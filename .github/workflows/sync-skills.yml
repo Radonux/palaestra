@@ -1,0 +1,46 @@
+# Ready to use: copy this file to .github/workflows/sync-skills.yml in your
+# repository. Make it a real copy; GitHub Actions does not resolve symlinks
+# under .github/workflows. It works as-is with the standard setup:
+#
+#   git submodule add https://github.com/BTreeMap/SKILLs.git .github/skills
+#
+# Twice a day it fast-forwards the .github/skills gitlink to the upstream tip
+# on each branch listed below (main, master, dev by default), one
+# GitHub-signed `chore:` commit per branch. A branch already current is left
+# untouched; a missing branch is skipped, not an error. The upstream is whatever each branch records for the submodule, so a
+# fork with the same layout works once the `uses:` line points at it.
+#
+# The logic lives in the reusable workflow this calls; here you supply only the
+# schedule and the `contents: write` grant, which that workflow narrows to
+# `contents: read` for every job but the one that writes. Commits made with
+# GITHUB_TOKEN do not trigger workflows, so this cannot recurse. The bumps are
+# signed and the refs move by fast-forward, so a ruleset requiring signed
+# commits or blocking force pushes needs no bypass actor.
+
+name: Sync skills
+
+on:
+  schedule:
+    # Twice daily (UTC), off the top of the hour to dodge cron congestion.
+    - cron: "23 4,16 * * *"
+  workflow_dispatch:
+
+# Deny-all default; the job below grants the one permission the reusable
+# workflow needs, and only for that job.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    permissions:
+      contents: write
+    uses: BTreeMap/SKILLs/.github/workflows/sync-skills.yml@main
+    # Defaults shown; uncomment and adjust as needed:
+    # with:
+    #   submodule-path: .github/skills
+    #   branches: main master dev        # any list; missing ones are skipped
+    #   upstream-url: ""                 # e.g. https://github.com/you/SKILLs.git
+    #   upstream-ref: ""                 # branch to track; default is upstream HEAD
