@@ -46,6 +46,7 @@ Implementation detail lives in `docs/`.
 | Guest runner | `guest/` (Rust) | Inside the kernel: namespaces, qdiscs, bulk TCP pair, cross-traffic flows, Sage's step loop and the ONNX policy, record collection. |
 | Policy contract | `policy.py`, `guest/src/step.rs` | `sage-v1`: Sage's 77-value state message in (a port of `sage.cc`), log2 of the window multiplier out, optional recurrent state; the graph picks and scales its own inputs. |
 | Step data | `steps.py` | Each step with the labels at its instant, Sage's reward from the exact capacity, and the action taken: net1 and net2 training rows. |
+| Trainer | `train/` (optional `train` extra, PyTorch) | net1 supervised and net2 offline RL from step data, architectures chosen by name, one ONNX policy graph out; imports expliCCit's released models from a local copy. |
 | Link model | `kernel/modules/sch_mmlink.c` | The bottleneck: Mahimahi's `mm-link` + `mm-delay` (+ `mm-loss`), as a qdisc. |
 | Observation | `kernel/modules/expl_tcpobs.c` | Sender state at every ACK, for any congestion control. |
 | Agent controllers | `kernel/modules/tcp_agent.c` | `agent` (Sage-style) and `agent_reno` (Orca-style) driven by a policy. |
@@ -111,9 +112,10 @@ CI runs the same on every push (`.github/workflows/ci.yml`).
 
 | Area | State |
 |---|---|
-| UML build, link model, observations, records, datasets, campaigns, CLI | done, tested (54 tests) |
+| UML build, link model, observations, records, datasets, campaigns, CLI | done, tested (61 tests) |
 | Agent controllers with ONNX policies, closed loop (`sage-v1`) | done, tested |
 | Sage's step and step training data (labels, reward, action per step) | done, tested; the comparison with `sage.cc`'s own code is UNRUN |
+| Trainer: net1, net2, export, expliCCit import | runs end to end; net1 learns (R^2 0.87 to 0.99 on held-out paths except free buffer); the first net2 collapses the window in closed loop (`docs/training.md`) |
 | Mahak metrics, trace generation and active-learning driver | done, matched to the originals |
 | Slurm array scripts | generated and checked locally; not yet submitted to a cluster |
 | BBRv3 (Google's, as `bbr3`) | done, tested |
@@ -179,7 +181,8 @@ later without rerunning), and `agent_action.parquet`.
 
 | Document | Contents |
 |---|---|
-| `docs/architecture.md` | Data flow and trust boundaries, exact link-model semantics, record ABI, time and determinism, decisions D1 to D19, known limits, how to extend |
+| `docs/architecture.md` | Data flow and trust boundaries, exact link-model semantics, record ABI, time and determinism, decisions D1 to D22, known limits, how to extend |
+| `docs/training.md` | From teacher campaigns to a policy: train, run, import expliCCit's models, results so far |
 | `docs/validation.md` | Every check that ran, with commands and results, and what has not run |
 | `docs/m0-report.md` | Feasibility measurements: UML build, speed, memory, determinism, BPF |
 | `kernel/modules/README.md` | The kernel modules and their ABIs |

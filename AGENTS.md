@@ -30,6 +30,7 @@ must keep. Implementation detail is in `docs/architecture.md`.
 Run what the change touches, and report only what actually ran:
 
     uv run ruff format --check src tests && uv run ruff check src tests && uv run pyright
+    uv sync --extra train                                  # the trainer's tests need PyTorch
     uv run pytest -q                                       # unit tests
     scripts/build-uml.sh build/uml && scripts/build-guest.sh build/uml
     EXPLICCIT_UML_DIR=build/uml uv run pytest -q            # adds the UML tests

@@ -18,6 +18,7 @@ Definitions (link 1 is the data-direction bottleneck):
                       bottleneck at or before the sample and was not dropped;
                       NaN if it had not departed by the end of the episode
   base_rtt_ns         two-way propagation delay (both delay lines)
+  one_way_delay_ns    one delay line: what Mahak and expliCCit call mRTT
   buffer_pkts/bytes   droptail limits (0 = unlimited)
   random_loss_rate    the data direction's configured i.i.d. loss probability
   cross_traffic_share bytes that cross traffic (every flow but the observed
@@ -210,6 +211,8 @@ def labels_at(
             "busy_fraction": np.where(cap > 0, used * 8 / (cap * window_s), np.nan),
             "receive_rate_bps": recv_bytes * 8 / window_s,
             "base_rtt_ns": np.full(n, 2 * k.one_way_ns, dtype=np.int64),
+            # Mahak's and expliCCit's "mRTT" (named for what it is: one way).
+            "one_way_delay_ns": np.full(n, k.one_way_ns, dtype=np.int64),
             "buffer_pkts": np.full(n, k.buffer_pkts, dtype=np.int64),
             "buffer_bytes": np.full(n, k.buffer_bytes, dtype=np.int64),
             "random_loss_rate": np.full(n, k.loss_downlink),

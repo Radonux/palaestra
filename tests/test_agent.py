@@ -11,6 +11,7 @@ import pyarrow as pa
 import pytest
 
 from expliccit_env.episode import EpisodeOk, run_episode
+from expliccit_env.policy import OBS_DIM
 from expliccit_env.records import Records, load_records
 from expliccit_env.spec import (
     AgentCC,
@@ -95,13 +96,13 @@ def test_policy_reads_the_observation(build: UmlBuild, tmp_path: Path) -> None:
     # a = 0.5 r - 0.35 with r = Sage's column 70 (max delivered rate times min
     # RTT over the window). Every action must be that function of the very
     # message the step table recorded, and the window must react to it.
-    w = np.zeros(77)
+    w = np.zeros(OBS_DIM)
     w[70] = 0.5
     outcome, rec = run_raw(
         build, tmp_path, agent_spec(tmp_path, onnx_policies.linear(w, -0.35), "hold")
     )
     steps = steps_of(outcome)
-    obs = np.asarray(steps["obs"].combine_chunks().flatten()).reshape(-1, 77)
+    obs = np.asarray(steps["obs"].combine_chunks().flatten()).reshape(-1, OBS_DIM)
     want = np.float32(0.5) * obs[:, 70].astype(np.float32) + np.float32(-0.35)
     assert np.array_equal(steps["applied_action"].to_numpy(), want.astype(np.float64))
     cwnd = rec.agent_action["cwnd"]

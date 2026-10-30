@@ -11,6 +11,11 @@ dependencies = [
     "scikit-learn>=1.5",
 ]
 
+[project.optional-dependencies]
+# The trainer (src/expliccit_env/train). CPU wheels by default; see
+# docs/training.md for a CUDA build on GPU nodes.
+train = ["torch>=2.10"]
+
 [project.scripts]
 expliccit = "expliccit_env.cli:main"
 
@@ -47,3 +52,11 @@ pythonVersion = "3.12"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["uml: needs a built UML kernel and guest (EXPLICCIT_UML_DIR)"]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

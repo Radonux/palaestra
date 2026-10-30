@@ -38,7 +38,7 @@ def _tensor(name: str, width: int) -> onnx.ValueInfoProto:
 
 
 def linear(weights: npt.NDArray[np.float64], bias: float) -> bytes:
-    """a = obs @ weights + bias, with weights of shape [77]."""
+    """a = obs @ weights + bias, with weights of shape [OBS_DIM]."""
     return _model(
         [
             helper.make_node("MatMul", ["obs", "W"], ["h"]),

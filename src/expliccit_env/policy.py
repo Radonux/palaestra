@@ -1,10 +1,11 @@
 """The policy contract (sage-v1) between exported policies and the guest.
 
 Every step (Sage's 10 ms control period, extended until an ACK arrives) the
-guest builds Sage's 77-value state message for the observed flow
-(guest/src/step.rs, a port of Sage's sage.cc) and runs the policy:
+guest builds Sage's 77-value state message for the observed flow, plus the
+min RTT column expliCCit added (guest/src/step.rs, a port of Sage's sage.cc),
+and runs the policy:
 
-    input  "obs"   float32 [1, 77], the message, columns as in OBS_COLUMNS
+    input  "obs"   float32 [1, 78], the message, columns as in OBS_COLUMNS
     input  "state" float32 [1, S], optional; zeros at the first step
     output 0       float32 [1, 1], a: the window is multiplied by 2**a
     output 1       float32 [1, S], the next state, present iff "state" is
@@ -58,13 +59,18 @@ OBS_COLUMNS: Final = (
     "max_delivered_x100mbps",
     "unused_reward",  # Sage's reward; always 0 here, the host computes it
     "prev_action",  # log2 of the window multiplier since the last step
+    "min_rtt_ms",  # added by expliCCit's sage.cc (there at index 75)
 )
-OBS_DIM: Final = 77
+OBS_DIM: Final = 78
 # Sage's own observation (rl_module/config-rl-eval.yaml, obs_cols, 69 columns).
 SAGE_OBS_COLS: Final = (
     2, 3, 7, 9, *range(10, 64), *range(65, 75), 76,
 )  # fmt: skip
+# expliCCit's observation (its config-rl-eval.yaml): Sage's, then min RTT, then
+# the previous action, in this order, in this message's indices.
+EXPLICCIT_OBS_COLS: Final = (*SAGE_OBS_COLS[:-1], 77, 76)
 PREV_ACTION_COL: Final = 76
 MAX_ACTION: Final = 8.0
 
 assert len(OBS_COLUMNS) == OBS_DIM and len(SAGE_OBS_COLS) == 69
+assert len(EXPLICCIT_OBS_COLS) == 70

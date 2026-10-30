@@ -21,9 +21,10 @@ from tests import sage_ref
 
 pytestmark = pytest.mark.uml
 
-# Columns the port does not take from sage.cc: 1 and 75 (Sage's nominal
-# capacity and reward, zeroed here) and 76 (filled by the step loop).
-_NOT_COMPARED = {1, 75, PREV_ACTION_COL}
+# Columns the port does not take from Sage's sage.cc: 1 and 75 (Sage's
+# nominal capacity and reward, zeroed here), 76 (filled by the step loop) and
+# 77 (expliCCit's addition, checked in test_step_table).
+_NOT_COMPARED = {1, 75, PREV_ACTION_COL, 77}
 _INT_COLS = {8, 9}  # printed with %d and %u
 
 
@@ -63,8 +64,8 @@ def test_step_matches_sage_cc(build: UmlBuild, tmp_path: Path, cc: str, loss: fl
     theirs = sage_ref.run(exe, readings, start_us=base_ns // 1000, base_ms=base_ns // 1_000_000)
     assert len(theirs) == steps.size  # every recorded step moved the ACK state
     for k, (fields, ours) in enumerate(zip(theirs, steps["obs"], strict=True)):
-        assert len(fields) == OBS_DIM, k
-        for c in range(OBS_DIM):
+        assert len(fields) == OBS_DIM - 1, k
+        for c in range(OBS_DIM - 1):
             if c in _NOT_COMPARED:
                 continue
             mine = str(int(ours[c])) if c in _INT_COLS else f"{ours[c]:.7f}"
@@ -79,8 +80,10 @@ def test_step_table(build: UmlBuild, tmp_path: Path) -> None:
     obs = np.asarray(table["obs"].combine_chunks().flatten()).reshape(-1, OBS_DIM)
     # Column 76 under a stock controller: log2 of the window's change since
     # the previous step (from 10 packets), rounded as sage.cc prints it.
-    cwnd = np.frombuffer(steps["info"].tobytes(), np.uint8).reshape(-1, 224)[:, 80:84]
-    cwnd = cwnd.copy().view("<u4").ravel().astype(np.float64)
+    info = np.frombuffer(steps["info"].tobytes(), np.uint8).reshape(-1, 224)
+    cwnd = info[:, 80:84].copy().view("<u4").ravel().astype(np.float64)
+    min_rtt = info[:, 148:152].copy().view("<u4").ravel().astype(np.float64)
+    assert np.array_equal(obs[:, 77], min_rtt / 1000.0)  # expliCCit's column
     ratio = cwnd / np.concatenate(([10.0], cwnd[:-1]))
     x = np.log2(ratio.astype(np.float32)) * np.float32(1000)
     rounded = np.sign(x) * np.floor(np.abs(x) + np.float32(0.5))  # C round(): half away from 0

@@ -15,7 +15,8 @@ executed in this environment unless it says CI.
       git clone https://github.com/Ppazhooh/mahak /tmp/mahak && git -C /tmp/mahak checkout 5077583
       EXPLICCIT_UML_DIR=build/uml EXPLICCIT_MAHAK_DIR=/tmp/mahak uv run pytest -q
 
-  Last result: 54 passed, 2 skipped (the `sage.cc` comparison, see below).
+  Last result: 61 passed, 2 skipped (the `sage.cc` comparison, see below),
+  with the `train` extra installed (`uv sync --extra train`).
 
 ## Ran: correctness of the ports and the link model
 
@@ -194,6 +195,23 @@ impossible negative powers; a budget of 100 ranks well (0.90) while a few
 very high-power points (small mRTT) keep the RMSE up. This is the
 algorithm's behaviour, not the port's. Since a UML query costs under a
 second, budgets in the hundreds are cheap.
+
+## Ran: the trainer (M9)
+
+`tests/test_train.py`: expliCCit's shapes match its released checkpoints
+(1,265,927 and 68,097 parameters); the input stage ignores non-finite values
+when fitting and maps them to 0 when running; net1 learns a synthetic
+capacity (R^2 > 0.9 on held-out episodes) and net2 trains; the deployed
+rounding is exact; the export is a sage-v1 graph without IsInf or IsNaN; a
+path's episodes share one split; and a freshly exported graph runs in the
+guest's closed loop (`tract`), its actions within the action bound.
+
+On real data (`docs/training.md`, "Results so far"): our net1 reaches R^2
+0.87 to 0.997 on held-out paths for six of expliCCit's seven LCFs (free
+buffer 0.50); expliCCit's released net1 on the same steps gets 0.36 to 1.0
+on four and negative R^2 on free buffer and busy fraction; its released
+policy runs in our closed loop at 0.58 to 0.95 utilization; our first net2
+collapses the window (diagnosed there).
 
 ## Not run to completion: the port of Sage's step against `sage.cc` (M9)
 

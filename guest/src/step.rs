@@ -12,10 +12,12 @@
 //! Two message columns are not observations and are written as 0: column 1
 //! (Sage's nominal link capacity, taken from its command line) and column 75
 //! (Sage's reward, which uses that capacity). The host computes the reward
-//! from exact ground truth instead.
+//! from exact ground truth instead. Column 77 is appended after Sage's 77:
+//! the kernel's min RTT in ms, which expliCCit's sage.cc adds to the message
+//! (there before the reward; here at the end, so Sage's indices hold).
 //!
 //! Policy contract (mirrors src/expliccit_env/policy.py):
-//!   input  "obs"   float32 [1, 77], the message above
+//!   input  "obs"   float32 [1, 78], the message above
 //!   input  "state" float32 [1, S], optional; zeros at the first step
 //!   output 0       float32 [1, 1], a: the window is multiplied by 2^a
 //!   output 1       float32 [1, S], the next state, when "state" exists
@@ -41,7 +43,7 @@ use std::thread::JoinHandle;
 use tract_onnx::prelude::*;
 use tract_onnx::tract_hir::infer::Factoid;
 
-pub const OBS: usize = 77;
+pub const OBS: usize = 78;
 /// struct tcp_info up to tcpi_reord_seen, the layout Sage reads.
 pub const INFO_LEN: usize = 224;
 /// t_us, tcp_info, obs, action, cwnd, pad: see src/expliccit_env/steps.py.
@@ -420,6 +422,7 @@ impl Featurizer {
         m[73] = if self.pre_dr_w_max > 0.0 { dr_w_max / self.pre_dr_w_max } else { dr_w_max };
         m[74] = dr_w_max / BW_NORM_FACTOR;
         m[76] = prev_action(prev_ratio);
+        m[77] = f64::from(s.min_rtt()) / 1000.0;
         self.t0 = now;
         self.pre_dr_w_mbps = dr_w_mbps;
         self.pre_dr_w_max = dr_w_max;

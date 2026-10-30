@@ -2,8 +2,8 @@
 
 The guest writes one fixed-size record per step (guest/src/step.rs): the
 step's CLOCK_MONOTONIC time in us, the TCP_INFO prefix it was computed from,
-Sage's 77-value message, the action a policy took after it (NaN under a stock
-controller) and the window that action set (0 if none). ``step_table`` joins
+the message (policy.OBS_COLUMNS), the action a policy took after it (NaN
+under a stock controller) and the window that action set (0 if none). ``step_table`` joins
 each step with the ground-truth labels at its instant, Sage's reward
 computed from the exact capacity, and the action taken from it.
 """

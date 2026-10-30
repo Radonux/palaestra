@@ -232,6 +232,7 @@ where the brief did not specify (its later sections were missing).
 | D19 | The native tier (D3: Linux 7.0 on Ubuntu 26.04 hosts, as root, in real time) is dropped | No environment we have can easily boot a patched kernel, and Ubuntu 26.04 ships stock 7.0, so a native tier could run Cubic, BBRv1 and the agent controllers but never BBRv3 or later kernel changes; packaging a custom image is too much work for what it adds. Cost: UML's virtual time is never checked against a real-time kernel, so effects of CPU cost (free under `inf-cpu`) on TCP are not measured. Its code was last present in commit `faad5be` (`src/expliccit_env/native.py`, `scripts/tier2-setup.sh`). |
 | D20 | Sage's step is ported into the guest, and is the only implementation | Training data and deployment then use the same code, with no train/serve skew, and the message equals Sage's, so Sage's and expliCCit's column choices apply unchanged. Rejected: computing features on the host from per-ACK records (a second implementation for deployment), and feeding raw `TCP_INFO` to the graph (it would have to reimplement Sage's windows in ONNX). The raw `TCP_INFO` of every step is kept in `steps.bin` for other feature designs. |
 | D21 | One policy contract: the whole message in, the graph selects and scales, optional recurrent state | Any network design (MLP, recurrent, a different column set, uncertainty heads) runs without guest changes. Replaced `tcpinfo-v1` (8 features in, absolute cwnd and pacing out), which no policy used. |
+| D22 | The trainer lives here, on PyTorch, with architectures and algorithms chosen by name, and exports one ONNX graph per policy | A network redesign is a registry entry, not a new pipeline, and the scaling travels inside the graph, so deployment needs no scaler files. expliCCit's layer layout and parameter names are kept, so its released checkpoints load unchanged (from a local copy; its code is not in this repository). Splits are by path, never by row, so held-out numbers are not training accuracy. Default scaling is robust (quantile clipping, then standardization); TD3+BC is the default net2 objective, with expliCCit's own kept for comparison. |
 
 ## Known ceilings (`ponytail` markers in the code)
 
@@ -251,6 +252,10 @@ where the brief did not specify (its later sections were missing).
 - The step loop polls every 1 ms after an idle step, where Sage busy-polls,
   and refreshes pacing once per step, where Sage's patched kernel may pace
   per ACK (its source is not public).
+- The trainer exports with torch's TorchScript-based ONNX exporter, which
+  emits simple ops `tract` runs; move to the dynamo exporter (it needs
+  `onnxscript`) when the old one is removed. Finiteness is tested as
+  |x| < 3e38 in the graph because `tract` does not analyse IsInf and IsNaN.
 - **Inference is free (parked).** Under `inf-cpu` a policy's inference costs
   no virtual time, while a real sender spends time on it (Sage crosses
   shared memory into Python every step). Plan: measure inference time

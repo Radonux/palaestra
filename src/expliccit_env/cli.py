@@ -1,4 +1,4 @@
-"""Command line: ``expliccit {episode,campaign,mahak-query,mahak} ...``."""
+"""Command line: ``expliccit {episode,campaign,mahak-query,mahak,train} ...``."""
 
 from __future__ import annotations
 
@@ -139,6 +139,25 @@ def _mahak(a: argparse.Namespace) -> int:
     return 0 if failed < len(m.queries) else 1
 
 
+def _train(a: argparse.Namespace) -> int:
+    # The trainer needs the optional "train" extra (PyTorch).
+    from expliccit_env.train import run  # noqa: PLC0415
+    from expliccit_env.train.spec import TrainSpec  # noqa: PLC0415
+
+    report = run.train(TrainSpec.parse(Path(a.spec).read_text()), Path(a.out))
+    print(json.dumps(report["net1"]["test"], indent=2))
+    return 0
+
+
+def _import_expliccit(a: argparse.Namespace) -> int:
+    from expliccit_env.train import run  # noqa: PLC0415
+
+    data = [Path(d) for d in a.data]
+    report = run.import_expliccit(Path(a.models), Path(a.out), data, as_deployed=a.as_deployed)
+    print(json.dumps(report, indent=2))
+    return 0
+
+
 def _common(q: argparse.ArgumentParser) -> None:
     q.add_argument(
         "--build",
@@ -220,6 +239,23 @@ def main(argv: list[str] | None = None) -> int:
     _mahak_query_args(m)
     d = sub.add_parser("mahak", help="Mahak's active-learning map (mahak_online.py) in UML")
     _mahak_args(d)
+
+    t = sub.add_parser("train", help="net1 and net2 from step data (needs the train extra)")
+    tc = t.add_subparsers(required=True)
+    tr = tc.add_parser("run", help="train net1, net2 on it, export policy.onnx")
+    tr.add_argument("spec", help="TrainSpec JSON")
+    tr.add_argument("out")
+    tr.set_defaults(fn=_train)
+    ti = tc.add_parser("import-expliccit", help="expliCCit's released models as a sage-v1 policy")
+    ti.add_argument("models", help="expliCCit's sage_rl/offline/models directory")
+    ti.add_argument("out")
+    ti.add_argument("--data", nargs="*", default=[], help="step data to report net1's error on")
+    ti.add_argument(
+        "--as-deployed",
+        action="store_true",
+        help="round beliefs and actions as expliCCit's deployed controller does",
+    )
+    ti.set_defaults(fn=_import_expliccit)
 
     a = p.parse_args(argv)
     return int(a.fn(a))
