@@ -163,7 +163,7 @@ pub fn uname() -> (String, String) {
         return (String::new(), String::new());
     }
     let field = |f: &[libc::c_char]| {
-        let bytes: Vec<u8> = f.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect();
+        let bytes: Vec<u8> = f.iter().take_while(|&&c| c != 0).map(|&c| c.to_ne_bytes()[0]).collect();
         String::from_utf8_lossy(&bytes).into_owned()
     };
     (field(&u.release), field(&u.version))

@@ -33,7 +33,8 @@ Run what the change touches, and report only what actually ran:
     uv run pytest -q                                       # unit tests
     scripts/build-uml.sh build/uml && scripts/build-guest.sh build/uml
     EXPLICCIT_UML_DIR=build/uml uv run pytest -q            # adds the Tier 1 tests
-    (cd guest && cargo fmt --check && cargo clippy --release --target x86_64-unknown-linux-musl -- -D warnings)
+    (cd guest && cargo fmt --check && for t in x86_64 aarch64; do
+        cargo clippy --release --target $t-unknown-linux-musl -- -D warnings; done)
     scripts/check-kernel.sh                                # checkpatch on modules and kernel patches
     shellcheck scripts/*.sh tools/m0/*.sh
     uvx --from actionlint-py==1.7.12.25 actionlint && uvx zizmor==1.31.1 --offline .github/workflows
