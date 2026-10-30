@@ -82,7 +82,8 @@ config GENERIC_CALIBRATE_DELAY
 
 config HZ
 	int
-	default 100
+	# expliccit-env: Tier 2 hosts run HZ=1000; TCP timers must match.
+	default 1000
 
 config UML_SUBARCH_SUPPORTS_SMP
 	bool
