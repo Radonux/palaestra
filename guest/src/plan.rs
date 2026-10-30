@@ -8,7 +8,7 @@ use serde::Deserialize;
 use std::num::{NonZeroU32, NonZeroU64};
 use std::path::{Path, PathBuf};
 
-pub const PLAN_VERSION: u32 = 3;
+pub const PLAN_VERSION: u32 = 4;
 /// Cross-traffic flows per episode (ports 6000 to 6015). ponytail: 16 flows,
 /// all sender to receiver; widen the port range or add reverse flows if needed.
 pub const MAX_CROSS: usize = 16;
@@ -47,6 +47,8 @@ enum RawCross {
 #[serde(deny_unknown_fields)]
 struct RawAgent {
     policy_file: String,
+    noise_sigma: f64,
+    noise_seed: u64,
 }
 
 #[derive(Deserialize)]
@@ -92,7 +94,15 @@ pub struct Sysctl {
 /// /dev/expl_agent after every step.
 pub enum Control {
     Stock,
-    Agent { policy: PathBuf },
+    Agent { policy: PathBuf, noise: Noise },
+}
+
+/// Exploration: Gaussian noise added to every action the policy takes,
+/// from a seeded generator, so an online training run is reproducible.
+#[derive(Clone, Copy)]
+pub struct Noise {
+    pub sigma: f64,
+    pub seed: u64,
 }
 
 pub struct Plan {
@@ -126,7 +136,15 @@ impl Plan {
         let is_agent = matches!(raw.cc.as_str(), "agent" | "agent_reno");
         let control = match (is_agent, raw.agent) {
             (false, None) => Control::Stock,
-            (true, Some(a)) => Control::Agent { policy: dir.join(plain_file_name(&a.policy_file)?) },
+            (true, Some(a)) => {
+                if !(0.0..=2.0).contains(&a.noise_sigma) {
+                    return fail(format!("agent.noise_sigma {} outside [0, 2]", a.noise_sigma));
+                }
+                Control::Agent {
+                    policy: dir.join(plain_file_name(&a.policy_file)?),
+                    noise: Noise { sigma: a.noise_sigma, seed: a.noise_seed },
+                }
+            }
             (true, None) => return fail(format!("cc {} needs an agent section", raw.cc)),
             (false, Some(_)) => return fail(format!("cc {} takes no agent section", raw.cc)),
         };

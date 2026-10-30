@@ -132,3 +132,22 @@ def test_bad_policy_output_fails_the_episode(build: UmlBuild, tmp_path: Path) ->
     )
     assert not isinstance(outcome, EpisodeOk)
     assert "exceeds" in str(outcome.row["failure"])
+
+
+def test_exploration_noise_is_seeded_and_has_the_requested_spread(
+    build: UmlBuild, tmp_path: Path
+) -> None:
+    base = agent_spec(tmp_path, onnx_policies.constant(0.0), "hold")
+    noisy = base.model_copy(update={"cc": base.cc.model_copy(update={"noise_sigma": 0.1})})
+    runs = [
+        steps_of(run_raw(build, tmp_path / name, spec)[0])["applied_action"].to_numpy()
+        for name, spec in (
+            ("a", noisy),
+            ("b", noisy),
+            ("c", noisy.model_copy(update={"seed": 4})),
+        )
+    ]
+    a, b, c = runs
+    assert np.array_equal(a, b)  # same episode seed, same noise
+    assert not np.array_equal(a[:50], c[:50])
+    assert abs(float(a.mean())) < 0.02 and 0.08 < float(a.std()) < 0.12

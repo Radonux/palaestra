@@ -35,6 +35,8 @@ trace ms before the sample, as for capacity_bps):
                       byte fraction); 1 means the next arrival is dropped
   busy_fraction       bottleneck bytes used over the bytes the trace offered
                       in the window; NaN where the capacity is 0
+  drop_fraction       the observed flow's packets the full queue dropped,
+                      over those that reached the bottleneck; NaN if none
   receive_rate_bps    the observed flow's bits leaving the bottleneck per
                       second (link bytes, as capacity_bps counts them); the
                       receiver sees them one propagation delay later
@@ -50,7 +52,7 @@ import numpy.typing as npt
 import pyarrow as pa
 
 from expliccit_env import mahimahi as mm
-from expliccit_env.records import DROP_QUEUE_FULL, Records
+from expliccit_env.records import DROP_QUEUE_FULL, Records, Table
 
 DOWNLINK: Final = 1
 UPLINK: Final = 2
@@ -150,6 +152,22 @@ def _accepted_delays(rec: Records, link_id: int) -> tuple[mm.I64, F64]:
     return acc_t, delay
 
 
+def _main_arrivals_and_drops(rec: Records) -> tuple[Table, Table]:
+    """The observed flow's packets that reached the bottleneck, and those the
+    full queue dropped (other drops happen before the link)."""
+    arr, drp = rec.link(rec.link_arrival, DOWNLINK), rec.link(rec.link_drop, DOWNLINK)
+    arr, drp = arr[arr["sport"] == MAIN_SPORT], drp[drp["sport"] == MAIN_SPORT]
+    return arr, drp[drp["reason"] == DROP_QUEUE_FULL]
+
+
+def drop_fraction(rec: Records, duration_ms: int) -> float:
+    """The observed flow's packets the full queue dropped over those that
+    reached the bottleneck in the episode; NaN if none reached it."""
+    arr, drp = _main_arrivals_and_drops(rec)
+    n = int((arr["ms"] < duration_ms).sum())
+    return int((drp["ms"] < duration_ms).sum()) / n if n else float("nan")
+
+
 def _window_sums(ms: mm.I64, values: F64, lo: mm.I64, hi: mm.I64) -> tuple[F64, mm.I64]:
     """Sum and count of ``values`` whose (nondecreasing) ``ms`` lies in [lo, hi)."""
     cum = np.concatenate(([0.0], np.cumsum(values)))
@@ -195,6 +213,10 @@ def labels_at(
     recv_bytes, _ = _window_sums(dep_ms[main], dep["bytes"][main].astype(np.float64), lo, hi)
     opp = rec.link(rec.link_opp, DOWNLINK)
     used, _ = _window_sums(opp["ms"].astype(np.int64), opp["used_bytes"].astype(np.float64), lo, hi)
+    arr, drp = _main_arrivals_and_drops(rec)
+    one = np.ones
+    _, arrivals = _window_sums(arr["ms"].astype(np.int64), one(arr.size), lo, hi)
+    _, drops = _window_sums(drp["ms"].astype(np.int64), one(drp.size), lo, hi)
     fills = [q_pkts / k.buffer_pkts] if k.buffer_pkts else []
     fills += [q_bytes / k.buffer_bytes] if k.buffer_bytes else []
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -210,6 +232,7 @@ def labels_at(
             "buffer_fill": np.maximum.reduce(fills),
             "busy_fraction": np.where(cap > 0, used * 8 / (cap * window_s), np.nan),
             "receive_rate_bps": recv_bytes * 8 / window_s,
+            "drop_fraction": np.where(arrivals > 0, drops / arrivals, np.nan),
             "base_rtt_ns": np.full(n, 2 * k.one_way_ns, dtype=np.int64),
             # Mahak's and expliCCit's "mRTT" (named for what it is: one way).
             "one_way_delay_ns": np.full(n, k.one_way_ns, dtype=np.int64),

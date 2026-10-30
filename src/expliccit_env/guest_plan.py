@@ -14,7 +14,7 @@ from typing import Final
 import numpy as np
 import numpy.typing as npt
 
-PLAN_VERSION: Final = 3
+PLAN_VERSION: Final = 4
 U32: Final = 2**32
 MAX_TRACE_BYTES: Final = 65_000
 
@@ -46,13 +46,18 @@ class LinkPlan:
 
 @dataclass(frozen=True, slots=True)
 class AgentPlan:
-    """An ONNX policy (sage-v1 contract, see policy.py) run every step."""
+    """An ONNX policy (sage-v1 contract, see policy.py) run every step, with
+    Gaussian exploration noise of ``noise_sigma`` added to each action."""
 
     policy_onnx: bytes
+    noise_sigma: float = 0.0
+    noise_seed: int = 0
 
     def __post_init__(self) -> None:
         if not self.policy_onnx:
             raise ValueError("agent needs a policy")
+        if not 0.0 <= self.noise_sigma <= 2.0 or not 0 <= self.noise_seed < 2**64:
+            raise ValueError("noise_sigma must be in [0, 2] and noise_seed a u64")
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,7 +124,11 @@ class GuestPlan:
         }
         if self.agent is not None:
             (directory / "policy.onnx").write_bytes(self.agent.policy_onnx)
-            plan["agent"] = {"policy_file": "policy.onnx"}
+            plan["agent"] = {
+                "policy_file": "policy.onnx",
+                "noise_sigma": self.agent.noise_sigma,
+                "noise_seed": self.agent.noise_seed,
+            }
         (directory / "plan.json").write_text(json.dumps(plan, indent=2))
 
 

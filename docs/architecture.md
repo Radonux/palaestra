@@ -248,7 +248,9 @@ where the brief did not specify (its later sections were missing).
   traffic sharing the ACK path).
 - Mahak's metrics (`utilization`, `mean_delay_ms`, powers) are computed over
   the link log as `mm-th-delay` would, so with cross traffic they describe
-  the whole link; `goodput_mbps` is the observed flow's own.
+  the whole link; `goodput_mbps` and `drop_fraction` (the share of its
+  packets reaching the bottleneck that the full queue dropped) are the
+  observed flow's own.
 - The step loop polls every 1 ms after an idle step, where Sage busy-polls,
   and refreshes pacing once per step, where Sage's patched kernel may pace
   per ACK (its source is not public).

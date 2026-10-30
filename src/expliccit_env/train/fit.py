@@ -27,6 +27,7 @@ from expliccit_env.train.models import (
     Critic,
     ExpliccitActor,
     ExpliccitNet1,
+    IntervalNet1,
     PolicyGraph,
     Scaler,
 )
@@ -42,6 +43,7 @@ class Net1:
     net: nn.Module
     lcf_scaler: Scaler  # targets in report units <-> net1's output space
     lcfs: tuple[str, ...]
+    intervals: bool = False  # output: centres, then lower and upper bounds
 
     @torch.no_grad()
     def beliefs(self, obs: F32) -> F32:
@@ -54,8 +56,17 @@ class Net1:
         return torch.cat(out).numpy() if out else np.zeros((0, len(self.lcfs)), np.float32)
 
     def predict(self, obs: F32) -> F32:
-        """LCFs in report units (LCF_UNITS)."""
-        return self.lcf_scaler.inverse(torch.from_numpy(self.beliefs(obs))).numpy()
+        """LCFs in report units (LCF_UNITS): the centres."""
+        z = self.beliefs(obs)[:, : len(self.lcfs)]
+        return self.lcf_scaler.inverse(torch.from_numpy(np.ascontiguousarray(z))).numpy()
+
+    def bounds(self, obs: F32) -> tuple[F32, F32]:
+        """Lower and upper bounds in report units (intervals only)."""
+        k, z = len(self.lcfs), self.beliefs(obs)
+        inv = self.lcf_scaler.inverse
+        lo = inv(torch.from_numpy(np.ascontiguousarray(z[:, k : 2 * k]))).numpy()
+        hi = inv(torch.from_numpy(np.ascontiguousarray(z[:, 2 * k :]))).numpy()
+        return lo, hi
 
 
 def targets(steps: Steps, lcfs: tuple[str, ...]) -> F32:
@@ -95,15 +106,68 @@ def report_net1(net1: Net1, steps: Steps, split: Split | None = None) -> dict[st
     pred, true = net1.predict(steps.obs[rows]), targets(steps, net1.lcfs)[rows]
     base = _baselines(steps, rows)
     out: dict[str, Any] = {}
+    lo, hi = net1.bounds(steps.obs[rows]) if net1.intervals else (pred, pred)
+    busy = steps.labels["busy_fraction"][rows]
     for k, name in enumerate(net1.lcfs):
         out[name] = {"unit": LCF_UNITS[name][1], "net1": _metrics(pred[:, k], true[:, k])}
         if name in base:
             out[name]["baseline"] = _metrics(base[name], true[:, k])
+        if net1.intervals:
+            ok = np.isfinite(true[:, k])
+            width = hi[:, k] - lo[:, k]
+            inside = (lo[:, k] <= true[:, k]) & (true[:, k] <= hi[:, k])
+            out[name]["interval"] = {
+                "coverage": float(inside[ok].mean()) if ok.any() else float("nan"),
+                "mean_width": float(width[ok].mean()) if ok.any() else float("nan"),
+                # Identifiability: how wide the interval is when the link is
+                # kept busy against when it is not.
+                "mean_width_busy": _mean_where(width, ok & (busy >= 0.95)),
+                "mean_width_idle": _mean_where(width, ok & (busy < 0.8)),
+            }
     return out
+
+
+def _mean_where(x: F32, rows: npt.NDArray[np.bool_]) -> float:
+    return float(x[rows].mean()) if rows.any() else float("nan")
 
 
 def _masked_mse(pred: torch.Tensor, y: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     return ((pred - y) ** 2 * mask).sum() / mask.sum().clamp(min=1)
+
+
+def _masked_pinball(
+    pred: torch.Tensor, y: torch.Tensor, mask: torch.Tensor, coverage: float
+) -> torch.Tensor:
+    """Pinball loss of (centres, lower, upper) at quantiles 0.5 and the
+    interval's two tails."""
+    k = y.shape[1]
+    tail = (1 - coverage) / 2
+    loss = torch.zeros(())
+    for j, q in enumerate((0.5, tail, 1 - tail)):
+        e = y - pred[:, j * k : (j + 1) * k]
+        loss = loss + (torch.maximum(q * e, (q - 1) * e) * mask).sum() / mask.sum().clamp(min=1)
+    return loss
+
+
+def _calibrate(
+    net: IntervalNet1, x: torch.Tensor, y: torch.Tensor, mask: torch.Tensor, coverage: float
+) -> None:
+    """Conformalized quantile regression (Romano et al., 2019): widen (or
+    narrow) each LCF's interval so that it covers the held-out rows at the
+    requested rate."""
+    net.eval()
+    with torch.no_grad():
+        out = net(x)
+    k = y.shape[1]
+    lo, hi = out[:, k : 2 * k], out[:, 2 * k :]
+    score = torch.maximum(lo - y, y - hi)
+    widen = torch.zeros(k)
+    for j in range(k):
+        e = score[:, j][mask[:, j] > 0]
+        if e.numel():
+            level = min(1.0, coverage * (1 + 1 / e.numel()))
+            widen[j] = torch.quantile(e, level)
+    net.widen.copy_(widen)
 
 
 def fit_net1(spec: Net1Spec, steps: Steps, seed: int) -> tuple[Net1, dict[str, Any]]:
@@ -123,7 +187,13 @@ def fit_net1(spec: Net1Spec, steps: Steps, seed: int) -> tuple[Net1, dict[str, A
         return x, t, mask
 
     (xt, yt, mt), (xv, yv, mv) = tensors(tr), tensors(va)
-    net = NET1[spec.arch](len(spec.obs_cols), len(spec.lcfs), spec.width, spec.dropout)
+    net = _net1_module(spec)
+
+    def loss_of(pred: torch.Tensor, y: torch.Tensor, m: torch.Tensor) -> torch.Tensor:
+        if spec.intervals:
+            return _masked_pinball(pred, y, m, spec.coverage)
+        return _masked_mse(pred, y, m)
+
     opt = torch.optim.AdamW(net.parameters(), lr=spec.lr, weight_decay=spec.weight_decay)
     best, best_state, stale = float("inf"), copy.deepcopy(net.state_dict()), 0
     history: list[float] = []
@@ -134,14 +204,14 @@ def fit_net1(spec: Net1Spec, steps: Steps, seed: int) -> tuple[Net1, dict[str, A
             b = order[i : i + spec.batch_size]
             if b.numel() < 2:
                 continue
-            loss = _masked_mse(net(xt[b]), yt[b], mt[b])
+            loss = loss_of(net(xt[b]), yt[b], mt[b])
             opt.zero_grad()
             loss.backward()
             nn.utils.clip_grad_norm_(net.parameters(), 1.0)
             opt.step()
         net.eval()
         with torch.no_grad():
-            val = float(_masked_mse(net(xv), yv, mv)) if xv.shape[0] else float("nan")
+            val = float(loss_of(net(xv), yv, mv)) if xv.shape[0] else float("nan")
         history.append(val)
         if val < best:
             best, best_state, stale = val, copy.deepcopy(net.state_dict()), 0
@@ -150,30 +220,36 @@ def fit_net1(spec: Net1Spec, steps: Steps, seed: int) -> tuple[Net1, dict[str, A
             if stale >= spec.patience:
                 break
     net.load_state_dict(best_state)
-    net1 = Net1(scaler, net, lcf_scaler, tuple(spec.lcfs))
+    if isinstance(net, IntervalNet1) and xv.shape[0]:
+        _calibrate(net, xv, yv, mv, spec.coverage)
+    net1 = Net1(scaler, net, lcf_scaler, tuple(spec.lcfs), spec.intervals)
     return net1, {"val_loss": history, "epochs": len(history)}
 
 
 @dataclass(frozen=True, slots=True)
-class _Transitions:
+class Transitions:
     s: torch.Tensor
     a: torch.Tensor
     r: torch.Tensor
     s2: torch.Tensor
 
+    def parts(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        return self.s, self.a, self.r, self.s2
 
-def _transitions(
+
+def transitions(
     steps: Steps, states: F32, spec: Net2Spec, split: Split
-) -> tuple[_Transitions, float]:
+) -> tuple[Transitions, float]:
     """(s_t, a_t, r, s_t+1) within episodes; a scaled to [-1, 1] and clipped.
     Returns the fraction of actions that needed clipping."""
     i = np.flatnonzero(steps.rows(split)[:-1] & (steps.episode[:-1] == steps.episode[1:]))
-    r = steps.reward[i + 1] if spec.reward_alignment == "next" else steps.reward[i]
+    reward = steps.reward if spec.reward == "sage" else utility(steps, spec)
+    r = reward[i + 1] if spec.reward_alignment == "next" else reward[i]
     keep = np.isfinite(steps.action[i]) & np.isfinite(r)
     i, r = i[keep], r[keep]
     a = steps.action[i] / spec.action_max
     clipped = float(np.mean(np.abs(a) > 1)) if a.size else 0.0
-    t = _Transitions(
+    t = Transitions(
         torch.from_numpy(states[i]),
         torch.from_numpy(np.clip(a, -1, 1).reshape(-1, 1)),
         torch.from_numpy((r * spec.reward_scale).astype(np.float32)),
@@ -182,13 +258,25 @@ def _transitions(
     return t, clipped
 
 
+def utility(steps: Steps, spec: Net2Spec) -> F32:
+    """Per step: receive rate over capacity, minus the delay and loss terms,
+    from ground truth. An empty window (no departures) costs no delay."""
+    lab = steps.labels
+    with np.errstate(divide="ignore", invalid="ignore"):
+        used = lab["receive_rate_bps"] / lab["capacity_bps"]
+        delay = np.nan_to_num(lab["queue_delay_mean_ns"] / lab["base_rtt_ns"])
+    loss = np.nan_to_num(lab["drop_fraction"])
+    r = used - spec.delay_weight * delay - spec.loss_weight * loss
+    return np.where(np.isfinite(used), r, np.nan).astype(np.float32)
+
+
 def _soft_update(target: nn.Module, source: nn.Module, tau: float) -> None:
     with torch.no_grad():
         for t, s in zip(target.parameters(), source.parameters(), strict=True):
             t.mul_(1 - tau).add_(s, alpha=tau)
 
 
-class _Learner:
+class Learner:
     """Actor, critics and their targets, updated one batch at a time."""
 
     def __init__(self, spec: Net2Spec, k: int) -> None:
@@ -216,7 +304,9 @@ class _Learner:
             loss = loss + self.spec.cql_alpha * (self.critics[0](s, a_rand).mean() - qs[0].mean())
         return loss
 
-    def update(self, t: _Transitions, step: int) -> dict[str, float]:
+    def update(self, t: Transitions, step: int, *, actor: bool = True) -> dict[str, float]:
+        """One gradient step on the critics and (every policy_delay steps,
+        unless ``actor`` is False) on the actor."""
         spec, (s, a, r, s2) = self.spec, (t.s, t.a, t.r, t.s2)
         if self.opt_c is None:  # bc
             bc = ((self.actor(s) - a) ** 2).mean()
@@ -236,7 +326,7 @@ class _Learner:
         critic_loss.backward()
         self.opt_c.step()
         out = {"critic": float(critic_loss.detach())}
-        if spec.algo == "expliccit-v1" or step % spec.policy_delay == 0:
+        if actor and (spec.algo == "expliccit-v1" or step % spec.policy_delay == 0):
             pi = self.actor(s)
             q = self.critics[0](s, pi)
             bc = ((pi - a) ** 2).mean()
@@ -265,18 +355,18 @@ def fit_net2(
         with torch.no_grad():
             z = net1.lcf_scaler(torch.from_numpy(targets(steps, net1.lcfs))).numpy()
         states = np.where(np.isfinite(z), z, 0).astype(np.float32)
-    data, clipped = _transitions(steps, states, spec, "train")
+    data, clipped = transitions(steps, states, spec, "train")
     if data.s.shape[0] == 0:
         raise ValueError("no training transitions")
-    learner = _Learner(spec, states.shape[1])
+    learner = Learner(spec, states.shape[1])
     log: dict[str, list[float]] = {"critic": [], "actor": [], "bc": []}
     for step in range(spec.steps):
         b = torch.from_numpy(rng.integers(0, data.s.shape[0], spec.batch_size))
-        batch = _Transitions(data.s[b], data.a[b], data.r[b], data.s2[b])
+        batch = Transitions(data.s[b], data.a[b], data.r[b], data.s2[b])
         for name, v in learner.update(batch, step).items():
             log[name].append(v)
     actor = learner.actor.eval()
-    val, _ = _transitions(steps, states, spec, "val")
+    val, _ = transitions(steps, states, spec, "val")
     with torch.no_grad():
         val_bc = float(((actor(val.s) - val.a) ** 2).mean()) if val.s.shape[0] else float("nan")
     tail = max(1, spec.steps // 10)
@@ -312,9 +402,16 @@ def load_net1(path: Path) -> tuple[Net1, Net1Spec]:
     scaler.load_state_dict(saved["scaler"])
     lcf_scaler = Scaler.fit(tuple(range(k)), np.zeros((2, k), np.float32), "standard")
     lcf_scaler.load_state_dict(saved["lcf_scaler"])
-    net = NET1[spec.arch](f, k, spec.width, spec.dropout)
+    net = _net1_module(spec)
     net.load_state_dict(saved["net"])
-    return Net1(scaler, net.eval(), lcf_scaler, tuple(spec.lcfs)), spec
+    return Net1(scaler, net.eval(), lcf_scaler, tuple(spec.lcfs), spec.intervals), spec
+
+
+def _net1_module(spec: Net1Spec) -> nn.Module:
+    k, f = len(spec.lcfs), len(spec.obs_cols)
+    if not spec.intervals:
+        return NET1[spec.arch](f, k, spec.width, spec.dropout)
+    return IntervalNet1(NET1[spec.arch](f, k, spec.width, spec.dropout, 3), k)
 
 
 def policy_graph(

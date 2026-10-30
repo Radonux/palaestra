@@ -155,6 +155,17 @@ def _train(a: argparse.Namespace) -> int:
     return 0
 
 
+def _online(a: argparse.Namespace) -> int:
+    from expliccit_env.train.online import OnlineSpec, run_online  # noqa: PLC0415
+
+    spec = OnlineSpec.parse(Path(a.spec).read_text())
+    scratch = Path(a.scratch) if a.scratch else None
+    report = run_online(spec, Path(a.out), _build(a), workers=a.workers, scratch=scratch)
+    last = report["iterations"][-1]
+    print(json.dumps({"rollouts": last["rollouts"], "eval": last.get("eval")}, indent=2))
+    return 0
+
+
 def _import_expliccit(a: argparse.Namespace) -> int:
     from expliccit_env.train import run  # noqa: PLC0415
 
@@ -262,6 +273,13 @@ def main(argv: list[str] | None = None) -> int:
     tr.add_argument("spec", help="TrainSpec JSON")
     tr.add_argument("out")
     tr.set_defaults(fn=_train)
+    to = tc.add_parser("online", help="train net2 in closed loop on a frozen net1")
+    to.add_argument("spec", help="OnlineSpec JSON")
+    to.add_argument("out")
+    to.add_argument("--workers", type=int, default=1, help="parallel UML guests")
+    to.add_argument("--scratch", help="node-local scratch for raw records")
+    _common(to)
+    to.set_defaults(fn=_online)
     ti = tc.add_parser("import-expliccit", help="expliCCit's released models as a sage-v1 policy")
     ti.add_argument("models", help="expliCCit's sage_rl/offline/models directory")
     ti.add_argument("out")

@@ -45,7 +45,10 @@ Two structural consequences:
 The data show the problem already: trained on BBRv1, Cubic and Vegas logs,
 net1 estimates capacity, queue and delay well (R^2 0.95 to 0.99) but free
 buffer (0.09) and busy fraction (0.45) poorly. Those are exactly the
-quantities those teachers rarely expose (`docs/training.md`).
+quantities those teachers rarely expose (`docs/training.md`). The
+interval net1 shows the limit directly: its capacity interval is 3.6
+Mbit/s wide on steps where the link is kept busy and 40.3 Mbit/s where it
+is not.
 
 ## 3. Experiments
 
@@ -114,6 +117,20 @@ rate over capacity, minus a weight times queueing delay over base RTT,
 minus a weight times the fraction of the flow's packets the bottleneck
 dropped. The second is what prices probing.
 
+First result (one seed, `docs/training.md`): four online runs, from
+cloned policies on point and interval net1, with and without the
+teachers' data in the replay buffer, all end worse than they started,
+near the corner where the sender barely sends. The reward ranks BBRv1,
+Vegas and BBRv3 above cloning, so the optimizer, not the reward, is what
+fails; the candidates and their tests are listed there. The claim that
+closed-loop training on intervals learns when to probe is therefore
+untested, not refuted.
+
+The same evaluation found that utilization and delay hide overdriving:
+expliCCit's objective reaches 85% utilization while the full queue drops
+73% of its packets. Every comparison now reports the flow's drop
+fraction.
+
 ## 5. What the environment supports today
 
 | Need | Status |
@@ -121,9 +138,10 @@ dropped. The second is what prices probing.
 | Exact, time-indexed ground truth of the bottleneck | yes: every arrival, drop and departure, both directions, by flow and drop cause |
 | Paths: capacity traces, delay, buffer, loss, cross traffic | yes; no AQM/ECN, delay jitter, bursty loss or multiple bottlenecks |
 | Policies with any network design, recurrent state | yes (contract sage-v1) |
-| Offline training and evaluation, paired, with intervals | yes |
-| Online training with exploration | in progress |
-| Interval net1 (quantiles, calibrated) | in progress |
+| Offline training and evaluation, paired, with bootstrap intervals over paths | yes |
+| Online training with seeded exploration (`expliccit train online`) | yes; so far it degrades the cloned policy (section 4) |
+| Interval net1 (centre and 90% interval per LCF, conformally calibrated) | yes; held-out coverage 0.84 to 0.91, except 0.76 for mean queueing delay |
+| The flow's drop fraction per step (label) and per episode (summary) | yes |
 | Ground truth or patched LCFs fed to a running policy (arms A0, A1, repair) | not yet |
 | net1's beliefs logged during closed loop | not yet |
 | Raw-signal net2 (arms A4, A5), LCF subsets, training sweeps | not yet |

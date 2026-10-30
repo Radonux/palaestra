@@ -231,6 +231,28 @@ the guest's own changes since M7, which shift the kernel's random stream.
 Seeded runs are reproducible for one build (kernel and guest), not across
 guest versions; compare versions on Cubic, or over many seeds.
 
+## Ran: online training and interval net1 (M11)
+
+`tests/test_agent.py::test_exploration_noise_is_seeded_and_has_the_requested_spread`:
+with a zero policy and sigma 0.1 the applied actions have mean below 0.02
+and standard deviation in [0.08, 0.12]; the same episode seed gives the
+same noise, another seed different noise. `tests/test_train.py`: the
+interval net1 covers held-out rows at 0.83 to 0.97 for a nominal 0.90
+and its bounds never cross; the utility reward equals hand-computed
+values; one online iteration (two rollouts, an update, an evaluation)
+runs in UML and writes a policy. `tests/test_uml.py`: on a one-flow
+episode the flow's drop fraction equals the qdisc's own counters
+(`drops_queue` over `arrivals`).
+
+Ran at scale (one seed each): an interval net1 and cloned net2 on the
+expliCCit-like data; four online runs of 12 or 20 iterations (16 or 24
+episodes each, 4 to 6 minutes on 4 cores, no failed episode); and one
+evaluation campaign of the four teachers and ten policies on 18 paths for
+45 s (252 episodes, none failed). Results and their reading are in
+`docs/training.md`: online training as configured degrades the cloned
+policy, and only cloning among the offline net2 keeps its drops near the
+teachers'.
+
 ## Not run to completion: the port of Sage's step against `sage.cc` (M9)
 
 `test_step_matches_sage_cc` (`tests/sage_ref.py`) is written to compile

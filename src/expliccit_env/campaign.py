@@ -48,6 +48,17 @@ def plan(spec: CampaignSpec, out: Path) -> int:
     return len(episodes)
 
 
+def write_episodes(out: Path, episodes: list[EpisodeSpec], meta: dict[str, object]) -> None:
+    """Plan an explicit list of episodes (``campaign run`` runs it)."""
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "campaign.json").write_text(
+        json.dumps(
+            {"dataset_version": DATASET_VERSION, **meta, "episodes": len(episodes)}, indent=2
+        )
+    )
+    (out / "episodes.jsonl").write_text("".join(e.canonical_json() + "\n" for e in episodes))
+
+
 def load_episodes(out: Path) -> list[EpisodeSpec]:
     return [
         EpisodeSpec.parse(line)
@@ -166,7 +177,13 @@ def slurm_script(
     )
 
 
-_SUMMARY_METRICS: Final = ("utilization", "mean_delay_ms", "first_power", "goodput_mbps")
+_SUMMARY_METRICS: Final = (
+    "utilization",
+    "mean_delay_ms",
+    "drop_fraction",
+    "first_power",
+    "goodput_mbps",
+)
 
 
 def summary(out: Path, *, resamples: int = 2000) -> dict[str, dict[str, object]]:

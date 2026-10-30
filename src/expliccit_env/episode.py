@@ -188,6 +188,7 @@ def _metrics(
         "total_retrans": int(rec.tcp_obs["total_retrans"][-1]),
         "drops_queue": int(rec.link_stats["drops_queue"].sum()),
         "drops_random": int(rec.link_stats["drops_random"].sum()),
+        "drop_fraction": labels.drop_fraction(rec, window),
         "capacity_cv": labels.capacity_cv(trace, window),
     }
     match mm.mm_th_delay(mm.mm_log_from_records(rec, labels.DOWNLINK, trace, window)):

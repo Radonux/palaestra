@@ -112,11 +112,11 @@ CI runs the same on every push (`.github/workflows/ci.yml`).
 
 | Area | State |
 |---|---|
-| UML build, link model, observations, records, datasets, campaigns, CLI | done, tested (63 tests) |
+| UML build, link model, observations, records, datasets, campaigns, CLI | done, tested (69 tests in all; 67 run, the 2 Sage comparisons UNRUN) |
 | Agent controllers with ONNX policies, closed loop (`sage-v1`) | done, tested |
 | Sage's step and step training data (labels, reward, action per step) | done, tested; the comparison with `sage.cc`'s own code is UNRUN |
-| Trainer: net1, net2, export, expliCCit import | runs end to end; reproduces an expliCCit-shaped controller (84 to 85% utilization from BBRv1, Cubic and Vegas logs; `docs/training.md`) |
-| Online training, interval encoder | in progress (`docs/methodology.md`) |
+| Trainer: net1, net2, export, expliCCit import | runs end to end; reproduces an expliCCit-shaped controller (cloning BBRv1, Cubic and Vegas logs: 84% utilization, 4.8% drops; expliCCit's objective: 85%, but 73% drops; `docs/training.md`) |
+| Online training, interval encoder | run end to end; intervals are calibrated and widen where capacity is unobservable; online training so far degrades the cloned policy (one seed; `docs/training.md`) |
 | Mahak metrics, trace generation and active-learning driver | done, matched to the originals |
 | Slurm array scripts | generated and checked locally; not yet submitted to a cluster |
 | BBRv3 (Google's, as `bbr3`) | done, tested |

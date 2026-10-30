@@ -176,6 +176,9 @@ class AgentCC(_Frozen):
     kind: Literal["agent"] = "agent"
     mode: Literal["hold", "reno"] = "hold"
     policy: OnnxPolicy
+    # Exploration (online training): Gaussian noise on each action, seeded
+    # from the episode's seed. 0 runs the policy as it is.
+    noise_sigma: Annotated[float, Field(ge=0, le=2)] = 0.0
 
     @property
     def name(self) -> str:
@@ -262,7 +265,11 @@ class EpisodeSpec(_Frozen):
                 case UdpCross():
                     return UdpCrossPlan(round(c.rate_mbps * 1e6), c.start_ms, stop)
 
-        agent = AgentPlan(self.cc.policy.read()) if isinstance(self.cc, AgentCC) else None
+        agent = (
+            AgentPlan(self.cc.policy.read(), self.cc.noise_sigma, self.seed ^ 0x5EED_0F_A6E47)
+            if isinstance(self.cc, AgentCC)
+            else None
+        )
         return GuestPlan(
             duration_ms=self.duration_ms,
             cc=self.cc.name,
@@ -346,7 +353,7 @@ class PathList(_Frozen):
     paths: Annotated[list[PathSpec], Field(min_length=1)]
 
 
-def _paths(sweep: MahakGrid | MahakSample | PathList, rng: np.random.Generator) -> list[PathSpec]:
+def paths_of(sweep: MahakGrid | MahakSample | PathList, rng: np.random.Generator) -> list[PathSpec]:
     if isinstance(sweep, PathList):
         return list(sweep.paths)
     return [
@@ -394,7 +401,7 @@ class CampaignSpec(_Frozen):
         """Deterministic expansion: points x conditions x ccs x replicates,
         each with its own seed drawn from the campaign seed."""
         rng = np.random.default_rng(self.seed)
-        paths = _paths(self.sweep, rng)
+        paths = paths_of(self.sweep, rng)
         out: list[EpisodeSpec] = []
         for path, cond, cc, _ in itertools.product(
             paths, self.conditions, self.ccs, range(self.replicates)

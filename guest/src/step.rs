@@ -440,14 +440,42 @@ fn prev_action(ratio: f64) -> f64 {
     }
 }
 
-/// An ONNX policy under contract sage-v1.
+/// SplitMix64 (Steele, Lea and Flood, 2014): a small seeded generator for
+/// exploration noise, the same stream on every run with the same seed.
+struct SplitMix64(u64);
+
+impl SplitMix64 {
+    fn next_u64(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// Uniform in (0, 1].
+    #[allow(clippy::cast_precision_loss)]
+    fn unit(&mut self) -> f64 {
+        ((self.next_u64() >> 11) + 1) as f64 / (1u64 << 53) as f64
+    }
+
+    /// Standard normal (Box-Muller).
+    fn normal(&mut self) -> f64 {
+        let (u1, u2) = (self.unit(), self.unit());
+        (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos()
+    }
+}
+
+/// An ONNX policy under contract sage-v1, with optional exploration noise.
 pub struct Policy {
     plan: TypedRunnableModel<TypedModel>,
     state: Option<Tensor>,
+    sigma: f64,
+    rng: SplitMix64,
 }
 
 impl Policy {
-    pub fn load(path: &Path) -> Result<Policy> {
+    pub fn load(path: &Path, noise: crate::plan::Noise) -> Result<Policy> {
         let model =
             tract_onnx::onnx().model_for_path(path).ctx(format!("loading ONNX policy {}", path.display()))?;
         let inputs = model.inputs.len();
@@ -477,7 +505,7 @@ impl Policy {
             .into_optimized()
             .and_then(|m| m.into_runnable())
             .ctx(format!("optimizing ONNX policy {}", path.display()))?;
-        Ok(Policy { plan, state })
+        Ok(Policy { plan, state, sigma: noise.sigma, rng: SplitMix64(noise.seed) })
     }
 
     #[allow(clippy::cast_possible_truncation)]
@@ -597,11 +625,14 @@ pub fn spawn(
                 }
                 let (mut a, mut cwnd) = (f64::NAN, 0u32);
                 if let (Some(p), Some(dev)) = (policy.as_mut(), dev.as_mut()) {
-                    let act = p.act(&obs)?;
-                    ratio = 2f64.powf(f64::from(act));
+                    let act = f64::from(p.act(&obs)?);
+                    // The noise is drawn whatever sigma is, so the stream
+                    // does not depend on it. The applied action is recorded.
+                    let z = p.rng.normal();
+                    a = (act + p.sigma * z).clamp(-f64::from(MAX_ACTION), f64::from(MAX_ACTION));
+                    ratio = 2f64.powf(a);
                     cwnd = window.apply(ratio);
                     dev.write_all(&agent_action(cwnd, &info)).ctx("writing action")?;
-                    a = f64::from(act);
                     actions += 1;
                 }
                 let mut rec = Vec::with_capacity(RECORD_LEN);

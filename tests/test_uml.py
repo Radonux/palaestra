@@ -93,6 +93,12 @@ def test_kernel_link_matches_mahimahi_oracle(build: UmlBuild, tmp_path: Path, cc
         assert int(stats[f].sum()) == 0, f
     assert rec.link_drop.size > 0, "the step should overflow the buffer"
     assert_matches_oracle(rec, trace, 30)
+    # One flow: its drop fraction is what the qdisc's own counters say.
+    down = stats[stats["link_id"] == labels.DOWNLINK]
+    assert labels.drop_fraction(rec, 10**9) == int(down["drops_queue"][0]) / int(
+        down["arrivals"][0]
+    )
+    assert np.isnan(labels.drop_fraction(rec, 0))
 
 
 def test_ack_delay_line_is_exact(build: UmlBuild, tmp_path: Path) -> None:

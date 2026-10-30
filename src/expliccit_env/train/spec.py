@@ -71,6 +71,11 @@ class Net1Spec(_Frozen):
     # so outliers (srtt up to 5 s in expliCCit's data) do not squeeze the rest.
     scaling: Literal["robust", "minmax"] = "robust"
     lcfs: Annotated[tuple[Lcf, ...], Field(min_length=1)] = EXPLICCIT_LCFS
+    # Report an interval per LCF (docs/methodology.md, section 2): centre,
+    # lower and upper bound with the given held-out coverage. net2 then sees
+    # all three.
+    intervals: bool = False
+    coverage: Annotated[float, Field(gt=0, lt=1)] = 0.9
     width: PositiveInt = 512
     dropout: Annotated[float, Field(ge=0, lt=1)] = 0.3
     epochs: PositiveInt = 50
@@ -93,6 +98,13 @@ class Net2Spec(_Frozen):
     # error. Such a policy needs ground truth to run, so it is not exported.
     inputs: Literal["net1", "true_lcfs"] = "net1"
     hidden: PositiveInt = 256
+    # "sage": Sage's reward. "utility": a ground-truth utility that prices
+    # probing: receive rate over capacity, minus delay_weight times the mean
+    # queueing delay over the base RTT, minus loss_weight times the flow's
+    # dropped fraction (docs/methodology.md).
+    reward: Literal["sage", "utility"] = "sage"
+    delay_weight: Annotated[float, Field(ge=0)] = 0.5
+    loss_weight: Annotated[float, Field(ge=0)] = 4.0
     # The reward a transition from step t earns: "next" is step t+1's (what
     # the action caused), "same" is step t's own (expliCCit and Sage's
     # offline data put reward and action on one row).

@@ -264,7 +264,7 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
     let steps = if plan.steps {
         let policy = match &plan.control {
             Control::Stock => None,
-            Control::Agent { policy } => Some(step::Policy::load(policy)?),
+            Control::Agent { policy, noise } => Some(step::Policy::load(policy, *noise)?),
         };
         Some(step::spawn(
             std::sync::Arc::clone(&conn),

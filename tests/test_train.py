@@ -16,6 +16,7 @@ from expliccit_env.policy import EXPLICCIT_OBS_COLS, OBS_DIM  # noqa: E402
 from expliccit_env.train import data, fit  # noqa: E402
 from expliccit_env.train.export import to_onnx  # noqa: E402
 from expliccit_env.train.models import ExpliccitActor, ExpliccitNet1, PolicyGraph, Scaler  # noqa: E402
+from expliccit_env.train.online import OnlineSpec, run_online  # noqa: E402
 from expliccit_env.train.spec import Net1Spec, Net2Spec  # noqa: E402
 
 
@@ -72,6 +73,30 @@ def test_net1_learns_and_net2_runs() -> None:
     with torch.no_grad():
         a = actor(torch.randn(16, 1))
     assert torch.all(a.abs() <= 1)
+
+
+def test_interval_net1_covers_held_out_rows_at_the_requested_rate() -> None:
+    steps = synthetic(n_episodes=60)
+    spec = Net1Spec(
+        width=64, epochs=30, patience=5, batch_size=256, lcfs=("capacity_bps",), intervals=True
+    )
+    net1, _ = fit.fit_net1(spec, steps, seed=0)
+    iv = fit.report_net1(net1, steps, "test")["capacity_bps"]["interval"]
+    assert 0.83 < iv["coverage"] < 0.97, iv
+    lo, hi = net1.bounds(steps.obs[:100])
+    assert np.all(lo <= hi)
+
+
+def test_utility_reward_prices_unused_capacity_delay_and_loss() -> None:
+    steps = synthetic(n_episodes=1, steps=3)
+    lab = steps.labels
+    lab["capacity_bps"] = np.array([10e6, 10e6, 10e6], np.float32)
+    lab["receive_rate_bps"] = np.array([10e6, 5e6, 10e6], np.float32)
+    lab["queue_delay_mean_ns"] = np.array([0, 0, 20e6], np.float32)
+    lab["base_rtt_ns"] = np.full(3, 40e6, np.float32)
+    lab["drop_fraction"] = np.array([np.nan, 0.0, 0.01], np.float32)
+    r = fit.utility(steps, Net2Spec(reward="utility", delay_weight=0.5, loss_weight=4.0))
+    assert np.allclose(r, [1.0, 0.5, 1.0 - 0.25 - 0.04])
 
 
 def test_as_deployed_rounds_beliefs_and_actions() -> None:
@@ -159,3 +184,40 @@ def test_exported_graph_runs_in_the_guest(build: object, tmp_path: Path) -> None
     assert isinstance(out, EpisodeOk), out.row
     applied = out.tables["steps"]["applied_action"].to_numpy()
     assert applied.size > 100 and np.all(np.abs(applied) <= 0.05)
+
+
+@pytest.mark.uml
+def test_online_loop_runs_an_iteration(build: object, tmp_path: Path) -> None:
+    from expliccit_env.uml import UmlBuild  # noqa: PLC0415
+
+    assert isinstance(build, UmlBuild)
+    steps = synthetic()
+    steps.labels["drop_fraction"] = np.zeros_like(steps.obs[:, 0])
+    net1, _ = fit.fit_net1(Net1Spec(width=64, epochs=1, batch_size=256), steps, 0)
+    fit.save_net1(net1, Net1Spec(width=64), tmp_path / "net1.pt")
+    path = {
+        "trace": {"kind": "periodic_levels", "levels_mbps": [24], "level_ms": 1000},
+        "delay": {"mahak_compat_mrtt_ms": 10},
+        "buffer": {"packets": 100},
+    }
+    camp = {
+        "name": "p",
+        "ccs": [{"kind": "stock", "name": "cubic"}],
+        "sweep": {"kind": "paths", "paths": [path]},
+    }
+    (tmp_path / "paths.json").write_text(json.dumps(camp))
+    spec = OnlineSpec(
+        paths_from=tmp_path / "paths.json",
+        eval_from=tmp_path / "paths.json",
+        net1_from=tmp_path / "net1.pt",
+        net2=Net2Spec(hidden=16, batch_size=64, reward="utility"),
+        iterations=1,
+        episodes_per_iteration=2,
+        duration_ms=3000,
+        updates_per_iteration=20,
+    )
+    report = run_online(spec, tmp_path / "out", build, workers=2)
+    (entry,) = report["iterations"]
+    assert entry["rollouts"]["ok"] == 2 and entry["new_transitions"] > 400
+    assert entry["eval"]["ok"] == 1
+    assert (tmp_path / "out" / "policy.onnx").exists()

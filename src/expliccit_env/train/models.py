@@ -10,6 +10,7 @@ so its released checkpoints load into them unchanged.
 
 from __future__ import annotations
 
+import warnings
 from typing import Literal
 
 import numpy as np
@@ -41,7 +42,10 @@ class Scaler(nn.Module):
     def fit(cols: tuple[int, ...], x: F32, kind: Literal["robust", "minmax", "standard"]) -> Scaler:
         """Fit on rows x (already restricted to ``cols``); non-finite values
         are ignored, and a column without any finite value maps to itself."""
-        with np.errstate(all="ignore"):
+        # An all-NaN column is expected (a label undefined on these rows):
+        # it gets centre 0 and spread 1 below, so numpy's warnings are noise.
+        with np.errstate(all="ignore"), warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
             x64 = np.where(np.isfinite(x), x, np.nan).astype(np.float64)
             n = x64.shape[1]
             lo, hi = np.full(n, -_BIG), np.full(n, _BIG)
@@ -85,7 +89,9 @@ class ExpliccitNet1(nn.Module):
     """expliCCit's encoder: a widening layer, two residual blocks, a tapering
     stack (w, w/2, w/4, w/8 with batch norm), one linear head per LCF."""
 
-    def __init__(self, inputs: int, lcfs: int, width: int = 512, dropout: float = 0.3) -> None:
+    def __init__(
+        self, inputs: int, lcfs: int, width: int = 512, dropout: float = 0.3, per_lcf: int = 1
+    ) -> None:
         super().__init__()
         w = width
 
@@ -102,11 +108,39 @@ class ExpliccitNet1(nn.Module):
         self.hidden = nn.Sequential(
             *layer(w, w // 2, True), *layer(w // 2, w // 4, True), *layer(w // 4, w // 8, False)
         )
-        self.heads = nn.ModuleList([nn.Linear(w // 8, 1) for _ in range(lcfs)])
+        self.heads = nn.ModuleList([nn.Linear(w // 8, per_lcf) for _ in range(lcfs)])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = self.hidden(self.res2(self.res1(self.initial(x))))
         return torch.cat([head(h) for head in self.heads], dim=1)
+
+
+def _softplus(x: torch.Tensor) -> torch.Tensor:
+    # relu(x) + log(1 + exp(-|x|)): stable, and only ops tract runs.
+    return torch.relu(x) + torch.log(1 + torch.exp(-torch.abs(x)))
+
+
+class IntervalNet1(nn.Module):
+    """net1 reporting what the observations support: for each LCF a centre
+    and an interval. The base network gives three numbers per LCF (m, a, b);
+    the bounds are m - softplus(a) - c and m + softplus(b) + c, so they never
+    cross the centre, and c is the conformal correction fitted on held-out
+    paths. Output: the K centres, then the K lower bounds, then the K upper
+    bounds, all in the LCF scaler's units."""
+
+    widen: torch.Tensor
+
+    def __init__(self, base: nn.Module, lcfs: int) -> None:
+        super().__init__()
+        self.base, self.k = base, lcfs
+        self.register_buffer("widen", torch.zeros(lcfs))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        o = self.base(x).reshape(-1, self.k, 3)
+        m, a, b = o[:, :, 0], o[:, :, 1], o[:, :, 2]
+        lo = torch.minimum(m - _softplus(a) - self.widen, m)
+        hi = torch.maximum(m + _softplus(b) + self.widen, m)
+        return torch.cat([m, lo, hi], dim=1)
 
 
 class ExpliccitActor(nn.Module):
