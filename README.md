@@ -112,10 +112,11 @@ CI runs the same on every push (`.github/workflows/ci.yml`).
 
 | Area | State |
 |---|---|
-| UML build, link model, observations, records, datasets, campaigns, CLI | done, tested (61 tests) |
+| UML build, link model, observations, records, datasets, campaigns, CLI | done, tested (63 tests) |
 | Agent controllers with ONNX policies, closed loop (`sage-v1`) | done, tested |
 | Sage's step and step training data (labels, reward, action per step) | done, tested; the comparison with `sage.cc`'s own code is UNRUN |
-| Trainer: net1, net2, export, expliCCit import | runs end to end; net1 learns (R^2 0.87 to 0.99 on held-out paths except free buffer); the first net2 collapses the window in closed loop (`docs/training.md`) |
+| Trainer: net1, net2, export, expliCCit import | runs end to end; reproduces an expliCCit-shaped controller (84 to 85% utilization from BBRv1, Cubic and Vegas logs; `docs/training.md`) |
+| Online training, interval encoder | in progress (`docs/methodology.md`) |
 | Mahak metrics, trace generation and active-learning driver | done, matched to the originals |
 | Slurm array scripts | generated and checked locally; not yet submitted to a cluster |
 | BBRv3 (Google's, as `bbr3`) | done, tested |
@@ -183,6 +184,7 @@ later without rerunning), and `agent_action.parquet`.
 |---|---|
 | `docs/architecture.md` | Data flow and trust boundaries, exact link-model semantics, record ABI, time and determinism, decisions D1 to D22, known limits, how to extend |
 | `docs/training.md` | From teacher campaigns to a policy: train, run, import expliCCit's models, results so far |
+| `docs/methodology.md` | How to test the LCF idea from first principles: claims, identifiability and probing, experiment arms, online training |
 | `docs/validation.md` | Every check that ran, with commands and results, and what has not run |
 | `docs/m0-report.md` | Feasibility measurements: UML build, speed, memory, determinism, BPF |
 | `kernel/modules/README.md` | The kernel modules and their ABIs |

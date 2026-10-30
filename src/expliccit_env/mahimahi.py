@@ -49,6 +49,26 @@ def mahak_trace(bw_mbps: int, step: float) -> I64:
     return np.concatenate((ts1, ts2)).astype(np.int64)
 
 
+def periodic_trace(levels_mbps: list[float], level_ms: int) -> I64:
+    """Capacity cycling through ``levels_mbps``, each held for ``level_ms``.
+
+    Opportunities (1500-byte packets) are spread over ms 1 to L of the cycle
+    so that each level delivers its rate exactly over its span (rounded down
+    to whole packets): ms j of a level gets floor(j r) - floor((j - 1) r)
+    with r packets per ms. Mahimahi repeats a trace with its last timestamp
+    as the period, which is L whenever the last level's last ms holds an
+    opportunity (always for levels that are multiples of 12 Mbit/s)."""
+    ms = np.arange(1, len(levels_mbps) * level_ms + 1, dtype=np.int64)
+    level = (ms - 1) // level_ms
+    j = ms - level * level_ms
+    r = np.asarray(levels_mbps, dtype=np.float64)[level] / 12.0  # 1500 B per 12 kbit
+    counts = np.floor(j * r) - np.floor((j - 1) * r)
+    ts = np.repeat(ms, counts.astype(np.int64))
+    if ts.size == 0:
+        raise ValueError("periodic trace has no delivery opportunity")
+    return ts
+
+
 def parse_trace(text: str) -> I64:
     """A Mahimahi trace file: one nondecreasing ms timestamp per line, last > 0."""
     lines = text.split("\n")

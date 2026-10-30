@@ -114,17 +114,33 @@ fn boot() -> Result<()> {
 }
 
 fn load_modules(dir: &Path, plan: &Plan) -> Result<()> {
-    let mut mods = vec![
+    let mut mods: Vec<(&str, String)> = vec![
         ("expl_rec.ko", format!("ring_mib={}", plan.ring_mib)),
         ("sch_mmlink.ko", String::new()),
         ("expl_tcpobs.ko", format!("mark={}", plan.obs_mark)),
         ("tcp_agent.ko", String::new()),
     ];
-    // BBRv3 is loaded only when an episode uses it, so every other episode
-    // runs without any BBRv3 code in the kernel (docs/validation.md).
-    let cross_bbr3 = plan.cross.iter().any(|c| matches!(c, CrossFlow::Tcp { cc, .. } if cc == "bbr3"));
-    if plan.cc == "bbr3" || cross_bbr3 {
-        mods.push(("tcp_bbr3.ko", String::new()));
+    // A congestion control built as a module (BBRv3 and the extra teachers)
+    // is loaded only when an episode uses it, so every other episode runs
+    // without its code in the kernel (docs/validation.md). Veno and YeAH
+    // use Vegas's exported functions, so Vegas comes first.
+    let cross = plan.cross.iter().filter_map(|c| match c {
+        CrossFlow::Tcp { cc, .. } => Some(cc.as_str()),
+        CrossFlow::Udp { .. } => None,
+    });
+    let mut wanted: Vec<String> = Vec::new();
+    for cc in std::iter::once(plan.cc.as_str()).chain(cross) {
+        let deps: &[&str] = if matches!(cc, "veno" | "yeah") { &["vegas"] } else { &[] };
+        for name in deps.iter().copied().chain(std::iter::once(cc)) {
+            let file = format!("tcp_{name}.ko");
+            let loaded = wanted.contains(&file) || mods.iter().any(|(m, _)| *m == file);
+            if dir.join(&file).exists() && !loaded {
+                wanted.push(file);
+            }
+        }
+    }
+    for file in &wanted {
+        mods.push((file.as_str(), String::new()));
     }
     for (name, params) in mods {
         sys::finit_module(&dir.join(name), &params).ctx(format!("loading {name}"))?;

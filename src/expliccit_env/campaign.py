@@ -18,8 +18,13 @@ from collections.abc import Iterator
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
-from expliccit_env.dataset import DATASET_VERSION, ShardWriter
+import numpy as np
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+from expliccit_env.dataset import DATASET_VERSION, TABLES, ShardWriter
 from expliccit_env.episode import EpisodeOutcome, run_episode
 from expliccit_env.spec import CampaignSpec, EpisodeSpec
 from expliccit_env.uml import UmlBuild
@@ -95,6 +100,7 @@ def run_shard(
     scratch: Path | None = None,
     keep_raw: bool = False,
     timeout_s: float = 1800.0,
+    tables: frozenset[str] = frozenset(TABLES),
 ) -> Iterator[EpisodeOutcome]:
     """Run one shard, yielding outcomes as they are written."""
     specs = load_episodes(out)[shard.index :: shard.count]
@@ -102,7 +108,7 @@ def run_shard(
         work = out / "raw" if keep_raw else Path(tmp)
         jobs = [_Job(s, build.root, work, keep_raw, timeout_s) for s in specs]
         with (
-            ShardWriter(out / "shards" / shard.name()) as writer,
+            ShardWriter(out / "shards" / shard.name(), tables) as writer,
             ProcessPoolExecutor(
                 max_workers=max(1, workers), mp_context=multiprocessing.get_context("forkserver")
             ) as pool,
@@ -158,6 +164,52 @@ def slurm_script(
     return "\n".join(
         ["#!/usr/bin/env bash", *opts, "set -euo pipefail", ': "${SLURM_ARRAY_TASK_ID:?}"', run, ""]
     )
+
+
+_SUMMARY_METRICS: Final = ("utilization", "mean_delay_ms", "first_power", "goodput_mbps")
+
+
+def summary(out: Path, *, resamples: int = 2000) -> dict[str, dict[str, object]]:
+    """Per controller: episodes ok and failed, and each metric's mean with a
+    95% bootstrap interval over paths (the episodes of one path, whatever
+    their seed, are resampled together)."""
+    shards = [s for s in sorted((out / "shards").glob("*")) if (s / "DONE").exists()]
+    # pyarrow-stubs leave read_table partly untyped.
+    t = pa.concat_tables(
+        [pq.read_table(s / "episodes.parquet") for s in shards],  # pyright: ignore[reportUnknownMemberType]
+        promote_options="permissive",
+    )
+    controller = [str(c) for c in t["controller"].to_pylist()]
+    ok = np.array([s == "ok" for s in t["status"].to_pylist()])
+    path = np.array([_path_key(str(j)) for j in t["spec_json"].to_pylist()])
+    rng = np.random.default_rng(0)
+    result: dict[str, dict[str, object]] = {}
+    for ctl in sorted(set(controller)):
+        mine = np.array([c == ctl for c in controller])
+        entry: dict[str, object] = {"ok": int((mine & ok).sum()), "failed": int((mine & ~ok).sum())}
+        for m in _SUMMARY_METRICS:
+            if m not in t.column_names:
+                continue
+            col = np.asarray(t[m].to_numpy(zero_copy_only=False), dtype=np.float64)
+            sel = mine & ok & np.isfinite(col)
+            per_path = np.array([col[sel & (path == q)].mean() for q in np.unique(path[sel])])
+            if per_path.size == 0:
+                continue
+            boot = per_path[rng.integers(0, per_path.size, (resamples, per_path.size))].mean(axis=1)
+            entry[m] = {
+                "mean": float(per_path.mean()),
+                "ci95": [float(np.quantile(boot, 0.025)), float(np.quantile(boot, 0.975))],
+                "paths": int(per_path.size),
+            }
+        result[ctl] = entry
+    return result
+
+
+def _path_key(spec_json: str) -> str:
+    spec = json.loads(spec_json)
+    for k in ("cc", "seed"):
+        spec.pop(k, None)
+    return json.dumps(spec, sort_keys=True)
 
 
 def status(out: Path) -> dict[str, int]:

@@ -12,9 +12,9 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from expliccit_env import campaign, mahak
-from expliccit_env.dataset import ShardWriter
+from expliccit_env.dataset import TABLES, ShardWriter
 from expliccit_env.episode import EpisodeOk, run_episode
-from expliccit_env.spec import CampaignSpec, EpisodeSpec
+from expliccit_env.spec import STOCK_NAMES, CampaignSpec, EpisodeSpec
 from expliccit_env.uml import UmlBuild
 
 
@@ -50,6 +50,7 @@ def _run(a: argparse.Namespace) -> int:
         scratch=Path(a.scratch) if a.scratch else None,
         keep_raw=a.keep_raw,
         timeout_s=a.timeout,
+        tables=frozenset(a.tables.split(",")) if a.tables else frozenset(TABLES),
     ):
         ok = isinstance(o, EpisodeOk)
         failed += not ok
@@ -78,6 +79,11 @@ def _slurm(a: argparse.Namespace) -> int:
 
 def _status(a: argparse.Namespace) -> int:
     print(json.dumps(campaign.status(Path(a.out)), indent=2))
+    return 0
+
+
+def _summary(a: argparse.Namespace) -> int:
+    print(json.dumps(campaign.summary(Path(a.out)), indent=2))
     return 0
 
 
@@ -168,7 +174,7 @@ def _common(q: argparse.ArgumentParser) -> None:
 
 
 def _mahak_query_args(m: argparse.ArgumentParser) -> None:
-    m.add_argument("--cc", required=True, choices=["cubic", "bbr", "bbr3", "reno"])
+    m.add_argument("--cc", required=True, choices=STOCK_NAMES)
     m.add_argument("--metric", required=True, choices=["utilization", "first_power", "delay"])
     m.add_argument("--buffer", type=int, required=True, help="packets")
     m.add_argument("--mrtt", type=int, required=True, help="Mahak mRTT: ONE-WAY delay, ms")
@@ -182,7 +188,7 @@ def _mahak_query_args(m: argparse.ArgumentParser) -> None:
 
 def _mahak_args(d: argparse.ArgumentParser) -> None:
     # Mahak's own flag spellings are accepted too, so run_mahak.sh lines work.
-    d.add_argument("--cc", "-cc", required=True, choices=["cubic", "bbr", "bbr3", "reno"])
+    d.add_argument("--cc", "-cc", required=True, choices=STOCK_NAMES)
     d.add_argument("--budget", "-budget", type=int, required=True, help="queries after the first")
     d.add_argument(
         "--metric", "-metric", required=True, choices=["utilization", "first_power", "delay"]
@@ -198,18 +204,7 @@ def _mahak_args(d: argparse.ArgumentParser) -> None:
     d.set_defaults(fn=_mahak)
 
 
-def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="expliccit")
-    sub = p.add_subparsers(required=True)
-
-    e = sub.add_parser("episode", help="run one EpisodeSpec into a one-shard dataset")
-    e.add_argument("spec")
-    e.add_argument("out")
-    e.add_argument("--keep-raw", action="store_true")
-    _common(e)
-    e.set_defaults(fn=_episode)
-
-    c = sub.add_parser("campaign").add_subparsers(required=True)
+def _campaign_args(c: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:  # pyright: ignore[reportPrivateUsage]
     cp = c.add_parser("plan", help="expand a CampaignSpec into episodes.jsonl")
     cp.add_argument("spec")
     cp.add_argument("out")
@@ -220,6 +215,10 @@ def main(argv: list[str] | None = None) -> int:
     cr.add_argument("--workers", type=int, default=1, help="parallel UML guests (one core each)")
     cr.add_argument("--scratch", help="node-local scratch for raw records")
     cr.add_argument("--keep-raw", action="store_true")
+    cr.add_argument(
+        "--tables",
+        help=f"comma-separated tables to keep (default all: {','.join(TABLES)})",
+    )
     _common(cr)
     cr.set_defaults(fn=_run)
     cs = c.add_parser("slurm", help="write an sbatch array script for a planned campaign")
@@ -234,6 +233,23 @@ def main(argv: list[str] | None = None) -> int:
     st = c.add_parser("status")
     st.add_argument("out")
     st.set_defaults(fn=_status)
+    su = c.add_parser("summary", help="per-controller metrics with bootstrap intervals over paths")
+    su.add_argument("out")
+    su.set_defaults(fn=_summary)
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(prog="expliccit")
+    sub = p.add_subparsers(required=True)
+
+    e = sub.add_parser("episode", help="run one EpisodeSpec into a one-shard dataset")
+    e.add_argument("spec")
+    e.add_argument("out")
+    e.add_argument("--keep-raw", action="store_true")
+    _common(e)
+    e.set_defaults(fn=_episode)
+
+    _campaign_args(sub.add_parser("campaign").add_subparsers(required=True))
 
     m = sub.add_parser("mahak-query", help="Mahak oracle_query in UML: print one metric")
     _mahak_query_args(m)

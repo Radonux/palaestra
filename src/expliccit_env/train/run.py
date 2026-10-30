@@ -23,8 +23,13 @@ def train(spec: TrainSpec, out: Path) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
     (out / "train_spec.json").write_text(spec.model_dump_json(indent=2))
     steps = data.load(spec.data, seed=spec.seed, val=spec.val_fraction, test=spec.test_fraction)
-    net1, net1_log = fit.fit_net1(spec.net1, steps, spec.seed)
-    torch.save(net1.net.state_dict(), out / "net1.pt")
+    if spec.net1_from is None:
+        net1, net1_log = fit.fit_net1(spec.net1, steps, spec.seed)
+        net1_spec = spec.net1
+    else:
+        net1, net1_spec = fit.load_net1(spec.net1_from)
+        net1_log = {"loaded_from": str(spec.net1_from)}
+    fit.save_net1(net1, net1_spec, out / "net1.pt")
     actor, net2_log = fit.fit_net2(spec.net2, steps, net1, spec.seed)
     torch.save(actor.state_dict(), out / "net2.pt")
     report: dict[str, Any] = {
@@ -35,7 +40,7 @@ def train(spec: TrainSpec, out: Path) -> dict[str, Any]:
     }
     if spec.net2.inputs == "net1":  # a policy on true LCFs cannot run
         (out / "policy.onnx").write_bytes(
-            to_onnx(fit.policy_graph(net1, actor, spec.net2.action_max))
+            to_onnx(fit.policy_graph(net1, actor, spec.net2.action_max, spec.net2.action_decimals))
         )
     _write(out, report)
     return report

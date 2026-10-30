@@ -16,7 +16,7 @@ import hashlib
 import itertools
 import json
 from pathlib import Path
-from typing import Annotated, Final, Literal, Self
+from typing import Annotated, Final, Literal, Self, get_args
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
@@ -73,6 +73,18 @@ class MahakStep(_Frozen):
         return mm.mahak_trace(self.bw_mbps, self.step)
 
 
+class PeriodicLevels(_Frozen):
+    """Capacity cycling through levels, each held ``level_ms`` (for example
+    expliCCit's case-study link, 24 and 48 Mbit/s alternating every 7 s)."""
+
+    kind: Literal["periodic_levels"] = "periodic_levels"
+    levels_mbps: Annotated[list[Annotated[float, Field(gt=0, le=3000)]], Field(min_length=1)]
+    level_ms: Annotated[int, Field(gt=0, le=65_000)]
+
+    def timestamps(self) -> mm.I64:
+        return mm.periodic_trace(self.levels_mbps, self.level_ms)
+
+
 class TraceFile(_Frozen):
     """A Mahimahi trace file, pinned by content hash for provenance."""
 
@@ -87,7 +99,7 @@ class TraceFile(_Frozen):
         return mm.parse_trace(raw.decode("ascii"))
 
 
-type Trace = Annotated[MahakStep | TraceFile, Field(discriminator="kind")]
+type Trace = Annotated[MahakStep | PeriodicLevels | TraceFile, Field(discriminator="kind")]
 
 
 class DropTail(_Frozen):
@@ -123,13 +135,20 @@ class PathSpec(_Frozen):
     loss: Loss = Loss()
 
 
-type StockName = Literal["cubic", "bbr", "bbr3", "reno"]
+type StockName = Literal[
+    "cubic", "bbr", "bbr3", "reno",
+    # Further teachers, built as modules (kernel/uml.config).
+    "bic", "cdg", "highspeed", "htcp", "hybla", "illinois", "lp", "nv", "scalable",
+    "vegas", "veno", "westwood", "yeah",
+]  # fmt: skip
+STOCK_NAMES: Final = get_args(StockName.__value__)
 
 
 class StockCC(_Frozen):
-    """An in-kernel congestion control: Cubic, BBRv1 (``bbr``) and Reno as
-    shipped in Linux 7.0, or Google's BBRv3 (``bbr3``: it needs
-    the core patches imported under third_party/linux)."""
+    """An in-kernel congestion control: Cubic, BBRv1 (``bbr``), Reno and the
+    other controllers Linux 7.0 ships (built as modules here), or Google's
+    BBRv3 (``bbr3``: it needs the core patches imported under
+    third_party/linux)."""
 
     kind: Literal["stock"] = "stock"
     name: StockName
@@ -319,7 +338,28 @@ class MahakSample(_Frozen):
         ]
 
 
-type Sweep = Annotated[MahakGrid | MahakSample, Field(discriminator="kind")]
+class PathList(_Frozen):
+    """An explicit list of paths (any trace kind, delay, buffer, uplink).
+    A condition's loss replaces each path's own."""
+
+    kind: Literal["paths"] = "paths"
+    paths: Annotated[list[PathSpec], Field(min_length=1)]
+
+
+def _paths(sweep: MahakGrid | MahakSample | PathList, rng: np.random.Generator) -> list[PathSpec]:
+    if isinstance(sweep, PathList):
+        return list(sweep.paths)
+    return [
+        PathSpec(
+            trace=MahakStep(bw_mbps=bw, step=step),
+            delay=MahakMrtt(mahak_compat_mrtt_ms=mrtt),
+            buffer=DropTail(packets=buf),
+        )
+        for bw, step, mrtt, buf in sweep.points(rng)
+    ]
+
+
+type Sweep = Annotated[MahakGrid | MahakSample | PathList, Field(discriminator="kind")]
 
 
 class Condition(_Frozen):
@@ -354,19 +394,14 @@ class CampaignSpec(_Frozen):
         """Deterministic expansion: points x conditions x ccs x replicates,
         each with its own seed drawn from the campaign seed."""
         rng = np.random.default_rng(self.seed)
-        points = self.sweep.points(rng)
+        paths = _paths(self.sweep, rng)
         out: list[EpisodeSpec] = []
-        for (bw, step, mrtt, buf), cond, cc, _ in itertools.product(
-            points, self.conditions, self.ccs, range(self.replicates)
+        for path, cond, cc, _ in itertools.product(
+            paths, self.conditions, self.ccs, range(self.replicates)
         ):
             out.append(
                 EpisodeSpec(
-                    path=PathSpec(
-                        trace=MahakStep(bw_mbps=bw, step=step),
-                        delay=MahakMrtt(mahak_compat_mrtt_ms=mrtt),
-                        buffer=DropTail(packets=buf),
-                        loss=cond.loss,
-                    ),
+                    path=path.model_copy(update={"loss": cond.loss}),
                     cc=cc,
                     duration_ms=self.duration_ms,
                     seed=int(rng.integers(0, U64, dtype=np.uint64)),

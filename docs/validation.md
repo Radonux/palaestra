@@ -15,7 +15,7 @@ executed in this environment unless it says CI.
       git clone https://github.com/Ppazhooh/mahak /tmp/mahak && git -C /tmp/mahak checkout 5077583
       EXPLICCIT_UML_DIR=build/uml EXPLICCIT_MAHAK_DIR=/tmp/mahak uv run pytest -q
 
-  Last result: 61 passed, 2 skipped (the `sage.cc` comparison, see below),
+  Last result: 63 passed, 2 skipped (the `sage.cc` comparison, see below),
   with the `train` extra installed (`uv sync --extra train`).
 
 ## Ran: correctness of the ports and the link model
@@ -212,6 +212,24 @@ buffer 0.50); expliCCit's released net1 on the same steps gets 0.36 to 1.0
 on four and negative R^2 on free buffer and busy fraction; its released
 policy runs in our closed loop at 0.58 to 0.95 utilization; our first net2
 collapses the window (diagnosed there).
+
+## Ran: teachers as modules, and seeded runs across guest versions (M10)
+
+Building BIC, CDG, HighSpeed, H-TCP, Hybla, Illinois, LP, NV, Scalable,
+Vegas, Veno, Westwood and YeAH into `kernel/uml.config` as modules changed
+the kernel image, so they are instead built from the unmodified in-tree
+sources as out-of-tree modules; the kernel image is bit-identical to
+before (md5 3ea96e84). Vegas, Veno, YeAH, LP and Westwood each ran an
+episode (utilization 0.94 to 0.99).
+
+The four seeded stock-identity episodes, rerun on the current guest
+against the M7 outputs: both Cubic episodes and one BBRv1 episode are
+byte-identical; the other BBRv1 episode diverges after 10.4 s, at a BBR
+pacing-gain change (its random gain-cycle phase). The same guest on the
+modified and the original kernel gives identical files, so the cause is
+the guest's own changes since M7, which shift the kernel's random stream.
+Seeded runs are reproducible for one build (kernel and guest), not across
+guest versions; compare versions on Cubic, or over many seeds.
 
 ## Not run to completion: the port of Sage's step against `sage.cc` (M9)
 

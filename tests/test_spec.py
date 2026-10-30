@@ -119,3 +119,23 @@ def test_conditions_multiply_a_campaign() -> None:
     assert len(wide) == 2 * len(plain)
     assert sum(not e.cross and e.path.loss.downlink == 0 for e in wide) == len(plain)
     assert sum(e.path.loss.downlink == 0.02 and len(e.cross) == 1 for e in wide) == len(plain)
+
+
+def test_paths_sweep_takes_any_trace_and_conditions_override_loss() -> None:
+    path = {
+        "trace": {"kind": "periodic_levels", "levels_mbps": [24, 48], "level_ms": 7000},
+        "delay": {"mahak_compat_mrtt_ms": 40},
+        "buffer": {"packets": 1000},
+        "loss": {"downlink": 0.5},
+    }
+    spec = {
+        "name": "p",
+        "ccs": [{"kind": "stock", "name": "vegas"}],
+        "sweep": {"kind": "paths", "paths": [path]},
+        "conditions": [{}, {"loss": {"downlink": 0.01}}],
+        "steps": True,
+    }
+    eps = CampaignSpec.parse(json.dumps(spec)).episodes()
+    assert [e.path.loss.downlink for e in eps] == [0.0, 0.01]
+    assert all(e.steps and e.cc.name == "vegas" for e in eps)
+    assert eps[0].guest_plan().downlink.trace.sum() == 24_000 * 7 // 12 + 48_000 * 7 // 12

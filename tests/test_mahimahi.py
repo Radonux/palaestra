@@ -156,3 +156,11 @@ def test_mahak_first_power() -> None:
     assert mm.mahak_metric(r, "utilization", 10) == 0.9
     assert mm.mahak_metric(r, "delay", 10) == 0.3
     assert mm.mahak_metric(r, "first_power", 10) == 0.9 / (3.0 / 10.0)
+
+
+def test_periodic_trace_has_exact_rates_and_period() -> None:
+    ts = mm.periodic_trace([24.0, 48.0], 7000)
+    assert int(ts[-1]) == 14_000  # Mahimahi's period: the whole cycle
+    assert int((ts <= 7000).sum()) == 24_000_000 * 7 // 12_000
+    assert int((ts > 7000).sum()) == 48_000_000 * 7 // 12_000
+    assert np.all(np.diff(ts) >= 0) and int(ts[0]) >= 1

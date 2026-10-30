@@ -6,6 +6,19 @@ what does not yet. The contract and data layout are in
 
 ## 1. Data: teacher campaigns with steps
 
+`examples/campaign-expliccit-teachers.json` is the expliCCit-like dataset:
+BBRv1, Cubic and Vegas (the teachers expliCCit names) over 120 paths
+(capacity alternating between b and 2b every 7 or 15 s for b = 12, 24,
+48 Mbit/s, or constant at 12 to 96 Mbit/s; one-way delay 5 to 40 ms;
+50 to 1000 packets), 30 s each. 360 episodes took 100 s on 4 cores and
+give 1.07M steps; with `--tables steps` the shard is 216 MB.
+
+Any Linux 7.0 congestion control can teach: Cubic, BBRv1, Reno and BBRv3,
+plus BIC, CDG, HighSpeed, H-TCP, Hybla, Illinois, LP, NV, Scalable, Vegas,
+Veno, Westwood and YeAH, built as modules and loaded only by the episodes
+that use them. A campaign's `sweep` can be `{"kind": "paths", "paths":
+[...]}` for any list of paths, including `periodic_levels` traces.
+
 Any campaign records Sage's steps when it sets `"steps": true`:
 
     {
@@ -84,7 +97,39 @@ modules unchanged; the pickled scikit-learn scalers are never loaded:
 the networks (LCF beliefs clamped at 0, the first six rounded, a rounded to
 three decimals); `--data` reports its net1's error on our data.
 
-## Results so far (October 2026, one dataset, one seed)
+## Reproduction: an expliCCit-shaped controller (one seed)
+
+Data: the expliCCit-like campaign above. net1: expliCCit's encoder, robust
+scaling, 4 epochs (early stop), on held-out paths R^2 0.988 (mean queueing
+delay), 0.986 (queue), 0.953 (capacity), 0.992 (one-way delay), 0.993
+(receive rate), 0.45 (busy fraction), 0.09 (free buffer). net2 variants on
+that net1, exported with a rounded to three decimals as expliCCit deploys
+it, evaluated over 45 s on 18 paths: expliCCit's two case-study links and
+16 held-out paths (rates, delays and buffers outside the training grid).
+Means over paths with 95% bootstrap intervals:
+
+| controller | utilization | mean queueing delay ms | power |
+|---|---|---|---|
+| BBRv1 | 0.970 [0.965, 0.975] | 10.2 | 3.62 |
+| BBRv3 | 0.940 [0.921, 0.957] | 16.7 | 3.21 |
+| Cubic | 0.981 [0.960, 0.994] | 77.2 | 0.83 |
+| Vegas | 0.951 [0.911, 0.981] | 18.6 | 3.57 |
+| net2 by behaviour cloning | 0.839 [0.761, 0.909] | 21.3 | 1.85 |
+| net2 by expliCCit's objective, discount 0.99 | 0.854 [0.795, 0.908] | 67.7 | 0.57 |
+| net2 by TD3+BC, discount 0.99, alpha 0.5 | 0.758 [0.666, 0.844] | 50.6 | 1.56 |
+| net2 by TD3+BC, discount 0.95, alpha 2.5 | 0.026 [0.020, 0.031] | 1.0 | 0.53 |
+
+The pipeline reproduces expliCCit's shape: a controller that acts only on
+seven inferred LCFs, learned offline from other controllers' logs, runs
+at 84 to 85% utilization where its teachers reach 95 to 98%. expliCCit's
+own objective gets there with a critic whose loss diverges (to about
+-4900: its penalty on random actions has no floor), and with three times
+the queueing delay of cloning. TD3+BC at discount 0.95 collapses the
+window: the policy's mean action is -0.021 per step against the teachers'
++0.0014. Sage's reward credits lower delay at once but delivered rate only
+over a 1 s window, which a 0.95 discount (about 200 ms) barely sees.
+
+## Earlier results (October 2026, one dataset, one seed)
 
 Data: the 144-episode campaign above without the loss condition (Cubic,
 BBRv1, BBRv3, Reno; 12 to 48 Mbit/s; one-way delay 10 or 40 ms; 50 or

@@ -36,11 +36,17 @@ TABLES: Final = ("obs", "labels", "link_events", "link_opp", "agent_action", "st
 
 
 class ShardWriter:
-    def __init__(self, directory: Path) -> None:
+    def __init__(self, directory: Path, tables: frozenset[str] = frozenset(TABLES)) -> None:
+        """``tables``: which per-episode tables to keep (episodes.parquet is
+        always written). Dropping link_events and link_opp saves most of the
+        space, but labels can then never be recomputed for those episodes."""
+        if not tables <= frozenset(TABLES):
+            raise ValueError(f"unknown tables {sorted(tables - frozenset(TABLES))}")
         if directory.exists():
             shutil.rmtree(directory)
         directory.mkdir(parents=True)
         self.dir = directory
+        self.tables = tables
         self.rows: list[dict[str, object]] = []
         self.writers: dict[str, pq.ParquetWriter] = {}
 
@@ -52,6 +58,8 @@ class ShardWriter:
         if isinstance(outcome, EpisodeOk):
             for name, table in outcome.tables.items():
                 assert name in TABLES, name
+                if name not in self.tables:
+                    continue
                 if name not in self.writers:
                     self.writers[name] = pq.ParquetWriter(
                         self.dir / f"{name}.parquet.tmp", table.schema, compression="zstd"

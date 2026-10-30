@@ -194,14 +194,19 @@ class _Learner:
     def __init__(self, spec: Net2Spec, k: int) -> None:
         self.spec = spec
         self.actor = NET2[spec.arch](k, spec.hidden)
-        self.critics = [Critic(k, spec.hidden) for _ in range(2 if spec.algo == "td3bc" else 1)]
+        n_critics = {"td3bc": 2, "expliccit-v1": 1, "bc": 0}[spec.algo]
+        self.critics = [Critic(k, spec.hidden) for _ in range(n_critics)]
         self.actor_t = copy.deepcopy(self.actor)
         self.critics_t = [copy.deepcopy(c) for c in self.critics]
         # expliCCit's learning rates for its objective, the spec's for TD3+BC.
-        td3bc = spec.algo == "td3bc"
-        self.opt_a = torch.optim.Adam(self.actor.parameters(), lr=spec.lr if td3bc else 1e-4)
+        theirs = spec.algo == "expliccit-v1"
+        self.opt_a = torch.optim.Adam(self.actor.parameters(), lr=1e-4 if theirs else spec.lr)
         critic_params = [p for c in self.critics for p in c.parameters()]
-        self.opt_c = torch.optim.Adam(critic_params, lr=spec.lr if td3bc else 1e-3)
+        self.opt_c = (
+            torch.optim.Adam(critic_params, lr=1e-3 if theirs else spec.lr)
+            if critic_params
+            else None
+        )
 
     def _critic_loss(self, s: torch.Tensor, a: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         qs = [c(s, a) for c in self.critics]
@@ -213,6 +218,12 @@ class _Learner:
 
     def update(self, t: _Transitions, step: int) -> dict[str, float]:
         spec, (s, a, r, s2) = self.spec, (t.s, t.a, t.r, t.s2)
+        if self.opt_c is None:  # bc
+            bc = ((self.actor(s) - a) ** 2).mean()
+            self.opt_a.zero_grad()
+            bc.backward()
+            self.opt_a.step()
+            return {"actor": float(bc.detach()), "bc": float(bc.detach())}
         with torch.no_grad():
             a2 = self.actor_t(s2)
             if spec.algo == "td3bc":
@@ -279,8 +290,39 @@ def fit_net2(
     }
 
 
-def policy_graph(net1: Net1, actor: nn.Module, action_max: float) -> PolicyGraph:
-    return PolicyGraph(net1.scaler, net1.net, net1.lcf_scaler, actor, action_max).eval()
+def save_net1(net1: Net1, spec: Net1Spec, path: Path) -> None:
+    """The whole estimator: its spec, input and output scalers, weights."""
+    torch.save(
+        {
+            "spec": spec.model_dump(mode="json"),
+            "scaler": net1.scaler.state_dict(),
+            "lcf_scaler": net1.lcf_scaler.state_dict(),
+            "net": net1.net.state_dict(),
+        },
+        path,
+    )
+
+
+def load_net1(path: Path) -> tuple[Net1, Net1Spec]:
+    saved = torch.load(path, map_location="cpu", weights_only=True)
+    spec = Net1Spec.model_validate(saved["spec"])
+    k, f = len(spec.lcfs), len(spec.obs_cols)
+    zeros = np.zeros((2, f), np.float32)
+    scaler = Scaler.fit(spec.obs_cols, zeros, "standard")
+    scaler.load_state_dict(saved["scaler"])
+    lcf_scaler = Scaler.fit(tuple(range(k)), np.zeros((2, k), np.float32), "standard")
+    lcf_scaler.load_state_dict(saved["lcf_scaler"])
+    net = NET1[spec.arch](f, k, spec.width, spec.dropout)
+    net.load_state_dict(saved["net"])
+    return Net1(scaler, net.eval(), lcf_scaler, tuple(spec.lcfs)), spec
+
+
+def policy_graph(
+    net1: Net1, actor: nn.Module, action_max: float, action_decimals: int | None = None
+) -> PolicyGraph:
+    graph = PolicyGraph(net1.scaler, net1.net, net1.lcf_scaler, actor, action_max)
+    graph.action_decimals = action_decimals
+    return graph.eval()
 
 
 # --- expliCCit's released checkpoints -----------------------------------------

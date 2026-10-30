@@ -266,8 +266,9 @@ where the brief did not specify (its later sections were missing).
 - **A new candidate LCF (label).** Add a pure function to
   `src/expliccit_env/labels.py` that maps an episode's records and constants
   to one value per observation row, and a column in `labels_table`. Existing
-  datasets keep `link_events` and `link_opp`, so the new label can be
-  recomputed from them without rerunning episodes.
+  datasets keep `link_events` and `link_opp`, which hold what a new label
+  needs, but nothing reads them back yet: today a new label means rerunning
+  the episodes (or keeping raw records with `--keep-raw`).
 - **A new trace shape.** Add a variant next to `MahakStep` in `spec.py` with a
   `timestamps()` method returning Mahimahi trace timestamps; the kernel only
   ever sees per-ms counts. `TraceFile` already accepts any Mahimahi trace

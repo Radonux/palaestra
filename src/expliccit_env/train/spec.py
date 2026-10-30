@@ -85,7 +85,9 @@ class Net2Spec(_Frozen):
     # "td3bc": TD3+BC (Fujimoto and Gu, 2021). "expliccit-v1": expliCCit's
     # action_head.py objective (one critic, a penalty on uniform random
     # actions, an actor that only maximizes Q), kept to compare against.
-    algo: Literal["td3bc", "expliccit-v1"] = "td3bc"
+    # "bc": regress the logged actions only (no critic), the baseline that
+    # shows what imitation alone gives.
+    algo: Literal["td3bc", "expliccit-v1", "bc"] = "td3bc"
     # "true_lcfs" trains on the labels instead of net1's beliefs: an ablation
     # that splits the gap to a teacher into the bottleneck's cost and net1's
     # error. Such a policy needs ground truth to run, so it is not exported.
@@ -96,6 +98,9 @@ class Net2Spec(_Frozen):
     # offline data put reward and action on one row).
     reward_alignment: Literal["next", "same"] = "next"
     action_max: Annotated[float, Field(gt=0, le=8)] = 1.0
+    # Round a to this many decimals in the exported graph (expliCCit's
+    # deployed controller uses 3: a dead band of 0.0005 around no change).
+    action_decimals: Annotated[int, Field(ge=0, le=6)] | None = None
     discount: Annotated[float, Field(ge=0, lt=1)] = 0.95
     reward_scale: Annotated[float, Field(gt=0)] = 1.0 / 25  # Sage's reward peaks at 25
     alpha: Annotated[float, Field(gt=0)] = 2.5  # TD3+BC's Q weight
@@ -119,6 +124,9 @@ class TrainSpec(_Frozen):
     test_fraction: Annotated[float, Field(ge=0, lt=1)] = 0.1
     seed: Annotated[int, Field(ge=0)] = 0
     net1: Net1Spec = Net1Spec()
+    # A trained net1 to reuse (a run's net1.pt): net1 is then not trained, and
+    # its saved spec replaces the "net1" field.
+    net1_from: Path | None = None
     net2: Net2Spec = Net2Spec()
 
     @model_validator(mode="after")

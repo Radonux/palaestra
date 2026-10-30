@@ -164,6 +164,8 @@ class PolicyGraph(nn.Module):
         self.scaler, self.net1, self.lcf_scaler, self.net2 = scaler, net1, lcf_scaler, net2
         self.action_max = action_max
         self.as_deployed = as_deployed
+        # Round a to this many decimals (as_deployed implies 3).
+        self.action_decimals: int | None = None
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
         z = self.net1(self.scaler(obs))
@@ -172,4 +174,8 @@ class PolicyGraph(nn.Module):
             c = torch.cat([torch.round(c[:, :6]), c[:, 6:]], dim=1)
             z = (c - self.lcf_scaler.center) / self.lcf_scaler.spread
         a = self.net2(z) * self.action_max
-        return torch.round(a * 1000.0) / 1000.0 if self.as_deployed else a
+        decimals = 3 if self.as_deployed else self.action_decimals
+        if decimals is None:
+            return a
+        scale = float(10**decimals)
+        return torch.round(a * scale) / scale

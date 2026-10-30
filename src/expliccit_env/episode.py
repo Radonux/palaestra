@@ -28,6 +28,7 @@ from expliccit_env.spec import (
     EpisodeSpec,
     MahakMrtt,
     MahakStep,
+    StockCC,
     TcpCross,
     UdpCross,
 )
@@ -115,6 +116,10 @@ def _spec_columns(spec: EpisodeSpec) -> dict[str, object]:
     trace = p.trace
     return {
         "cc": spec.cc.name,
+        # Which controller: the stock name, or the policy's mode and hash.
+        "controller": spec.cc.name
+        if isinstance(spec.cc, StockCC)
+        else f"{spec.cc.name}:{spec.cc.policy.sha256[:12]}",
         "trace_kind": trace.kind,
         "bw_mbps": trace.bw_mbps if isinstance(trace, MahakStep) else None,
         "step": trace.step if isinstance(trace, MahakStep) else None,
