@@ -24,7 +24,9 @@ cp "$HERE"/kernel/modules/{Kbuild,*.c,*.h} "$mods/"
 make -s -C "${KERNEL_SRC:-$HERE/third_party/linux}" O="$BUILD" ARCH=um M="$mods" W=1 modules
 
 target=x86_64-unknown-linux-musl
-cargo build --quiet --release --locked --manifest-path "$HERE/guest/Cargo.toml" --target "$target"
+# Run cargo inside guest/ so rustup honours guest/rust-toolchain.toml (it
+# resolves the toolchain from the working directory, not the manifest).
+(cd "$HERE/guest" && cargo build --quiet --release --locked --target "$target")
 
 root="$BUILD/rootfs"
 rm -rf "$root"
