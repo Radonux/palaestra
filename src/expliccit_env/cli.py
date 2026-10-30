@@ -112,7 +112,15 @@ def main(argv: list[str] | None = None) -> int:
 
     def common(q: argparse.ArgumentParser) -> None:
         q.add_argument(
-            "--build", required=True, help="UML build dir (build-uml.sh + build-guest.sh)"
+            "--build",
+            required=True,
+            help="build-uml.sh + build-guest.sh dir, or tier2-setup.sh dir",
+        )
+        q.add_argument(
+            "--tier",
+            choices=["uml", "native"],
+            default="uml",
+            help="uml: Tier 1, virtual time; native: Tier 2, real time, needs root",
         )
         q.add_argument(
             "--timeout", type=float, default=1800.0, help="wall-clock seconds per episode"

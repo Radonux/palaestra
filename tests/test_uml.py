@@ -15,6 +15,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from expliccit_env import campaign
+from expliccit_env.cli import main
 from expliccit_env import mahimahi as mm
 from expliccit_env.guest_plan import GuestPlan, LinkPlan
 from expliccit_env.records import Records, load_records
@@ -146,3 +147,42 @@ def test_campaign_shards_and_tables(build: UmlBuild, tmp_path: Path) -> None:
         obs, lab = pq.read_table(shard / "obs.parquet"), pq.read_table(shard / "labels.parquet")
         assert obs.num_rows == lab.num_rows == sum(eps["n_obs"].to_pylist())
         assert obs["t_ns"].equals(lab["t_ns"])
+
+
+def test_cli_episode_and_mahak_query(build: UmlBuild, tmp_path: Path) -> None:
+    spec = json.loads((Path(__file__).parents[1] / "examples" / "episode-mahak.json").read_text())
+    spec["duration_ms"] = 2000
+    (tmp_path / "spec.json").write_text(json.dumps(spec))
+    assert (
+        main(
+            [
+                "episode",
+                str(tmp_path / "spec.json"),
+                str(tmp_path / "out"),
+                "--build",
+                str(build.root),
+            ]
+        )
+        == 0
+    )
+    assert (tmp_path / "out" / "DONE").exists()
+    args = [
+        "mahak-query",
+        "--build",
+        str(build.root),
+        "--cc",
+        "cubic",
+        "--metric",
+        "first_power",
+        "--buffer",
+        "50",
+        "--mrtt",
+        "10",
+        "--bw",
+        "10",
+        "--step",
+        "1.0",
+        "--scratch",
+        str(tmp_path),
+    ]
+    assert main(args) == 0
