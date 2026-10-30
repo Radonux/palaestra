@@ -56,6 +56,7 @@ const TCA_MMLINK_TRACE: u16 = 4;
 const TCA_MMLINK_LIMIT_PKTS: u16 = 5;
 const TCA_MMLINK_LIMIT_BYTES: u16 = 6;
 const TCA_MMLINK_LINK_ID: u16 = 8;
+const TCA_MMLINK_LOSS: u16 = 9;
 
 /// Stage order of one mmlink qdisc (enum mmlink_order).
 #[derive(Clone, Copy)]
@@ -72,6 +73,7 @@ pub struct Mmlink<'a> {
     pub trace: &'a [u8],
     pub limit_pkts: u32,
     pub limit_bytes: u32,
+    pub loss: u32,
 }
 
 fn align4(n: usize) -> usize {
@@ -246,6 +248,7 @@ impl Socket {
         m.attr(TCA_MMLINK_LIMIT_PKTS, &q.limit_pkts.to_ne_bytes())?;
         m.attr(TCA_MMLINK_LIMIT_BYTES, &q.limit_bytes.to_ne_bytes())?;
         m.attr(TCA_MMLINK_LINK_ID, &q.link_id.to_ne_bytes())?;
+        m.attr(TCA_MMLINK_LOSS, &q.loss.to_ne_bytes())?;
         m.attr(TCA_MMLINK_TRACE, q.trace)?;
         m.end(opts)?;
         self.call(m).ctx(format!("adding mmlink qdisc {}", q.link_id))

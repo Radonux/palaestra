@@ -25,6 +25,8 @@ enum mmlink_order {
  * DELAY_LIMIT	u32, safety bound on packets in the delay line (default
  *		1 << 20); overflowing it invalidates the episode.
  * LINK_ID	u32, required: copied into every record.
+ * LOSS		u32, i.i.d. drop probability times 2^32 (default 0): Mahimahi's
+ *		mm-loss, applied before the delay line and the link.
  */
 enum {
 	TCA_MMLINK_UNSPEC,
@@ -36,6 +38,7 @@ enum {
 	TCA_MMLINK_LIMIT_BYTES,
 	TCA_MMLINK_DELAY_LIMIT,
 	TCA_MMLINK_LINK_ID,
+	TCA_MMLINK_LOSS,
 	__TCA_MMLINK_MAX
 };
 

@@ -7,7 +7,7 @@ Built out of tree against the matching kernel build:
 | Module | Role |
 |---|---|
 | `expl_rec` | Global record ring, read through `/dev/expl_rec`. Load first. |
-| `sch_mmlink` | qdisc `mmlink`: trace-driven link plus delay with Mahimahi semantics. |
+| `sch_mmlink` | qdisc `mmlink`: trace-driven link plus delay with Mahimahi semantics, and optional i.i.d. random loss on entry (`mm-loss`). |
 | `expl_tcpobs` | Sender observations from the `tcp:tcp_probe` tracepoint, for sockets with `SO_MARK == mark`. |
 | `tcp_agent` | Congestion controls `agent` (Sage-style hold) and `agent_reno` (Orca-style, Reno base) driven by a policy through `/dev/expl_agent`. |
 

@@ -28,6 +28,9 @@
  * ever sees MTU-sized packets. Non-IPv4 frames (ARP) bypass the model, since
  * Mahimahi works on IP packets and never sees them.
  *
+ * An optional i.i.d. loss stage (Mahimahi's mm-loss) drops packets on
+ * entry, before the delay line and the link.
+ *
  * Every arrival, drop, departure and processed opportunity is reported to
  * expl_rec (see expliccit_rec.h for what each record means).
  *
@@ -40,6 +43,7 @@
  */
 #include <linux/ip.h>
 #include <linux/module.h>
+#include <linux/random.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>
 #include <linux/tcp.h>
@@ -74,6 +78,7 @@ struct mmlink_stats {
 	u64 bypassed;
 	u64 early;
 	u64 purged;
+	u64 drops_random;
 };
 
 struct mmlink_sched {
@@ -86,6 +91,7 @@ struct mmlink_sched {
 	u32 limit_bytes;
 	u32 delay_limit;
 	u32 link_id;
+	u32 loss;		/* drop probability times 2^32 */
 	enum mmlink_order order;
 	bool configured;
 
@@ -113,6 +119,7 @@ static const struct nla_policy mmlink_policy[TCA_MMLINK_MAX + 1] = {
 	[TCA_MMLINK_LIMIT_BYTES] = { .type = NLA_U32 },
 	[TCA_MMLINK_DELAY_LIMIT] = NLA_POLICY_MIN(NLA_U32, 1),
 	[TCA_MMLINK_LINK_ID] = { .type = NLA_U32 },
+	[TCA_MMLINK_LOSS] = { .type = NLA_U32 },
 };
 
 static struct mmlink_cb *mmlink_cb(const struct sk_buff *skb)
@@ -372,6 +379,16 @@ static void mmlink_accept(struct Qdisc *sch, struct sk_buff *skb, u64 now)
 		mmlink_drop(sch, skb);
 		return;
 	}
+	/* mm-loss: an i.i.d. drop before the delay line and the link. The
+	 * kernel RNG is seeded per run in Tier 1, so this is reproducible.
+	 */
+	if (q->loss && get_random_u32() < q->loss) {
+		q->st.drops_random++;
+		mmlink_emit(q, EXPL_REC_LINK_DROP, skb, now, mmlink_ms(q, now),
+			    mmlink_ms(q, now), EXPL_DROP_RANDOM);
+		mmlink_drop(sch, skb);
+		return;
+	}
 	if (now < q->base_ns)
 		q->st.early++;
 	mmlink_advance(sch, now);
@@ -521,6 +538,7 @@ static int mmlink_init(struct Qdisc *sch, struct nlattr *opt,
 	q->delay_limit = nla_get_u32_default(tb[TCA_MMLINK_DELAY_LIMIT],
 					     MMLINK_DELAY_LIMIT_DEFAULT);
 	q->link_id = nla_get_u32(tb[TCA_MMLINK_LINK_ID]);
+	q->loss = nla_get_u32_default(tb[TCA_MMLINK_LOSS], 0);
 	if (!q->limit_pkts && !q->limit_bytes) {
 		NL_SET_ERR_MSG_MOD(extack, "droptail needs a packet or byte limit");
 		return -EINVAL;
@@ -560,6 +578,7 @@ static void mmlink_destroy(struct Qdisc *sch)
 		.bypassed = q->st.bypassed,
 		.early = q->st.early,
 		.purged = q->st.purged,
+		.drops_random = q->st.drops_random,
 	};
 
 	qdisc_watchdog_cancel(&q->watchdog);

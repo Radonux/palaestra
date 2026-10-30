@@ -18,6 +18,7 @@
 //! bottleneck as remote, like a Mahimahi shell.
 
 mod agent;
+mod cross;
 mod netlink;
 mod netns;
 mod plan;
@@ -27,7 +28,7 @@ mod traffic;
 
 use netlink::{Mmlink, Order, Socket};
 use netns::Netns;
-use plan::{Control, Link, Plan};
+use plan::{Control, CrossFlow, Link, Plan};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::ffi::CString;
@@ -35,7 +36,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use sys::{Context, Result, fail};
 
-const RESULT_VERSION: u32 = 1;
+const RESULT_VERSION: u32 = 2;
 const SND_ADDR: [u8; 4] = [10, 0, 0, 1];
 const PATH_SND_ADDR: [u8; 4] = [10, 0, 0, 2];
 const RCV_ADDR: [u8; 4] = [10, 0, 1, 1];
@@ -71,6 +72,7 @@ struct Report {
     softnet_dropped: u64,
     netdev_max_backlog: &'static str,
     agent_actions: u64,
+    cross_bytes_sent: Vec<u64>,
 }
 
 fn main() -> ExitCode {
@@ -134,7 +136,8 @@ fn load_modules(dir: &Path, plan: &Plan) -> Result<()> {
     ];
     // BBRv3 is loaded only when an episode uses it, so every other episode
     // runs without any BBRv3 code in the kernel (docs/validation.md).
-    if plan.cc == "bbr3" {
+    let cross_bbr3 = plan.cross.iter().any(|c| matches!(c, CrossFlow::Tcp { cc, .. } if cc == "bbr3"));
+    if plan.cc == "bbr3" || cross_bbr3 {
         mods.push(("tcp_bbr3.ko", String::new()));
     }
     for (name, params) in mods {
@@ -197,6 +200,7 @@ fn mmlink<'a>(link: &'a Link, link_id: u32, order: Order, base_ns: u64) -> Mmlin
         trace: &link.trace,
         limit_pkts: link.limit_pkts,
         limit_bytes: link.limit_bytes,
+        loss: link.loss,
     }
 }
 
@@ -258,6 +262,7 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
     })?;
 
     let sender = snd.within(&home, || traffic::start_sender(&plan.cc, plan.obs_mark.get()))?;
+    let cross = cross::start(&plan.cross, base_ns, &snd, &rcv, &home)?;
     sys::sleep_until(base_ns);
     let receiver = rcv.within(&home, traffic::start_receiver)?;
     let Ok(conn) = sender.conn.recv() else {
@@ -290,6 +295,7 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
     sys::shutdown(std::os::fd::AsFd::as_fd(&*receiver.conn));
     let sent = traffic::join(sender.handle, "sender")?;
     let received = traffic::join(receiver.handle, "receiver")?;
+    let cross_bytes_sent = cross.finish()?;
 
     // Deleting the qdiscs emits their LINK_STATS records.
     path.within(&home, || {
@@ -317,5 +323,6 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
         softnet_dropped,
         netdev_max_backlog: NETDEV_MAX_BACKLOG,
         agent_actions,
+        cross_bytes_sent,
     })
 }

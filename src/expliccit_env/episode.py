@@ -23,12 +23,12 @@ from expliccit_env import labels
 from expliccit_env import mahimahi as mm
 from expliccit_env.native import NativeBuild, run_native
 from expliccit_env.records import ABI, RecordError, Records, Table, load_records
-from expliccit_env.spec import BaseRtt, EpisodeSpec, MahakMrtt, MahakStep
+from expliccit_env.spec import BaseRtt, EpisodeSpec, MahakMrtt, MahakStep, TcpCross, UdpCross
 from expliccit_env.uml import UmlBuild, run_guest
 
 type Build = UmlBuild | NativeBuild
 
-RESULT_VERSION: Final = 1
+RESULT_VERSION: Final = 2
 _SKIP_COLUMNS: Final = frozenset({"type", "len", "pad"})
 
 
@@ -50,12 +50,14 @@ class GuestEpisode(_Strict):
     softnet_dropped: int
     netdev_max_backlog: str
     agent_actions: int
+    # Bytes each cross flow's sender wrote, in spec order.
+    cross_bytes_sent: list[int]
 
 
 class GuestResult(_Strict):
     """result.json written by the guest runner (trust boundary)."""
 
-    result_version: Literal[1]
+    result_version: Literal[2]
     status: Literal["ok", "failed"]
     error: str | None
     kernel_release: str
@@ -111,6 +113,11 @@ def _spec_columns(spec: EpisodeSpec) -> dict[str, object]:
         else 2 * p.delay.mahak_compat_mrtt_ms,
         "buffer_pkts": p.buffer.packets,
         "buffer_bytes": p.buffer.bytes,
+        "loss_downlink": p.loss.downlink,
+        "loss_uplink": p.loss.uplink,
+        "cross_tcp": sum(isinstance(c, TcpCross) for c in spec.cross),
+        # A float even when 0, so every shard has the same column type.
+        "cross_udp_mbps": sum((c.rate_mbps for c in spec.cross if isinstance(c, UdpCross)), 0.0),
         "duration_ms": spec.duration_ms,
         "seed": str(spec.seed),
         "spec_json": spec.canonical_json(),
@@ -147,6 +154,10 @@ def validity_problems(result: GuestEpisode, rec: Records, spec: EpisodeSpec) -> 
             problems.append(f"{field}={n}")
     if rec.tcp_obs.size == 0:
         problems.append("no sender observations")
+    if len(result.cross_bytes_sent) != len(spec.cross):
+        problems.append(
+            f"{len(result.cross_bytes_sent)} cross flows ran, {len(spec.cross)} planned"
+        )
     return problems
 
 
@@ -159,6 +170,7 @@ def _metrics(
         "goodput_mbps": result.bytes_received * 8 / (window / 1000) / 1e6,
         "total_retrans": int(rec.tcp_obs["total_retrans"][-1]),
         "drops_queue": int(rec.link_stats["drops_queue"].sum()),
+        "drops_random": int(rec.link_stats["drops_random"].sum()),
         "capacity_cv": labels.capacity_cv(trace, window),
     }
     match mm.mm_th_delay(mm.mm_log_from_records(rec, labels.DOWNLINK, trace, window)):
@@ -238,7 +250,11 @@ def run_episode(
         timing |= {"kernel_release": result.kernel_release, "kernel_version": result.kernel_version}
         trace = spec.path.trace.timestamps()
         consts = labels.PathConstants(
-            g.base_ns, spec.path.delay.one_way_ns, spec.path.buffer.packets, spec.path.buffer.bytes
+            g.base_ns,
+            spec.path.delay.one_way_ns,
+            spec.path.buffer.packets,
+            spec.path.buffer.bytes,
+            spec.path.loss.downlink,
         )
         lab = labels.labels_table(rec, trace, consts, spec.duration_ms)
         lab = lab.add_column(0, "episode_id", dict_column(np.zeros(lab.num_rows, np.int32), [eid]))
@@ -262,6 +278,7 @@ def run_episode(
             "hz": rec.hz,
             "bytes_sent": g.bytes_sent,
             "bytes_received": g.bytes_received,
+            "cross_bytes_sent": g.cross_bytes_sent,
             "agent_actions": g.agent_actions,
             "n_obs": rec.tcp_obs.size,
             "n_link_events": link_events.num_rows,

@@ -14,12 +14,13 @@ import numpy as np
 import pyarrow.parquet as pq
 import pytest
 
-from expliccit_env import campaign
+from expliccit_env import campaign, labels
 from expliccit_env import mahimahi as mm
 from expliccit_env.cli import main
+from expliccit_env.episode import EpisodeOk, run_episode
 from expliccit_env.guest_plan import GuestPlan, LinkPlan
-from expliccit_env.records import Records, load_records
-from expliccit_env.spec import CampaignSpec
+from expliccit_env.records import DROP_QUEUE_FULL, DROP_RANDOM, Records, load_records
+from expliccit_env.spec import CampaignSpec, EpisodeSpec
 from expliccit_env.uml import UmlBuild, run_guest
 from tests.perl_ref import run_perl
 
@@ -54,6 +55,7 @@ def assert_matches_oracle(rec: Records, trace: mm.I64, buffer: int) -> None:
         arr = rec.link(rec.link_arrival, link_id)
         dep = rec.link(rec.link_depart, link_id)
         drp = rec.link(rec.link_drop, link_id)
+        drp = drp[drp["reason"] == DROP_QUEUE_FULL]  # random loss happens before the link
         opp = rec.link(rec.link_opp, link_id)
         last = int(opp["ms"].max())
         ev = mm.replay(
@@ -117,6 +119,71 @@ def test_same_seed_is_bit_identical(build: UmlBuild, tmp_path: Path) -> None:
     read = lambda run, f: (tmp_path / run / "out" / f"{f}.bin").read_bytes()  # noqa: E731
     assert all(read("a", f) == read("b", f) for f in files)
     assert any(read("a", f) != read("c", f) for f in files)
+
+
+def test_loss_and_cross_traffic(build: UmlBuild, tmp_path: Path) -> None:
+    # 20 Mbit/s; 5 Mbit/s of CBR UDP over [2 s, 8 s); Cubic cross traffic from
+    # 6 s; 1% random loss on data, 0.5% on ACKs.
+    spec = EpisodeSpec.parse(
+        json.dumps(
+            {
+                "path": {
+                    "trace": {"kind": "mahak_step", "bw_mbps": 20, "step": 1.0},
+                    "delay": {"base_rtt_ms": 20},
+                    "buffer": {"packets": 60},
+                    "loss": {"downlink": 0.01, "uplink": 0.005},
+                },
+                "cc": {"kind": "stock", "name": "bbr"},
+                "duration_ms": 10_000,
+                "seed": 5,
+                "cross": [
+                    {"kind": "udp_cbr", "rate_mbps": 5, "start_ms": 2000, "stop_ms": 8000},
+                    {"kind": "tcp", "cc": "cubic", "start_ms": 6000},
+                ],
+            }
+        )
+    )
+    out = run_episode(spec, build, tmp_path / "a", timeout_s=300, keep_raw=True)
+    assert isinstance(out, EpisodeOk), out.row
+    raw = tmp_path / "a" / spec.episode_id() / "raw"
+    rec = load_records(raw)
+    # Seeded loss and cross-flow threads keep the episode reproducible.
+    run_episode(spec, build, tmp_path / "b", timeout_s=300, keep_raw=True)
+    again = tmp_path / "b" / spec.episode_id() / "raw"
+    for f in ("link_arrival", "link_depart", "link_drop", "link_opp", "link_stats", "tcp_obs"):
+        assert (raw / f"{f}.bin").read_bytes() == (again / f"{f}.bin").read_bytes(), f
+    trace = spec.path.trace.timestamps()
+    assert_matches_oracle(rec, trace, 60)
+
+    # Random drops are Bernoulli trials on every packet entering each link.
+    for link_id, p in ((1, 0.01), (2, 0.005)):
+        drp = rec.link(rec.link_drop, link_id)
+        k = int((drp["reason"] == DROP_RANDOM).sum())
+        n = k + rec.link(rec.link_arrival, link_id).size
+        assert abs(k - n * p) < 5 * (n * p * (1 - p)) ** 0.5, (link_id, k, n)
+    assert out.row["drops_random"] == int(rec.link_stats["drops_random"].sum()) > 0
+
+    # Every flow crossed the bottleneck; only the observed one is observed.
+    sports = set(rec.link(rec.link_depart, 1)["sport"].tolist())
+    assert {labels.MAIN_SPORT, 6000, 6001} <= sports
+    assert set(rec.tcp_obs["sport"].tolist()) == {labels.MAIN_SPORT}
+    udp_sent, tcp_sent = out.row["cross_bytes_sent"]  # type: ignore[misc]
+    assert udp_sent == 2500 * 1472  # one 1500-byte packet per 2.4 ms for 6 s
+    assert tcp_sent > 0
+
+    lab = out.tables["labels"]
+    t_ms = (np.asarray(lab["t_ns"]).astype(np.int64) - out.row["base_ns"]) // 1_000_000  # type: ignore[operator]
+    share = np.asarray(lab["cross_traffic_share"])
+    assert np.all(np.asarray(lab["random_loss_rate"]) == 0.01)
+    assert np.all((share >= 0) & (share <= 1))
+    assert np.all(share[t_ms < 2000] == 0)
+    # UDP alone: 5 Mbit/s of 1504-byte units on 20 Mbit/s, less 1% loss.
+    udp_only = share[(t_ms >= 2200) & (t_ms < 6000)]
+    assert udp_only.size and abs(float(np.median(udp_only)) - 0.25) < 0.02
+    # Cubic adds its share (small: 1% random loss throttles it, not BBR).
+    with_tcp = share[(t_ms >= 6500) & (t_ms < 8000)]
+    assert float(np.median(with_tcp)) > float(np.median(udp_only)) + 0.01
+    assert float(np.median(share[t_ms >= 8200])) > 0
 
 
 @pytest.mark.skipif(shutil.which("perl") is None, reason="needs perl")

@@ -5,10 +5,13 @@
 
 use crate::sys::{Context, Result, fail};
 use serde::Deserialize;
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroU64};
 use std::path::{Path, PathBuf};
 
-pub const PLAN_VERSION: u32 = 1;
+pub const PLAN_VERSION: u32 = 2;
+/// Cross-traffic flows per episode (ports 6000 to 6015). ponytail: 16 flows,
+/// all sender to receiver; widen the port range or add reverse flows if needed.
+pub const MAX_CROSS: usize = 16;
 /// Largest trace that fits one netlink attribute next to the other options.
 pub const MAX_TRACE_BYTES: usize = 65_000;
 /// TCP_CA_NAME_MAX in include/net/tcp.h, including the NUL.
@@ -27,6 +30,16 @@ struct RawPlan {
     uplink: RawLink,
     sysctls: Vec<(String, String)>,
     agent: Option<RawAgent>,
+    cross: Vec<RawCross>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+enum RawCross {
+    #[serde(rename = "tcp")]
+    Tcp { cc: String, start_ms: u32, stop_ms: u32 },
+    #[serde(rename = "udp_cbr")]
+    UdpCbr { rate_bps: u64, start_ms: u32, stop_ms: u32 },
 }
 
 #[derive(Deserialize)]
@@ -43,6 +56,7 @@ struct RawLink {
     trace_file: String,
     limit_pkts: u32,
     limit_bytes: u32,
+    loss: u32,
 }
 
 /// One direction of the path. Direction fixes the stage order.
@@ -53,6 +67,17 @@ pub struct Link {
     /// Droptail limits, at least one nonzero (0 means no limit).
     pub limit_pkts: u32,
     pub limit_bytes: u32,
+    /// i.i.d. drop probability times 2^32 (0: no loss stage).
+    pub loss: u32,
+}
+
+/// A competing flow through the same bottleneck, active over
+/// [start_ms, stop_ms) of trace time, with stop_ms <= the episode length.
+pub enum CrossFlow {
+    /// Bulk TCP with its own congestion control.
+    Tcp { cc: String, start_ms: u32, stop_ms: u32 },
+    /// Constant bit rate UDP, counted at the IP layer (1500-byte packets).
+    Udp { rate_bps: NonZeroU64, start_ms: u32, stop_ms: u32 },
 }
 
 /// A sysctl written in the sender and receiver namespaces. The name is a
@@ -79,6 +104,7 @@ pub struct Plan {
     pub uplink: Link,
     pub sysctls: Vec<Sysctl>,
     pub control: Control,
+    pub cross: Vec<CrossFlow>,
 }
 
 impl Plan {
@@ -88,12 +114,12 @@ impl Plan {
         if raw.plan_version != PLAN_VERSION {
             return fail(format!("plan_version {} != {PLAN_VERSION}", raw.plan_version));
         }
-        let valid_cc = !raw.cc.is_empty()
-            && raw.cc.len() < TCP_CA_NAME_MAX
-            && raw.cc.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
-        if !valid_cc {
-            return fail(format!("invalid congestion control name {:?}", raw.cc));
+        cc_name(&raw.cc)?;
+        if raw.cross.len() > MAX_CROSS {
+            return fail(format!("{} cross flows, at most {MAX_CROSS}", raw.cross.len()));
         }
+        let cross =
+            raw.cross.into_iter().map(|c| CrossFlow::parse(c, raw.duration_ms)).collect::<Result<_>>()?;
         let is_agent = matches!(raw.cc.as_str(), "agent" | "agent_reno");
         let control = match (is_agent, raw.agent) {
             (false, None) => Control::Stock,
@@ -106,6 +132,7 @@ impl Plan {
         };
         Ok(Plan {
             control,
+            cross,
             duration_ms: nonzero(raw.duration_ms, "duration_ms")?,
             start_offset_ms: raw.start_offset_ms,
             cc: raw.cc,
@@ -115,6 +142,41 @@ impl Plan {
             uplink: Link::load(dir, raw.uplink).ctx("uplink")?,
             sysctls: raw.sysctls.into_iter().map(Sysctl::parse).collect::<Result<_>>()?,
         })
+    }
+}
+
+fn cc_name(cc: &str) -> Result<()> {
+    let valid = !cc.is_empty()
+        && cc.len() < TCP_CA_NAME_MAX
+        && cc.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+    if valid { Ok(()) } else { fail(format!("invalid congestion control name {cc:?}")) }
+}
+
+impl CrossFlow {
+    fn parse(raw: RawCross, duration_ms: u32) -> Result<CrossFlow> {
+        let window = |start: u32, stop: u32| {
+            if start < stop && stop <= duration_ms {
+                Ok(())
+            } else {
+                fail(format!("cross flow window [{start}, {stop}) not inside [0, {duration_ms})"))
+            }
+        };
+        match raw {
+            RawCross::Tcp { cc, start_ms, stop_ms } => {
+                cc_name(&cc)?;
+                window(start_ms, stop_ms)?;
+                Ok(CrossFlow::Tcp { cc, start_ms, stop_ms })
+            }
+            RawCross::UdpCbr { rate_bps, start_ms, stop_ms } => {
+                window(start_ms, stop_ms)?;
+                match NonZeroU64::new(rate_bps) {
+                    Some(r) if rate_bps <= 10_000_000_000 => {
+                        Ok(CrossFlow::Udp { rate_bps: r, start_ms, stop_ms })
+                    }
+                    _ => fail(format!("cross rate {rate_bps} bit/s outside (0, 10 Gbit/s]")),
+                }
+            }
+        }
     }
 }
 
@@ -143,7 +205,13 @@ impl Link {
         if raw.limit_pkts == 0 && raw.limit_bytes == 0 {
             return fail("droptail needs a packet or byte limit");
         }
-        Ok(Link { delay_ns: raw.delay_ns, trace, limit_pkts: raw.limit_pkts, limit_bytes: raw.limit_bytes })
+        Ok(Link {
+            delay_ns: raw.delay_ns,
+            trace,
+            limit_pkts: raw.limit_pkts,
+            limit_bytes: raw.limit_bytes,
+            loss: raw.loss,
+        })
     }
 }
 

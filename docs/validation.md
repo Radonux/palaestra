@@ -7,15 +7,15 @@ executed in this environment unless it says CI.
 
 - Host: x86_64 cloud container, 4 vCPU, 15 GiB RAM, host kernel 6.18.44,
   Ubuntu 24.04 userland, gcc 13.3.0, Rust 1.97.0, Python 3.13, perl 5.38.
-- Tier 1 kernel: UML from `third_party/linux` (Linux 7.0 plus the HZ and
-  seeded-randomness patches), `kernel/uml.config`, `time-travel=inf-cpu`.
+- Tier 1 kernel: UML from `third_party/linux` (Linux 7.0 plus the patches in
+  `third_party/README.md`), `kernel/uml.config`, `time-travel=inf-cpu`.
 - Reproduce everything below with:
 
       scripts/build-uml.sh build/uml && scripts/build-guest.sh build/uml
       git clone https://github.com/Ppazhooh/mahak /tmp/mahak && git -C /tmp/mahak checkout 5077583
       EXPLICCIT_UML_DIR=build/uml EXPLICCIT_MAHAK_DIR=/tmp/mahak uv run pytest -q
 
-  Last result: 35 passed.
+  Last result: 47 passed.
 
 ## Ran: correctness of the ports and the link model
 
@@ -29,7 +29,7 @@ executed in this environment unless it says CI.
 | Oracle laws | `test_link_oracle_laws` (Hypothesis, 300 cases): conservation, FIFO, never departing in the arrival ms, droptail bounds, opportunity accounting | pass |
 | Record ABI | `test_dtypes_match_c_structs`: every numpy offset equals the C `offsetof` | pass |
 | Reproducibility | `test_same_seed_is_bit_identical` (BBR) | byte-identical records for one seed; different for another |
-| Spec laws | `test_spec.py`: a delay is exactly one of mRTT and base RTT; unknown fields rejected; deterministic campaign expansion | pass |
+| Spec laws | `test_spec.py`: a delay is exactly one of mRTT and base RTT; unknown fields rejected; deterministic campaign expansion; loss probabilities in [0, 1); cross-flow windows inside the episode; conditions multiply a campaign without changing its plain arm | pass |
 
 ## Ran: closed loop and pipeline
 
@@ -130,6 +130,31 @@ BBRv3 retransmits far less with shallow buffers, as designed. In Mahak's
 BBR2 failure cell (5x drop, 8000 packets, mRTT 4 ms) its queueing delay is
 about twice BBRv1's, the direction Mahak reported for BBR2; a map over
 seeds is needed before calling it a finding.
+
+## Ran: random loss and cross traffic (M7)
+
+`test_loss_and_cross_traffic`: BBRv1 on 20 Mbit/s, 20 ms base RTT,
+60-packet buffer, 10 s; 1% random loss on data and 0.5% on ACKs; 5 Mbit/s
+of constant-rate UDP over [2 s, 8 s) and a Cubic flow from 6 s.
+
+| Check | Result |
+|---|---|
+| Kernel link equals the `LinkQueue` oracle (both directions, all flows) | pass |
+| Random drops are Bernoulli per entering packet (within 5 sigma) | data 176 of 16916 (1.04%), ACKs 37 of 7251 (0.51%) |
+| Every flow crossed the bottleneck; `TCP_OBS` holds only the observed flow | pass |
+| UDP sender wrote exactly 2500 packets (one per 2.4 ms for 6 s) | pass |
+| `cross_traffic_share` label: 0 before 2 s; UDP alone; UDP plus Cubic; Cubic alone | median 0, 0.247, 0.359, 0.145 |
+| Same seed, second run | byte-identical record files |
+
+The UDP-only share is 0.25 (5 Mbit/s of 1504-byte units on 20 Mbit/s) less
+the 1% loss before the link. Cubic gets a small share because 1% random
+loss throttles it, while BBRv1 does not back off on loss.
+
+**Loss-free, single-flow episodes are unchanged.** The four seeded stock
+episodes of the BBRv3 check above were rerun on the M7 build and compared
+with the final BBRv3 build's output: every record file is byte-identical,
+and the `LINK_STATS` counters are identical apart from the appended
+`drops_random` field (0) that came with record ABI 3.
 
 ## CI
 

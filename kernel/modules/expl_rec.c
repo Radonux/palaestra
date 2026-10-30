@@ -159,7 +159,7 @@ static int __init expl_rec_init(void)
 	BUILD_BUG_ON(sizeof(struct expl_rec_meta) % 8);
 	BUILD_BUG_ON(sizeof(struct expl_rec_link) != 64);
 	BUILD_BUG_ON(sizeof(struct expl_rec_opp) != 40);
-	BUILD_BUG_ON(sizeof(struct expl_rec_link_stats) != 96);
+	BUILD_BUG_ON(sizeof(struct expl_rec_link_stats) != 104);
 	BUILD_BUG_ON(sizeof(struct expl_rec_tcp_obs) != 160);
 
 	if (!ring_mib || ring_mib > 1024)

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from expliccit_env.guest_plan import TcpCrossPlan, UdpCrossPlan
 from expliccit_env.spec import BaseRtt, CampaignSpec, EpisodeSpec, MahakMrtt
 
 EXAMPLES = Path(__file__).parents[1] / "examples"
@@ -73,3 +74,48 @@ def test_campaign_expansion_is_deterministic() -> None:
 
 def test_examples_parse() -> None:
     EpisodeSpec.parse((EXAMPLES / "episode-mahak.json").read_text()).guest_plan()
+
+
+def test_loss_and_cross_reach_the_guest_plan() -> None:
+    spec = json.loads(episode({"base_rtt_ms": 40}, duration_ms=5000))
+    spec["path"]["loss"] = {"downlink": 0.01, "uplink": 0.5}
+    spec["cross"] = [
+        {"kind": "tcp", "cc": "bbr3", "start_ms": 1000},
+        {"kind": "udp_cbr", "rate_mbps": 2.5, "start_ms": 0, "stop_ms": 4000},
+    ]
+    plan = EpisodeSpec.parse(json.dumps(spec)).guest_plan()
+    assert plan.downlink.loss == round(0.01 * 2**32)
+    assert plan.uplink.loss == 2**31
+    assert plan.cross == (TcpCrossPlan("bbr3", 1000, 5000), UdpCrossPlan(2_500_000, 0, 4000))
+
+
+@pytest.mark.parametrize(
+    ("path_extra", "cross"),
+    [
+        ({"loss": {"downlink": 1.0}}, []),  # certain loss: no transfer at all
+        ({"loss": {"downlink": -0.1}}, []),
+        ({}, [{"kind": "tcp", "cc": "cubic", "start_ms": 5000}]),  # starts at the end
+        ({}, [{"kind": "tcp", "cc": "cubic", "stop_ms": 6000}]),  # outlives the episode
+        ({}, [{"kind": "udp_cbr", "rate_mbps": 0}]),
+        ({}, [{"kind": "udp_cbr", "rate_mbps": 1, "cc": "cubic"}]),
+        ({}, [{"kind": "tcp", "cc": "agent"}]),
+        ({}, [{"kind": "tcp", "cc": "cubic"}] * 17),
+    ],
+)
+def test_rejects_bad_loss_and_cross(path_extra: dict[str, object], cross: object) -> None:
+    spec = json.loads(episode({"base_rtt_ms": 40}, duration_ms=5000))
+    spec["path"] |= path_extra
+    spec["cross"] = cross
+    with pytest.raises(ValidationError):
+        EpisodeSpec.parse(json.dumps(spec))
+
+
+def test_conditions_multiply_a_campaign() -> None:
+    base = json.loads((EXAMPLES / "campaign-smoke.json").read_text())
+    plain = CampaignSpec.parse(json.dumps(base)).episodes()
+    assert plain == CampaignSpec.parse(json.dumps(base | {"conditions": [{}]})).episodes()
+    cond = {"loss": {"downlink": 0.02}, "cross": [{"kind": "udp_cbr", "rate_mbps": 1}]}
+    wide = CampaignSpec.parse(json.dumps(base | {"conditions": [{}, cond]})).episodes()
+    assert len(wide) == 2 * len(plain)
+    assert sum(not e.cross and e.path.loss.downlink == 0 for e in wide) == len(plain)
+    assert sum(e.path.loss.downlink == 0.02 and len(e.cross) == 1 for e in wide) == len(plain)

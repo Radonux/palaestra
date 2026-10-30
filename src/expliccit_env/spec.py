@@ -22,7 +22,14 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from expliccit_env import mahimahi as mm
-from expliccit_env.guest_plan import AgentPlan, GuestPlan, LinkPlan
+from expliccit_env.guest_plan import (
+    AgentPlan,
+    CrossPlan,
+    GuestPlan,
+    LinkPlan,
+    TcpCrossPlan,
+    UdpCrossPlan,
+)
 
 SPEC_VERSION: Final = 1
 U64: Final = 2**64
@@ -96,12 +103,24 @@ class DropTail(_Frozen):
         return self
 
 
+type Probability = Annotated[float, Field(ge=0.0, lt=1.0)]
+
+
+class Loss(_Frozen):
+    """i.i.d. random loss per direction (Mahimahi's mm-loss), applied before
+    the delay line and the link."""
+
+    downlink: Probability = 0.0
+    uplink: Probability = 0.0
+
+
 class PathSpec(_Frozen):
     trace: Trace
     # None: the uplink uses the downlink's trace, as Mahak does.
     uplink_trace: Trace | None = None
     delay: Delay
     buffer: DropTail
+    loss: Loss = Loss()
 
 
 class StockCC(_Frozen):
@@ -144,6 +163,31 @@ class AgentCC(_Frozen):
 type CongestionControl = Annotated[StockCC | AgentCC, Field(discriminator="kind")]
 
 
+class TcpCross(_Frozen):
+    """Bulk TCP through the same bottleneck, with its own congestion control,
+    active over [start_ms, stop_ms) of trace time (stop: episode end)."""
+
+    kind: Literal["tcp"] = "tcp"
+    cc: Literal["cubic", "bbr", "bbr3", "reno"]
+    start_ms: Annotated[int, Field(ge=0)] = 0
+    stop_ms: PositiveInt | None = None
+
+
+class UdpCross(_Frozen):
+    """Constant bit rate UDP (1500-byte IP packets), rate counted at the IP
+    layer, active over [start_ms, stop_ms) of trace time (stop: episode end)."""
+
+    kind: Literal["udp_cbr"] = "udp_cbr"
+    rate_mbps: Annotated[float, Field(gt=0, le=10_000)]
+    start_ms: Annotated[int, Field(ge=0)] = 0
+    stop_ms: PositiveInt | None = None
+
+
+type CrossFlow = Annotated[TcpCross | UdpCross, Field(discriminator="kind")]
+# guest/src/plan.rs MAX_CROSS: every flow runs sender to receiver.
+MAX_CROSS: Final = 16
+
+
 class EpisodeSpec(_Frozen):
     spec_version: Literal[1] = 1
     path: PathSpec
@@ -151,6 +195,17 @@ class EpisodeSpec(_Frozen):
     duration_ms: PositiveInt = 20_000
     seed: Annotated[int, Field(ge=0, lt=U64)] = 0
     sysctls: dict[str, str] = Field(default_factory=dict[str, str])
+    cross: Annotated[list[CrossFlow], Field(max_length=MAX_CROSS)] = Field(
+        default_factory=list[CrossFlow]
+    )
+
+    @model_validator(mode="after")
+    def _cross_windows(self) -> Self:
+        for c in self.cross:
+            stop = self.duration_ms if c.stop_ms is None else c.stop_ms
+            if not c.start_ms < stop <= self.duration_ms:
+                raise ValueError(f"cross flow window [{c.start_ms}, {stop}) not inside the episode")
+        return self
 
     @classmethod
     def parse(cls, text: str) -> EpisodeSpec:
@@ -170,8 +225,18 @@ class EpisodeSpec(_Frozen):
         delay = self.path.delay.one_way_ns
         buf = self.path.buffer
 
-        def link(ts: mm.I64) -> LinkPlan:
-            return LinkPlan(delay, mm.dense_counts(ts), buf.packets, buf.bytes)
+        def link(ts: mm.I64, loss: float) -> LinkPlan:
+            return LinkPlan(
+                delay, mm.dense_counts(ts), buf.packets, buf.bytes, _u32_probability(loss)
+            )
+
+        def cross(c: TcpCross | UdpCross) -> CrossPlan:
+            stop = self.duration_ms if c.stop_ms is None else c.stop_ms
+            match c:
+                case TcpCross():
+                    return TcpCrossPlan(c.cc, c.start_ms, stop)
+                case UdpCross():
+                    return UdpCrossPlan(round(c.rate_mbps * 1e6), c.start_ms, stop)
 
         agent = (
             AgentPlan(self.cc.policy.read(), self.cc.interval_ms)
@@ -181,11 +246,17 @@ class EpisodeSpec(_Frozen):
         return GuestPlan(
             duration_ms=self.duration_ms,
             cc=self.cc.name,
-            downlink=link(down_ts),
-            uplink=link(up_ts),
+            downlink=link(down_ts, self.path.loss.downlink),
+            uplink=link(up_ts, self.path.loss.uplink),
             sysctls=tuple(sorted(self.sysctls.items())),
             agent=agent,
+            cross=tuple(cross(c) for c in self.cross),
         )
+
+
+def _u32_probability(p: float) -> int:
+    """sch_mmlink's loss encoding: probability times 2^32, below 2^32."""
+    return min(round(p * 2**32), 2**32 - 1)
 
 
 # --- campaigns ----------------------------------------------------------------
@@ -249,11 +320,24 @@ class MahakSample(_Frozen):
 type Sweep = Annotated[MahakGrid | MahakSample, Field(discriminator="kind")]
 
 
+class Condition(_Frozen):
+    """Random loss and cross traffic for one arm of a campaign; every sweep
+    point runs under every condition."""
+
+    loss: Loss = Loss()
+    cross: Annotated[list[CrossFlow], Field(max_length=MAX_CROSS)] = Field(
+        default_factory=list[CrossFlow]
+    )
+
+
 class CampaignSpec(_Frozen):
     spec_version: Literal[1] = 1
     name: Annotated[str, Field(pattern=r"^[A-Za-z0-9_.-]{1,64}$")]
     ccs: list[CongestionControl]
     sweep: Sweep
+    conditions: Annotated[list[Condition], Field(min_length=1)] = Field(
+        default_factory=lambda: [Condition()]
+    )
     replicates: PositiveInt = 1
     duration_ms: PositiveInt = 20_000
     seed: Annotated[int, Field(ge=0, lt=U64)] = 0
@@ -264,13 +348,13 @@ class CampaignSpec(_Frozen):
         return cls.model_validate_json(text)
 
     def episodes(self) -> list[EpisodeSpec]:
-        """Deterministic expansion: points x ccs x replicates, each with its
-        own seed drawn from the campaign seed."""
+        """Deterministic expansion: points x conditions x ccs x replicates,
+        each with its own seed drawn from the campaign seed."""
         rng = np.random.default_rng(self.seed)
         points = self.sweep.points(rng)
         out: list[EpisodeSpec] = []
-        for (bw, step, mrtt, buf), cc, _ in itertools.product(
-            points, self.ccs, range(self.replicates)
+        for (bw, step, mrtt, buf), cond, cc, _ in itertools.product(
+            points, self.conditions, self.ccs, range(self.replicates)
         ):
             out.append(
                 EpisodeSpec(
@@ -278,11 +362,13 @@ class CampaignSpec(_Frozen):
                         trace=MahakStep(bw_mbps=bw, step=step),
                         delay=MahakMrtt(mahak_compat_mrtt_ms=mrtt),
                         buffer=DropTail(packets=buf),
+                        loss=cond.loss,
                     ),
                     cc=cc,
                     duration_ms=self.duration_ms,
                     seed=int(rng.integers(0, U64, dtype=np.uint64)),
                     sysctls=self.sysctls,
+                    cross=cond.cross,
                 )
             )
         return out

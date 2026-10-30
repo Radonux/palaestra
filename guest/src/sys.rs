@@ -168,3 +168,30 @@ pub fn uname() -> (String, String) {
     };
     (field(&u.release), field(&u.version))
 }
+
+/// An unconnected IPv4 TCP socket in the calling thread's namespace.
+pub fn tcp_socket() -> io::Result<OwnedFd> {
+    // SAFETY: plain socket(2); a non-negative return is a new fd we own.
+    let fd = check(unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM | libc::SOCK_CLOEXEC, 0) })?;
+    // SAFETY: fd was just returned by socket and is owned by nobody else.
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+}
+
+/// connect(2) to an IPv4 address; blocks until connected or failed.
+pub fn connect_v4(fd: BorrowedFd<'_>, addr: std::net::SocketAddrV4) -> io::Result<()> {
+    let sa = libc::sockaddr_in {
+        sin_family: libc::AF_INET as libc::sa_family_t,
+        sin_port: addr.port().to_be(),
+        sin_addr: libc::in_addr { s_addr: u32::from_ne_bytes(addr.ip().octets()) },
+        sin_zero: [0; 8],
+    };
+    let len = std::mem::size_of::<libc::sockaddr_in>() as libc::socklen_t;
+    loop {
+        // SAFETY: sa is a valid sockaddr_in of len bytes for the call.
+        let ret = unsafe { libc::connect(fd.as_raw_fd(), (&raw const sa).cast(), len) };
+        match check(ret) {
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+            r => return r.map(drop),
+        }
+    }
+}

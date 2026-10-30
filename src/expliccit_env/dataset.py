@@ -30,7 +30,7 @@ import pyarrow.parquet as pq
 
 from expliccit_env.episode import EpisodeOk, EpisodeOutcome
 
-DATASET_VERSION: Final = 1
+DATASET_VERSION: Final = 2
 TABLES: Final = ("obs", "labels", "link_events", "link_opp", "agent_action")
 
 

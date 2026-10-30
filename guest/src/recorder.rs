@@ -26,7 +26,7 @@ const TYPES: [(u16, usize, &str); 8] = [
     (3, 64, "link_drop"),
     (4, 64, "link_depart"),
     (5, 40, "link_opp"),
-    (6, 96, "link_stats"),
+    (6, 104, "link_stats"),
     (7, 160, "tcp_obs"),
     (8, 32, "agent_action"),
 ];

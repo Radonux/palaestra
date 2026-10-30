@@ -15,7 +15,7 @@
 
 #include <linux/types.h>
 
-#define EXPL_REC_ABI 2
+#define EXPL_REC_ABI 3
 #define EXPL_REC_MAGIC 0x52504c45 /* "ELPR" little-endian */
 
 enum expl_rec_type {
@@ -52,6 +52,7 @@ enum expl_drop_reason {
 	/* Not a well-formed IPv4 packet of at most 1500 bytes: invalid episode. */
 	EXPL_DROP_OVERSIZE = 3,
 	EXPL_DROP_GSO = 4,		/* GSO segmentation failed: invalid episode */
+	EXPL_DROP_RANDOM = 5,		/* the i.i.d. loss stage (Mahimahi mm-loss) */
 };
 
 /*
@@ -102,7 +103,8 @@ struct expl_rec_opp {
 
 /* LINK_STATS: emitted once when the qdisc is destroyed; t_ns is that time.
  * Any nonzero drops_delay, drops_oversize or drops_gso invalidates the
- * episode. purged counts packets still held when the qdisc was reset.
+ * episode; drops_random counts the loss stage's intended drops. purged
+ * counts packets still held when the qdisc was reset.
  */
 struct expl_rec_link_stats {
 	struct expl_rec_hdr hdr;
@@ -117,6 +119,7 @@ struct expl_rec_link_stats {
 	__u64 bypassed;
 	__u64 early;
 	__u64 purged;
+	__u64 drops_random;
 };
 
 #define EXPL_OBS_RATE_APP_LIMITED	0x1

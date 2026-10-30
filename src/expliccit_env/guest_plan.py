@@ -14,7 +14,8 @@ from typing import Final
 import numpy as np
 import numpy.typing as npt
 
-PLAN_VERSION: Final = 1
+PLAN_VERSION: Final = 2
+U32: Final = 2**32
 MAX_TRACE_BYTES: Final = 65_000
 
 
@@ -26,8 +27,11 @@ class LinkPlan:
     trace: npt.NDArray[np.uint8]  # opportunities per ms (mahimahi.dense_counts)
     limit_pkts: int
     limit_bytes: int
+    loss: int = 0  # i.i.d. drop probability times 2^32
 
     def __post_init__(self) -> None:
+        if not 0 <= self.loss < U32:
+            raise ValueError("loss must be a u32 (probability times 2^32)")
         if self.delay_ns < 0:
             raise ValueError("delay_ns must be nonnegative")
         if not (2 <= self.trace.size <= MAX_TRACE_BYTES) or self.trace[-1] == 0:
@@ -53,6 +57,23 @@ class AgentPlan:
 
 
 @dataclass(frozen=True, slots=True)
+class TcpCrossPlan:
+    cc: str
+    start_ms: int
+    stop_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class UdpCrossPlan:
+    rate_bps: int
+    start_ms: int
+    stop_ms: int
+
+
+type CrossPlan = TcpCrossPlan | UdpCrossPlan
+
+
+@dataclass(frozen=True, slots=True)
 class GuestPlan:
     duration_ms: int
     cc: str
@@ -63,6 +84,7 @@ class GuestPlan:
     ring_mib: int = 64
     sysctls: tuple[tuple[str, str], ...] = ()
     agent: AgentPlan | None = None
+    cross: tuple[CrossPlan, ...] = ()
 
     def __post_init__(self) -> None:
         if (self.cc in ("agent", "agent_reno")) != (self.agent is not None):
@@ -79,6 +101,7 @@ class GuestPlan:
                 "trace_file": trace_file,
                 "limit_pkts": link.limit_pkts,
                 "limit_bytes": link.limit_bytes,
+                "loss": link.loss,
             }
         plan: dict[str, object] = {
             "plan_version": PLAN_VERSION,
@@ -90,8 +113,17 @@ class GuestPlan:
             **links,
             "sysctls": [list(s) for s in self.sysctls],
             "agent": None,
+            "cross": [_cross_json(c) for c in self.cross],
         }
         if self.agent is not None:
             (directory / "policy.onnx").write_bytes(self.agent.policy_onnx)
             plan["agent"] = {"policy_file": "policy.onnx", "interval_ms": self.agent.interval_ms}
         (directory / "plan.json").write_text(json.dumps(plan, indent=2))
+
+
+def _cross_json(c: CrossPlan) -> dict[str, int | str]:
+    match c:
+        case TcpCrossPlan(cc, start, stop):
+            return {"kind": "tcp", "cc": cc, "start_ms": start, "stop_ms": stop}
+        case UdpCrossPlan(rate, start, stop):
+            return {"kind": "udp_cbr", "rate_bps": rate, "start_ms": start, "stop_ms": stop}

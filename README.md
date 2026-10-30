@@ -28,8 +28,10 @@ Implementation detail lives in `docs/`.
   │                                                                           │
   │   [snd netns]  ── veth ──  [path netns]  ── veth ──  [rcv netns]          │
   │   TCP sender               sch_mmlink x2             TCP receiver         │
-  │   (cubic | bbr |           (Mahimahi link +                               │
-  │    tcp_agent)               delay, each way)                              │
+  │   (cubic | bbr | bbr3 |    (Mahimahi loss, link      cross receivers      │
+  │    tcp_agent)               and delay, each way)                          │
+  │   cross TCP and UDP                                                       │
+  │   senders                                                                 │
   │        │                         │                                        │
   │   expl_tcpobs ─────────────► expl_rec ◄────── tcp_agent actions           │
   │   (per-ACK state)           (record ring, /dev/expl_rec)                  │
@@ -38,10 +40,10 @@ Implementation detail lives in `docs/`.
 
 | Part | Where | Responsibility |
 |---|---|---|
-| Specs and campaigns | `src/expliccit_env/spec.py`, `campaign.py` | What to run: path (trace, delay, buffer), congestion control, duration, seed; grids and samples of Mahak's space. |
+| Specs and campaigns | `src/expliccit_env/spec.py`, `campaign.py` | What to run: path (trace, delay, buffer, random loss), congestion control, cross traffic, duration, seed; grids and samples of Mahak's space, each under a list of loss and cross-traffic conditions. |
 | Launchers | `uml.py` (Tier 1), `native.py` (Tier 2) | Boot a UML guest in virtual time, or run on a native host as root. |
-| Guest runner | `guest/` (Rust) | Inside the kernel: namespaces, qdiscs, bulk TCP pair, ONNX policy loop, record collection. |
-| Link model | `kernel/modules/sch_mmlink.c` | The bottleneck: Mahimahi's `mm-link` + `mm-delay`, as a qdisc. |
+| Guest runner | `guest/` (Rust) | Inside the kernel: namespaces, qdiscs, bulk TCP pair, cross-traffic flows, ONNX policy loop, record collection. |
+| Link model | `kernel/modules/sch_mmlink.c` | The bottleneck: Mahimahi's `mm-link` + `mm-delay` (+ `mm-loss`), as a qdisc. |
 | Observation | `kernel/modules/expl_tcpobs.c` | Sender state at every ACK, for any congestion control. |
 | Agent controllers | `kernel/modules/tcp_agent.c` | `agent` (Sage-style) and `agent_reno` (Orca-style) driven by a policy. |
 | Records | `kernel/modules/expl_rec.c`, `expliccit_rec.h` | One ring, one sequence of events; the only kernel-to-host data path. |
@@ -74,13 +76,14 @@ run; a change that weakens one should say so in its commit message.
    byte-identical (`docs/validation.md`).
 2. **The link model is Mahimahi's.** The kernel's arrivals, drops, departures
    and opportunities equal an independent Python port of Mahimahi's
-   `LinkQueue`, event for event:
-   `pytest tests/test_uml.py -k mahimahi_oracle`.
+   `LinkQueue`, event for event, also under random loss and cross traffic:
+   `pytest tests/test_uml.py -k "mahimahi_oracle or loss_and_cross"`.
 3. **Mahak's numbers are Mahak's.** Trace generation matches Mahak's
    `helper.py` bit for bit, and metrics match its Perl `mm-th-delay` exactly:
    `pytest tests/test_mahimahi.py`.
 4. **Tier 1 is reproducible.** Same build, spec and seed give byte-identical
-   records: `pytest tests/test_uml.py -k bit_identical`.
+   records, random loss and cross traffic included:
+   `pytest tests/test_uml.py -k "bit_identical or loss_and_cross"`.
 5. **No silent data.** An episode that times out, overflows a buffer it must
    not, drops records, or fails validation becomes a row with
    `status = "failed"` and a reason, never metrics or labels.
@@ -100,13 +103,14 @@ CI runs the same on every push (`.github/workflows/ci.yml`).
 
 | Area | State |
 |---|---|
-| Tier 1: build, link model, observations, records, datasets, campaigns, CLI | done, tested (36 tests) |
+| Tier 1: build, link model, observations, records, datasets, campaigns, CLI | done, tested (47 tests) |
 | Agent controllers with ONNX policies, closed loop | done, tested |
 | Mahak metrics and trace generation | done, matched to the originals |
 | Slurm array scripts | generated and checked locally; not yet submitted to a cluster |
 | Tier 2 native mode | written, **not run** (needs an Ubuntu 26.04 / Linux 7.0 host) |
 | Cross-tier fidelity study, real-Mahimahi reference runs | not started (need Tier 2) |
 | BBRv3 (Google's, as `bbr3`) | done in Tier 1, tested; not available on Tier 2's stock kernel |
+| Random loss and cross traffic (TCP of any CC, constant-rate UDP), with their labels | done in Tier 1, tested |
 
 Measured speed: 8x to 53x real time per core in Tier 1, about 5400 twenty-second
 episodes per core-hour on Mahak's ICNP'25 space; about 2.5 MB of Parquet per
@@ -164,7 +168,7 @@ later without rerunning), and `agent_action.parquet`.
 
 | Document | Contents |
 |---|---|
-| `docs/architecture.md` | Data flow and trust boundaries, exact link-model semantics, record ABI, time and determinism, decisions D1 to D13, known limits, how to extend |
+| `docs/architecture.md` | Data flow and trust boundaries, exact link-model semantics, record ABI, time and determinism, decisions D1 to D17, known limits, how to extend |
 | `docs/validation.md` | Every check that ran, with commands and results, and what has not run |
 | `docs/m0-report.md` | Feasibility measurements: UML build, speed, memory, determinism, BPF |
 | `kernel/modules/README.md` | The kernel modules and their ABIs |

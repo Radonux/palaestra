@@ -19,7 +19,7 @@ from typing import Final
 import numpy as np
 import numpy.typing as npt
 
-ABI: Final = 2
+ABI: Final = 3
 MAGIC: Final = 0x52504C45
 
 _HDR: Final = [("type", "<u2"), ("len", "<u2"), ("seq", "<u4"), ("t_ns", "<u8")]
@@ -70,6 +70,7 @@ STATS: Final = np.dtype(
         ("bypassed", "<u8"),
         ("early", "<u8"),
         ("purged", "<u8"),
+        ("drops_random", "<u8"),
     ]
 )
 _OBS_U32: Final = (
@@ -131,6 +132,7 @@ DROP_QUEUE_FULL: Final = 1
 DROP_DELAY_FULL: Final = 2
 DROP_OVERSIZE: Final = 3
 DROP_GSO: Final = 4
+DROP_RANDOM: Final = 5
 
 # (file stem, record type, dtype); the guest's recorder.rs uses the same table.
 FILES: Final = (

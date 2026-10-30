@@ -19,8 +19,11 @@ Definitions (link 1 is the data-direction bottleneck):
                       NaN if it had not departed by the end of the episode
   base_rtt_ns         two-way propagation delay (both delay lines)
   buffer_pkts/bytes   droptail limits (0 = unlimited)
-  random_loss_rate    0: no random-loss stage yet
-  cross_traffic_share 0: no cross traffic yet
+  random_loss_rate    the data direction's configured i.i.d. loss probability
+  cross_traffic_share bytes that cross traffic (every flow but the observed
+                      one) took from the bottleneck over the trailing
+                      ``window_ms``, as a fraction of the trace's capacity
+                      over the same ms; in [0, 1], NaN where the capacity is 0
 """
 
 from __future__ import annotations
@@ -38,6 +41,9 @@ from expliccit_env.records import DROP_QUEUE_FULL, Records
 DOWNLINK: Final = 1
 UPLINK: Final = 2
 NS_PER_MS: Final = 1_000_000
+# The observed flow's sender port (guest/src/traffic.rs SENDER_ADDR); cross
+# flows use other ports.
+MAIN_SPORT: Final = 5001
 
 type F64 = npt.NDArray[np.float64]
 
@@ -48,15 +54,37 @@ class PathConstants:
     one_way_ns: int
     buffer_pkts: int
     buffer_bytes: int
+    loss_downlink: float = 0.0
+
+
+def _window_ms(base_ns: int, t_ns: mm.I64, window_ms: int, end_ms: int) -> tuple[mm.I64, mm.I64]:
+    """Each sample's trailing window as trace ms [lo, hi)."""
+    hi = np.clip((t_ns - base_ns) // NS_PER_MS, 0, end_ms)
+    return np.clip(hi - window_ms, 0, None), hi
 
 
 def capacity_bps(trace: mm.I64, base_ns: int, t_ns: mm.I64, window_ms: int, end_ms: int) -> F64:
     """Trailing-window capacity from the trace, at each sample time."""
     per_ms = np.bincount(mm.opportunity_times(trace, end_ms + 1), minlength=end_ms + 1)
     cum = np.concatenate(([0], np.cumsum(per_ms)))  # cum[k] = opportunities at ms < k
-    ms = np.clip((t_ns - base_ns) // NS_PER_MS, 0, end_ms)
-    lo = np.clip(ms - window_ms, 0, None)
-    return (cum[ms] - cum[lo]) * (mm.PACKET_SIZE * 8) / (window_ms / 1000.0)
+    lo, hi = _window_ms(base_ns, t_ns, window_ms, end_ms)
+    return (cum[hi] - cum[lo]) * (mm.PACKET_SIZE * 8) / (window_ms / 1000.0)
+
+
+def cross_traffic_share(
+    rec: Records, trace: mm.I64, base_ns: int, t_ns: mm.I64, *, window_ms: int, end_ms: int
+) -> F64:
+    """Cross traffic's share of the bottleneck capacity in each sample's
+    trailing window. Departures use opportunities, so it lies in [0, 1]."""
+    dep = rec.link(rec.link_depart, DOWNLINK)
+    cross = dep[dep["sport"] != MAIN_SPORT]
+    cum = np.concatenate(([0], np.cumsum(cross["bytes"].astype(np.int64))))
+    lo, hi = _window_ms(base_ns, t_ns, window_ms, end_ms)
+    ms = cross["ms"].astype(np.int64)  # nondecreasing: departures are FIFO
+    used = cum[np.searchsorted(ms, hi)] - cum[np.searchsorted(ms, lo)]
+    cap = capacity_bps(trace, base_ns, t_ns, window_ms, end_ms) * (window_ms / 1000.0) / 8
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(cap > 0, used / cap, np.nan)
 
 
 def _queue_after_events(rec: Records, link_id: int) -> tuple[mm.I64, mm.I64, mm.I64]:
@@ -68,6 +96,9 @@ def _queue_after_events(rec: Records, link_id: int) -> tuple[mm.I64, mm.I64, mm.
     """
     arr = rec.link(rec.link_arrival, link_id)
     drp = rec.link(rec.link_drop, link_id)
+    # Only a full queue drops an arrival; every other drop happens before the
+    # link (random loss, delay line) and leaves the queue unchanged.
+    drp = drp[drp["reason"] == DROP_QUEUE_FULL]
     dep = rec.link(rec.link_depart, link_id)
     t = np.concatenate([dep["t_ns"], arr["t_ns"], drp["t_ns"]]).astype(np.int64)
     rank = np.concatenate([np.zeros(dep.size), np.ones(arr.size), np.full(drp.size, 2)])
@@ -140,8 +171,12 @@ def labels_table(
             "base_rtt_ns": pa.array(np.full(n, 2 * k.one_way_ns, dtype=np.int64)),
             "buffer_pkts": pa.array(np.full(n, k.buffer_pkts, dtype=np.int64)),
             "buffer_bytes": pa.array(np.full(n, k.buffer_bytes, dtype=np.int64)),
-            "random_loss_rate": pa.array(np.zeros(n)),
-            "cross_traffic_share": pa.array(np.zeros(n)),
+            "random_loss_rate": pa.array(np.full(n, k.loss_downlink)),
+            "cross_traffic_share": pa.array(
+                cross_traffic_share(
+                    rec, trace, k.base_ns, t, window_ms=window_ms, end_ms=duration_ms
+                )
+            ),
         }
     )
 
