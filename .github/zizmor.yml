@@ -1,0 +1,10 @@
+# zizmor policy for this repository's workflows.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        # sync-skills.yml is the bundled updater from BTreeMap/SKILLs, installed
+        # verbatim as its README directs; it calls that repository's reusable
+        # workflow at @main by design. Only that repository may be ref-pinned.
+        "BTreeMap/SKILLs/*": ref-pin
+        "*": hash-pin

@@ -7,28 +7,23 @@ EXPLICCIT_UML_DIR; skipped otherwise.
 from __future__ import annotations
 
 import json
-import os
 import shutil
 from pathlib import Path
 
 import numpy as np
+import pyarrow.parquet as pq
 import pytest
 
+from expliccit_env import campaign
 from expliccit_env import mahimahi as mm
+from expliccit_env.cli import main
 from expliccit_env.guest_plan import GuestPlan, LinkPlan
 from expliccit_env.records import Records, load_records
+from expliccit_env.spec import CampaignSpec
 from expliccit_env.uml import UmlBuild, run_guest
 from tests.perl_ref import run_perl
 
 pytestmark = pytest.mark.uml
-
-
-@pytest.fixture(scope="module")
-def build() -> UmlBuild:
-    path = os.environ.get("EXPLICCIT_UML_DIR")
-    if not path:
-        pytest.skip("set EXPLICCIT_UML_DIR to a built UML tree")
-    return UmlBuild.at(Path(path))
 
 
 def episode(
@@ -135,3 +130,59 @@ def test_mahak_metrics_agree_with_perl(build: UmlBuild, tmp_path: Path) -> None:
     assert run_perl(log, tmp_path).startswith(r.perl_output())
     assert 0.5 < r.utilization <= 1.0
     assert r.mean_delay_ms >= 1.0
+
+
+def test_campaign_shards_and_tables(build: UmlBuild, tmp_path: Path) -> None:
+    spec = CampaignSpec.parse(
+        (Path(__file__).parents[1] / "examples" / "campaign-smoke.json").read_text()
+    ).model_copy(update={"duration_ms": 3000})
+    assert campaign.plan(spec, tmp_path) == 8
+    for k in range(2):
+        outcomes = list(campaign.run_shard(tmp_path, build, campaign.Shard(k, 2), workers=2))
+        assert len(outcomes) == 4
+    assert campaign.status(tmp_path)["episodes_done"] == 8
+    for shard in (tmp_path / "shards").iterdir():
+        eps = pq.read_table(shard / "episodes.parquet")
+        assert set(eps["status"].to_pylist()) == {"ok"}
+        obs, lab = pq.read_table(shard / "obs.parquet"), pq.read_table(shard / "labels.parquet")
+        assert obs.num_rows == lab.num_rows == sum(eps["n_obs"].to_pylist())
+        assert obs["t_ns"].equals(lab["t_ns"])
+
+
+def test_cli_episode_and_mahak_query(build: UmlBuild, tmp_path: Path) -> None:
+    spec = json.loads((Path(__file__).parents[1] / "examples" / "episode-mahak.json").read_text())
+    spec["duration_ms"] = 2000
+    (tmp_path / "spec.json").write_text(json.dumps(spec))
+    assert (
+        main(
+            [
+                "episode",
+                str(tmp_path / "spec.json"),
+                str(tmp_path / "out"),
+                "--build",
+                str(build.root),
+            ]
+        )
+        == 0
+    )
+    assert (tmp_path / "out" / "DONE").exists()
+    args = [
+        "mahak-query",
+        "--build",
+        str(build.root),
+        "--cc",
+        "cubic",
+        "--metric",
+        "first_power",
+        "--buffer",
+        "50",
+        "--mrtt",
+        "10",
+        "--bw",
+        "10",
+        "--step",
+        "1.0",
+        "--scratch",
+        str(tmp_path),
+    ]
+    assert main(args) == 0

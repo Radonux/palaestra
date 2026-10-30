@@ -20,7 +20,7 @@ use std::time::Duration;
 const POLL: Duration = Duration::from_millis(20);
 
 /// (type, exact length, output file stem); mirrors kernel/modules/expliccit_rec.h.
-const TYPES: [(u16, usize, &str); 7] = [
+const TYPES: [(u16, usize, &str); 8] = [
     (1, 32, "meta"),
     (2, 64, "link_arrival"),
     (3, 64, "link_drop"),
@@ -28,6 +28,7 @@ const TYPES: [(u16, usize, &str); 7] = [
     (5, 40, "link_opp"),
     (6, 96, "link_stats"),
     (7, 160, "tcp_obs"),
+    (8, 32, "agent_action"),
 ];
 
 #[derive(Default, Debug)]

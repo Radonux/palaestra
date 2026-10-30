@@ -19,7 +19,7 @@ from typing import Final
 import numpy as np
 import numpy.typing as npt
 
-ABI: Final = 1
+ABI: Final = 2
 MAGIC: Final = 0x52504C45
 
 _HDR: Final = [("type", "<u2"), ("len", "<u2"), ("seq", "<u4"), ("t_ns", "<u8")]
@@ -120,6 +120,8 @@ OBS: Final = np.dtype(
     ]
 )
 
+AGENT: Final = np.dtype([*_HDR, ("cwnd", "<u4"), ("action_seq", "<u4"), ("pacing_rate", "<u8")])
+
 # EXPL_OBS_* flag bits.
 OBS_RATE_APP_LIMITED: Final = 0x1
 OBS_CWND_LIMITED: Final = 0x2
@@ -139,6 +141,7 @@ FILES: Final = (
     ("link_opp", 5, OPP),
     ("link_stats", 6, STATS),
     ("tcp_obs", 7, OBS),
+    ("agent_action", 8, AGENT),
 )
 
 type Table = npt.NDArray[np.void]
@@ -159,6 +162,7 @@ class Records:
     link_opp: Table
     link_stats: Table
     tcp_obs: Table
+    agent_action: Table
 
     @property
     def hz(self) -> int:

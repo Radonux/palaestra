@@ -1,4 +1,10 @@
-# Static musl binaries; aarch64 links with the bundled rust-lld so no cross
-# toolchain is needed.
+# Static musl binaries. tract-linalg assembles SIMD kernels with the target C
+# compiler (libc-independent objects), so point cc-rs at musl-gcc and at the
+# GNU aarch64 cross compiler (Ubuntu: musl-tools, gcc-aarch64-linux-gnu).
+# aarch64 links with the bundled rust-lld, so no full cross toolchain is needed.
+[env]
+CC_x86_64_unknown_linux_musl = "musl-gcc"
+CC_aarch64_unknown_linux_musl = "aarch64-linux-gnu-gcc"
+
 [target.aarch64-unknown-linux-musl]
 linker = "rust-lld"

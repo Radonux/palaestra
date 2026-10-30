@@ -13,3 +13,4 @@ Module.symvers
 .pytest_cache/
 .ruff_cache/
 .hypothesis/
+/.checkpatch-camelcase.git.

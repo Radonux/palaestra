@@ -1,0 +1,10 @@
+{
+  "path": {
+    "trace": {"kind": "mahak_step", "bw_mbps": 70, "step": 0.2},
+    "delay": {"mahak_compat_mrtt_ms": 4},
+    "buffer": {"packets": 8000}
+  },
+  "cc": {"kind": "stock", "name": "bbr"},
+  "duration_ms": 20000,
+  "seed": 1
+}

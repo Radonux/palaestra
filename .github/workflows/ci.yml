@@ -1,0 +1,156 @@
+name: ci
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: python (lint, types, unit tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            src
+            tests
+            examples
+            kernel/modules
+            third_party/mahimahi/scripts
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Mahak reference checkout (for the trace-port test)
+        env:
+          MAHAK_DIR: ${{ runner.temp }}/mahak
+        run: |
+          git clone --quiet https://github.com/Ppazhooh/mahak "$MAHAK_DIR"
+          git -C "$MAHAK_DIR" checkout --quiet 507758332a33d97a102a0a801162925bdb0a9669
+      - run: uv sync --locked
+      - run: uv run ruff format --check src tests
+      - run: uv run ruff check src tests
+      - run: uv run pyright
+      - name: pytest (UML tests skip here; the tier1 job runs them)
+        env:
+          EXPLICCIT_MAHAK_DIR: ${{ runner.temp }}/mahak
+        run: uv run pytest -q
+
+  rust:
+    name: rust guest (fmt, clippy, x86_64 and aarch64 musl)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: guest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: guest
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            guest/target
+          key: rust-${{ runner.os }}-${{ hashFiles('guest/Cargo.lock', 'guest/rust-toolchain.toml') }}
+      - run: sudo apt-get update -q && sudo apt-get install -y -q musl-tools gcc-aarch64-linux-gnu
+      - run: rustup toolchain install
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --release --target x86_64-unknown-linux-musl -- -D warnings
+      - run: cargo build --locked --release --target x86_64-unknown-linux-musl
+      - run: cargo build --locked --release --target aarch64-unknown-linux-musl
+
+  tier1:
+    name: tier 1 (UML 7.0 build, kernel style, end-to-end tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: sudo apt-get update -q && sudo apt-get install -y -q flex bison bc libelf-dev musl-tools
+      - run: scripts/check-kernel.sh
+      - run: scripts/build-uml.sh build/uml
+      - run: cd guest && rustup toolchain install
+      - run: scripts/build-guest.sh build/uml
+      - run: uv sync --locked
+      - name: end-to-end tests in UML
+        env:
+          EXPLICCIT_UML_DIR: build/uml
+        run: uv run pytest -q -m uml
+      - name: smoke campaign through the CLI
+        run: |
+          uv run expliccit campaign plan examples/campaign-smoke.json build/smoke
+          uv run expliccit campaign run build/smoke --build build/uml --workers "$(nproc)"
+          uv run expliccit campaign status build/smoke
+
+  mainline-tripwire:
+    name: newest mainline (non-blocking tripwire)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - run: sudo apt-get update -q && sudo apt-get install -y -q flex bison bc libelf-dev musl-tools
+      - name: unpack mainline and apply our kernel patches
+        env:
+          DEST: ${{ runner.temp }}/linux-mainline
+        run: uv run --no-project python tools/ci/mainline_tree.py "$DEST"
+      - name: build and run the UML tests against mainline
+        env:
+          KERNEL_SRC: ${{ runner.temp }}/linux-mainline
+          EXPLICCIT_UML_DIR: build/uml-mainline
+        run: |
+          scripts/build-uml.sh build/uml-mainline
+          (cd guest && rustup toolchain install)
+          scripts/build-guest.sh build/uml-mainline
+          uv sync --locked
+          uv run pytest -q -m uml
+
+  workflows:
+    name: workflow and shell lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github
+            scripts
+            tools
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - run: uvx --from actionlint-py==1.7.12.25 actionlint
+      - run: uvx zizmor==1.31.1 --offline .github/workflows
+      - run: shellcheck scripts/*.sh tools/m0/*.sh

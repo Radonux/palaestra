@@ -10,13 +10,15 @@
 # Produces OUT_DIR/linux (static UML binary), OUT_DIR/.config, a tree prepared
 # for out-of-tree modules (make -C third_party/linux O=OUT_DIR M=...), and
 # OUT_DIR/BUILD_INFO with the provenance of this build. Re-running rebuilds
-# incrementally. JOBS sets make parallelism (default nproc).
+# incrementally. JOBS sets make parallelism (default nproc). KERNEL_SRC
+# overrides the source tree (CI's mainline tripwire); provenance then
+# records the vendored tree's hash, so only use it for that tripwire.
 set -euo pipefail
 
 OUT="${1:?usage: build-uml.sh OUT_DIR [EXTRA_FRAGMENT ...]}"
 shift
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC="$HERE/third_party/linux"
+SRC="${KERNEL_SRC:-$HERE/third_party/linux}"
 JOBS="${JOBS:-$(nproc)}"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"

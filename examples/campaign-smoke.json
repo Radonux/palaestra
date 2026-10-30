@@ -1,0 +1,8 @@
+{
+  "name": "smoke",
+  "ccs": [{"kind": "stock", "name": "cubic"}, {"kind": "stock", "name": "bbr"}],
+  "sweep": {"kind": "mahak_grid", "bw_mbps": [10, 50], "step": [0.5], "mahak_compat_mrtt_ms": [10],
+            "buffer_pkts": [20, 500]},
+  "duration_ms": 14000,
+  "seed": 42
+}

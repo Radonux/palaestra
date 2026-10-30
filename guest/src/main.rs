@@ -17,6 +17,7 @@
 //! path namespace orphans each skb, so the sender's TCP Small Queues see the
 //! bottleneck as remote, like a Mahimahi shell.
 
+mod agent;
 mod netlink;
 mod netns;
 mod plan;
@@ -26,7 +27,7 @@ mod traffic;
 
 use netlink::{Mmlink, Order, Socket};
 use netns::Netns;
-use plan::{Link, Plan};
+use plan::{Control, Link, Plan};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::ffi::CString;
@@ -69,6 +70,7 @@ struct Report {
     ring_dropped: u64,
     softnet_dropped: u64,
     netdev_max_backlog: &'static str,
+    agent_actions: u64,
 }
 
 fn main() -> ExitCode {
@@ -128,6 +130,7 @@ fn load_modules(dir: &Path, plan: &Plan) -> Result<()> {
         ("expl_rec.ko", format!("ring_mib={}", plan.ring_mib)),
         ("sch_mmlink.ko", String::new()),
         ("expl_tcpobs.ko", format!("mark={}", plan.obs_mark)),
+        ("tcp_agent.ko", String::new()),
     ];
     for (name, params) in mods {
         match sys::finit_module(&dir.join(name), &params) {
@@ -256,7 +259,28 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
         return traffic::join(sender.handle, "sender").and_then(|_| fail("sender exited before accepting"));
     };
     let end_ns = base_ns + u64::from(plan.duration_ms.get()) * 1_000_000;
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let agent = match &plan.control {
+        Control::Stock => None,
+        Control::Agent { policy, interval_ms } => {
+            let policy = agent::Policy::load(policy)?;
+            let interval_ns = u64::from(interval_ms.get()) * 1_000_000;
+            Some(agent::spawn(
+                std::sync::Arc::clone(&conn),
+                policy,
+                base_ns,
+                interval_ns,
+                end_ns,
+                std::sync::Arc::clone(&stop),
+            )?)
+        }
+    };
     sys::sleep_until(end_ns);
+    stop.store(true, std::sync::atomic::Ordering::Release);
+    let agent_actions = match agent {
+        Some(h) => traffic::join(h, "agent")?,
+        None => 0,
+    };
     sys::shutdown(std::os::fd::AsFd::as_fd(&*conn));
     sys::shutdown(std::os::fd::AsFd::as_fd(&*receiver.conn));
     let sent = traffic::join(sender.handle, "sender")?;
@@ -287,5 +311,6 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
         ring_dropped,
         softnet_dropped,
         netdev_max_backlog: NETDEV_MAX_BACKLOG,
+        agent_actions,
     })
 }

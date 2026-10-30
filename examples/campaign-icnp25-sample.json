@@ -1,0 +1,14 @@
+{
+  "name": "icnp25-sample",
+  "ccs": [{"kind": "stock", "name": "cubic"}, {"kind": "stock", "name": "bbr"}],
+  "sweep": {
+    "kind": "mahak_sample",
+    "n": 1000,
+    "bw_mbps": {"lo": 5, "hi": 100},
+    "step": {"lo": 0.1, "hi": 8},
+    "mahak_compat_mrtt_ms": {"lo": 5, "hi": 200},
+    "buffer_pkts": {"lo": 2, "hi": 4000}
+  },
+  "duration_ms": 20000,
+  "seed": 2025
+}

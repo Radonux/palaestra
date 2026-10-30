@@ -41,6 +41,18 @@ class LinkPlan:
 
 
 @dataclass(frozen=True, slots=True)
+class AgentPlan:
+    """An ONNX policy (tcpinfo-v1 contract, see policy.py) run every interval."""
+
+    policy_onnx: bytes
+    interval_ms: int
+
+    def __post_init__(self) -> None:
+        if self.interval_ms <= 0 or not self.policy_onnx:
+            raise ValueError("agent needs a policy and a positive interval")
+
+
+@dataclass(frozen=True, slots=True)
 class GuestPlan:
     duration_ms: int
     cc: str
@@ -50,6 +62,11 @@ class GuestPlan:
     obs_mark: int = 7
     ring_mib: int = 64
     sysctls: tuple[tuple[str, str], ...] = ()
+    agent: AgentPlan | None = None
+
+    def __post_init__(self) -> None:
+        if (self.cc in ("agent", "agent_reno")) != (self.agent is not None):
+            raise ValueError("cc agent/agent_reno and an agent plan go together")
 
     def write(self, directory: Path) -> None:
         directory.mkdir(parents=True, exist_ok=True)
@@ -72,5 +89,9 @@ class GuestPlan:
             "ring_mib": self.ring_mib,
             **links,
             "sysctls": [list(s) for s in self.sysctls],
+            "agent": None,
         }
+        if self.agent is not None:
+            (directory / "policy.onnx").write_bytes(self.agent.policy_onnx)
+            plan["agent"] = {"policy_file": "policy.onnx", "interval_ms": self.agent.interval_ms}
         (directory / "plan.json").write_text(json.dumps(plan, indent=2))

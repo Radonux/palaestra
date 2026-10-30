@@ -1,0 +1,8 @@
+{
+  "name": "bbr2-region-probe",
+  "ccs": [{"kind": "stock", "name": "cubic"}, {"kind": "stock", "name": "bbr"}],
+  "sweep": {"kind": "mahak_grid", "bw_mbps": [70], "step": [0.2, 1.0], "mahak_compat_mrtt_ms": [4, 40],
+            "buffer_pkts": [100, 8000]},
+  "duration_ms": 20000,
+  "seed": 7
+}
