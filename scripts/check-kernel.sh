@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Style-check our kernel code with the vendored checkpatch.pl --strict:
 #   - the out-of-tree modules in kernel/modules, as whole files;
-#   - every local patch commit on top of the Linux import, as patches.
+#   - every local patch commit on top of the Linux import, as patches,
+#     except upstream imports listed in third_party/linux-imports.txt.
 # For patches, BAD_SIGN_OFF (our commit trailers are not kernel sign-offs)
 # and PARENTHESIS_ALIGNMENT (upstream's own __uml_setup help-string style)
 # are not enforced. Needs full git history.
@@ -17,7 +18,12 @@ done < <(git -C "$HERE" ls-files 'kernel/modules/*.[ch]')
 
 import="$(git -C "$HERE" log --diff-filter=A --format=%H -- third_party/linux/Makefile | tail -1)"
 [[ -n "$import" ]] || { echo "cannot find the Linux import commit (shallow clone?)" >&2; exit 1; }
+imports="$HERE/third_party/linux-imports.txt"
 while read -r commit; do
+    # Upstream patches imported verbatim keep upstream's style; skip them.
+    if grep -q "^$commit " "$imports"; then
+        continue
+    fi
     # Strip the third_party/linux/ prefix so checkpatch sees kernel paths.
     git -C "$HERE" format-patch -1 --stdout "$commit" -- third_party/linux \
         | sed -e 's#^\([-+][-+][-+] [ab]/\)third_party/linux/#\1#' \

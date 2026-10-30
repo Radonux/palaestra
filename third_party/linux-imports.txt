@@ -1,0 +1,16 @@
+# Upstream kernel commits imported verbatim with git am (see README.md).
+# scripts/check-kernel.sh does not style-check these: they are not ours.
+# <commit in this repository>  <source>
+3cb3ca7e5adbd6ec5956f8c5fd1380ce390b8206 google/bbr bbr-v3-2026-09-16-01
+dc0e8b886f1cd65e01228a69f5fe38f68827149d google/bbr bbr-v3-2026-09-16-01
+a3ba1db52d3846c7a85b548364bbec40ae4f8cee google/bbr bbr-v3-2026-09-16-01
+b1dcfaa5c1dc905de5dfd815a5e25150815bd2f8 google/bbr bbr-v3-2026-09-16-01
+34041679661327018ea2364b8269d1e9a3688c8b google/bbr bbr-v3-2026-09-16-01
+12f010c7318e7d0f55f4e404dbf279fdd7eefe97 google/bbr bbr-v3-2026-09-16-01
+7cd1b031f165f596467be040dd109bb2b02c2639 google/bbr bbr-v3-2026-09-16-01
+b2f1badcf9c7691caa60df9e197f8b5b0eb3231f google/bbr bbr-v3-2026-09-16-01
+29399943323effe2ea1d7848b0749496d1e876ac google/bbr bbr-v3-2026-09-16-01
+a02659a55c2a160da6306d8037a7c6e2be3df4f9 google/bbr bbr-v3-2026-09-16-01
+38fb7c34431a4882907f1635f4129e76219f0aa4 google/bbr bbr-v3-2026-09-16-01
+8eb2345e7ae05494ae7982a740cc2d027d52b8f8 google/bbr bbr-v3-2026-09-16-01
+44162fe143e807ebbf6c02a3c4a32e8cbbeb567e google/bbr bbr-v3-2026-09-16-01
