@@ -26,6 +26,7 @@ obj-$(CONFIG_OF) += dtb.o
 obj-$(CONFIG_EARLY_PRINTK) += early_printk.o
 obj-$(CONFIG_STACKTRACE) += stacktrace.o
 obj-$(CONFIG_SMP) += smp.o
+obj-$(CONFIG_UML_SEEDED_RANDOM) += seeded_random.o
 
 USER_OBJS := config.o
 

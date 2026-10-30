@@ -7,9 +7,14 @@
 /* This is from <os.h>, but better not to #include that in a global header here. */
 ssize_t os_getrandom(void *buf, size_t len, unsigned int flags);
 
+size_t um_seeded_random_longs(unsigned long *v, size_t max_longs);
+
 static inline size_t __must_check arch_get_random_longs(unsigned long *v, size_t max_longs)
 {
 	ssize_t ret;
+
+	if (IS_ENABLED(CONFIG_UML_SEEDED_RANDOM))
+		return um_seeded_random_longs(v, max_longs);
 
 	ret = os_getrandom(v, max_longs * sizeof(*v), 0);
 	if (ret < 0)

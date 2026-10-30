@@ -882,7 +882,9 @@ void __init random_init_early(const char *command_line)
 	}
 
 	_mix_pool_bytes(init_utsname(), sizeof(*(init_utsname())));
-	_mix_pool_bytes(command_line, strlen(command_line));
+	/* A seeded UML run must not depend on the host paths in its cmdline. */
+	if (!IS_ENABLED(CONFIG_UML_SEEDED_RANDOM))
+		_mix_pool_bytes(command_line, strlen(command_line));
 
 	/* Reseed if already seeded by earlier phases. */
 	if (crng_ready())

@@ -262,6 +262,19 @@ config UML_TIME_TRAVEL_SUPPORT
 
 	  It is safe to say Y, but you probably don't need this.
 
+config UML_SEEDED_RANDOM
+	bool "Seed all kernel randomness from the um_seed= parameter"
+	depends on UML_TIME_TRAVEL_SUPPORT && !UML_RANDOM
+	help
+	  Replace host entropy (getrandom() via arch_get_random_longs()) with
+	  a deterministic stream seeded by the um_seed=<u64> boot parameter,
+	  and keep the kernel command line out of the entropy pool. Together
+	  with time-travel=inf-cpu and time-travel-start= this makes a run a
+	  pure function of its inputs and seed.
+
+	  The stream is not cryptographically secure. Only enable this for a
+	  kernel used for simulation.
+
 config UML_MAX_USERSPACE_ITERATIONS
 	int
 	prompt "Maximum number of unscheduled userspace iterations"
