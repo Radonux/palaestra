@@ -472,14 +472,10 @@ static void bbr3_save_cwnd(struct sock *sk)
 		bbr->prior_cwnd = max(bbr->prior_cwnd, tcp_snd_cwnd(tp));
 }
 
-__bpf_kfunc static void bbr3_cwnd_event(struct sock *sk,
-					enum tcp_ca_event event)
-{
-	if (event == CA_EVENT_TLP_RECOVERY)
-		bbr3_loss_probe_recovery(sk);
-}
-
-__bpf_kfunc static void bbr3_cwnd_event_tx_start(struct sock *sk)
+/* Linux 7.0 has no cwnd_event_tx_start op (it appeared later); the event
+ * arrives through cwnd_event, which dispatches it here.
+ */
+static void bbr3_cwnd_event_tx_start(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct bbr3 *bbr = inet_csk_ca(sk);
@@ -496,6 +492,15 @@ __bpf_kfunc static void bbr3_cwnd_event_tx_start(struct sock *sk)
 		bbr3_set_pacing_rate(sk, bbr3_bw(sk), BBR_UNIT);
 	else if (bbr->mode == BBR_PROBE_RTT)
 		bbr3_check_probe_rtt_done(sk);
+}
+
+__bpf_kfunc static void bbr3_cwnd_event(struct sock *sk,
+					enum tcp_ca_event event)
+{
+	if (event == CA_EVENT_TX_START)
+		bbr3_cwnd_event_tx_start(sk);
+	else if (event == CA_EVENT_TLP_RECOVERY)
+		bbr3_loss_probe_recovery(sk);
 }
 
 /* Calculate bdp based on min RTT and the estimated bottleneck bandwidth:
@@ -2212,7 +2217,6 @@ static struct tcp_congestion_ops tcp_bbr3_cong_ops __read_mostly = {
 	.skb_marked_lost = bbr3_skb_marked_lost,
 	.undo_cwnd	= bbr3_undo_cwnd,
 	.cwnd_event	= bbr3_cwnd_event,
-	.cwnd_event_tx_start	= bbr3_cwnd_event_tx_start,
 	.ssthresh	= bbr3_ssthresh,
 	.get_info	= bbr3_get_info,
 	.set_state	= bbr3_set_state,
@@ -2225,7 +2229,6 @@ BTF_ID_FLAGS(func, bbr3_sndbuf_expand)
 BTF_ID_FLAGS(func, bbr3_skb_marked_lost)
 BTF_ID_FLAGS(func, bbr3_undo_cwnd)
 BTF_ID_FLAGS(func, bbr3_cwnd_event)
-BTF_ID_FLAGS(func, bbr3_cwnd_event_tx_start)
 BTF_ID_FLAGS(func, bbr3_ssthresh)
 BTF_ID_FLAGS(func, bbr3_set_state)
 BTF_KFUNCS_END(tcp_bbr3_check_kfunc_ids)
