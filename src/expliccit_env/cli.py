@@ -1,25 +1,21 @@
-"""Command line: ``expliccit {episode,campaign,mahak-query} ...``."""
+"""Command line: ``expliccit {episode,campaign,mahak-query,mahak} ...``."""
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import sys
+import tempfile
 from pathlib import Path
 
-from expliccit_env import campaign
+from pydantic import ValidationError
+
+from expliccit_env import campaign, mahak
 from expliccit_env.dataset import ShardWriter
 from expliccit_env.episode import Build, EpisodeOk, run_episode
 from expliccit_env.native import NativeBuild
-from expliccit_env.spec import (
-    CampaignSpec,
-    DropTail,
-    EpisodeSpec,
-    MahakMrtt,
-    MahakStep,
-    PathSpec,
-    StockCC,
-)
+from expliccit_env.spec import CampaignSpec, EpisodeSpec
 from expliccit_env.uml import UmlBuild
 
 
@@ -88,49 +84,117 @@ def _status(a: argparse.Namespace) -> int:
 
 def _mahak_query(a: argparse.Namespace) -> int:
     """Drop-in for Mahak's helper.oracle_query(X, metric, CC) on Tier 1."""
-    spec = EpisodeSpec(
-        path=PathSpec(
-            trace=MahakStep(bw_mbps=a.bw, step=a.step),
-            delay=MahakMrtt(mahak_compat_mrtt_ms=a.mrtt),
-            buffer=DropTail(packets=a.buffer),
-        ),
-        cc=StockCC(name=a.cc),
-        seed=a.seed,
-    )
+    point = mahak.MahakPoint(a.buffer, a.mrtt, a.bw, a.step)
+    spec = mahak.mahak_spec(point, a.cc, a.seed)
     outcome = run_episode(spec, _build(a), Path(a.scratch), timeout_s=a.timeout)
-    value = outcome.row.get(a.metric if a.metric != "delay" else "mahak_delay")
-    if not isinstance(outcome, EpisodeOk) or value is None:
-        print(json.dumps(outcome.row, default=str), file=sys.stderr)
-        return 1
-    print(value)
-    return 0
+    match mahak.metric_value(outcome, a.metric):
+        case mahak.Failure(reason):
+            print(reason, json.dumps(outcome.row, default=str), file=sys.stderr)
+            return 1
+        case value:
+            print(value)
+            return 0
+
+
+def _mahak(a: argparse.Namespace) -> int:
+    """Mahak's mahak_online.py, with every query a Tier 1 episode."""
+    space = mahak.MahakSpace.parse(a.buffer, a.mrtt, a.bw, a.change)
+    out, build = Path(a.out), _build(a)
+    out.mkdir(parents=True, exist_ok=True)
+    # The oracle is a pure function of (point, seed), so a repeated point
+    # reuses its result instead of writing a duplicate episode.
+    seen: dict[mahak.MahakPoint, tuple[str | None, float | mahak.Failure]] = {}
+    with (
+        tempfile.TemporaryDirectory(prefix="expliccit-", dir=a.scratch) as tmp,
+        ShardWriter(out / "shards" / campaign.Shard(0, 1).name()) as writer,
+    ):
+
+        def oracle(p: mahak.MahakPoint) -> float | mahak.Failure:
+            if p not in seen:
+                try:
+                    spec = mahak.mahak_spec(p, a.cc, a.seed)
+                except ValidationError as e:
+                    seen[p] = (None, mahak.Failure(f"spec: {e}"))
+                else:
+                    outcome = run_episode(spec, build, Path(tmp), timeout_s=a.timeout)
+                    writer.add(outcome)
+                    seen[p] = (outcome.episode_id, mahak.metric_value(outcome, a.metric))
+            return seen[p][1]
+
+        m = mahak.explore(space, oracle, budget=a.budget, seed=a.seed)
+    mahak.write_csv(m, a.metric, out / f"Mahak_{a.cc}.csv")
+    with (out / "queries.jsonl").open("w") as f:
+        for q in m.queries:
+            row = {
+                "grid_index": q.index,
+                **dataclasses.asdict(q.point),
+                "episode_id": seen[q.point][0],
+                a.metric: None if isinstance(q.result, mahak.Failure) else q.result,
+                "failure": q.result.reason if isinstance(q.result, mahak.Failure) else None,
+            }
+            f.write(json.dumps(row) + "\n")
+    failed = sum(isinstance(q.result, mahak.Failure) for q in m.queries)
+    print(
+        f"{len(m.queries)} queries ({failed} failed) over {len(m.grid)} grid points; map in {out}"
+    )
+    return 0 if failed < len(m.queries) else 1
+
+
+def _common(q: argparse.ArgumentParser) -> None:
+    q.add_argument(
+        "--build",
+        required=True,
+        help="build-uml.sh + build-guest.sh dir, or tier2-setup.sh dir",
+    )
+    q.add_argument(
+        "--tier",
+        choices=["uml", "native"],
+        default="uml",
+        help="uml: Tier 1, virtual time; native: Tier 2, real time, needs root",
+    )
+    q.add_argument("--timeout", type=float, default=1800.0, help="wall-clock seconds per episode")
+
+
+def _mahak_query_args(m: argparse.ArgumentParser) -> None:
+    m.add_argument("--cc", required=True, choices=["cubic", "bbr", "bbr3", "reno"])
+    m.add_argument("--metric", required=True, choices=["utilization", "first_power", "delay"])
+    m.add_argument("--buffer", type=int, required=True, help="packets")
+    m.add_argument("--mrtt", type=int, required=True, help="Mahak mRTT: ONE-WAY delay, ms")
+    m.add_argument("--bw", type=int, required=True, help="Mbit/s")
+    m.add_argument("--step", type=float, required=True, help="capacity ratio at 12 s")
+    m.add_argument("--seed", type=int, default=0)
+    m.add_argument("--scratch", default="/tmp")
+    _common(m)
+    m.set_defaults(fn=_mahak_query)
+
+
+def _mahak_args(d: argparse.ArgumentParser) -> None:
+    # Mahak's own flag spellings are accepted too, so run_mahak.sh lines work.
+    d.add_argument("--cc", "-cc", required=True, choices=["cubic", "bbr", "bbr3", "reno"])
+    d.add_argument("--budget", "-budget", type=int, required=True, help="queries after the first")
+    d.add_argument(
+        "--metric", "-metric", required=True, choices=["utilization", "first_power", "delay"]
+    )
+    d.add_argument("--buffer", "-buffer", required=True, help="MIN,MAX,STEP packets")
+    d.add_argument("--mrtt", "-mRTT", required=True, help="MIN,MAX,STEP one-way ms")
+    d.add_argument("--bw", "-bw", required=True, help="MIN,MAX,STEP Mbit/s")
+    d.add_argument("--change", "-change", required=True, help="MIN,MAX,STEP capacity ratio")
+    d.add_argument("--seed", type=int, default=0, help="first point and episode seed")
+    d.add_argument("--out", required=True)
+    d.add_argument("--scratch", help="node-local scratch for raw records")
+    _common(d)
+    d.set_defaults(fn=_mahak)
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="expliccit")
     sub = p.add_subparsers(required=True)
 
-    def common(q: argparse.ArgumentParser) -> None:
-        q.add_argument(
-            "--build",
-            required=True,
-            help="build-uml.sh + build-guest.sh dir, or tier2-setup.sh dir",
-        )
-        q.add_argument(
-            "--tier",
-            choices=["uml", "native"],
-            default="uml",
-            help="uml: Tier 1, virtual time; native: Tier 2, real time, needs root",
-        )
-        q.add_argument(
-            "--timeout", type=float, default=1800.0, help="wall-clock seconds per episode"
-        )
-
     e = sub.add_parser("episode", help="run one EpisodeSpec into a one-shard dataset")
     e.add_argument("spec")
     e.add_argument("out")
     e.add_argument("--keep-raw", action="store_true")
-    common(e)
+    _common(e)
     e.set_defaults(fn=_episode)
 
     c = sub.add_parser("campaign").add_subparsers(required=True)
@@ -144,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     cr.add_argument("--workers", type=int, default=1, help="parallel UML guests (one core each)")
     cr.add_argument("--scratch", help="node-local scratch for raw records")
     cr.add_argument("--keep-raw", action="store_true")
-    common(cr)
+    _common(cr)
     cr.set_defaults(fn=_run)
     cs = c.add_parser("slurm", help="write an sbatch array script for a planned campaign")
     cs.add_argument("out")
@@ -160,16 +224,9 @@ def main(argv: list[str] | None = None) -> int:
     st.set_defaults(fn=_status)
 
     m = sub.add_parser("mahak-query", help="Mahak oracle_query on Tier 1: print one metric")
-    m.add_argument("--cc", required=True, choices=["cubic", "bbr", "bbr3", "reno"])
-    m.add_argument("--metric", required=True, choices=["utilization", "first_power", "delay"])
-    m.add_argument("--buffer", type=int, required=True, help="packets")
-    m.add_argument("--mrtt", type=int, required=True, help="Mahak mRTT: ONE-WAY delay, ms")
-    m.add_argument("--bw", type=int, required=True, help="Mbit/s")
-    m.add_argument("--step", type=float, required=True, help="capacity ratio at 12 s")
-    m.add_argument("--seed", type=int, default=0)
-    m.add_argument("--scratch", default="/tmp")
-    common(m)
-    m.set_defaults(fn=_mahak_query)
+    _mahak_query_args(m)
+    d = sub.add_parser("mahak", help="Mahak's active-learning map (mahak_online.py) on Tier 1")
+    _mahak_args(d)
 
     a = p.parse_args(argv)
     return int(a.fn(a))

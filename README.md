@@ -8,7 +8,8 @@ path with Mahimahi's semantics. It produces:
 - closed-loop rollouts for net2: learned policies (ONNX) driving the kernel's
   congestion window;
 - Mahak-style performance maps (utilization, delay, power) for any congestion
-  control, with kernel-level fidelity.
+  control, with kernel-level fidelity: Mahak's own active-learning driver,
+  ported, with Tier 1 as its oracle.
 
 This README is the map for human collaborators: what the parts are, how
 data flows, which guarantees the system makes, and how to check them.
@@ -48,6 +49,7 @@ Implementation detail lives in `docs/`.
 | Agent controllers | `kernel/modules/tcp_agent.c` | `agent` (Sage-style) and `agent_reno` (Orca-style) driven by a policy. |
 | Records | `kernel/modules/expl_rec.c`, `expliccit_rec.h` | One ring, one sequence of events; the only kernel-to-host data path. |
 | Decode, labels, metrics | `records.py`, `labels.py`, `mahimahi.py`, `episode.py` | Validate records, derive ground truth, compute Mahak's metrics. |
+| Mahak driver | `mahak.py` | Mahak's Gaussian-process active learning over its grid, querying Tier 1 episodes. |
 | Datasets | `dataset.py` | Parquet shards joined on `episode_id`. |
 | Kernel and Mahimahi | `third_party/linux`, `third_party/mahimahi` | Vendored sources; our changes are separate commits. |
 
@@ -79,8 +81,10 @@ run; a change that weakens one should say so in its commit message.
    `LinkQueue`, event for event, also under random loss and cross traffic:
    `pytest tests/test_uml.py -k "mahimahi_oracle or loss_and_cross"`.
 3. **Mahak's numbers are Mahak's.** Trace generation matches Mahak's
-   `helper.py` bit for bit, and metrics match its Perl `mm-th-delay` exactly:
-   `pytest tests/test_mahimahi.py`.
+   `helper.py` bit for bit, metrics match its Perl `mm-th-delay` exactly, and
+   the driver makes the same queries and the same map as Mahak's own
+   `mahak_online.py` given the same oracle:
+   `pytest tests/test_mahimahi.py tests/test_mahak.py`.
 4. **Tier 1 is reproducible.** Same build, spec and seed give byte-identical
    records, random loss and cross traffic included:
    `pytest tests/test_uml.py -k "bit_identical or loss_and_cross"`.
@@ -103,9 +107,9 @@ CI runs the same on every push (`.github/workflows/ci.yml`).
 
 | Area | State |
 |---|---|
-| Tier 1: build, link model, observations, records, datasets, campaigns, CLI | done, tested (47 tests) |
+| Tier 1: build, link model, observations, records, datasets, campaigns, CLI | done, tested (51 tests) |
 | Agent controllers with ONNX policies, closed loop | done, tested |
-| Mahak metrics and trace generation | done, matched to the originals |
+| Mahak metrics, trace generation and active-learning driver | done, matched to the originals |
 | Slurm array scripts | generated and checked locally; not yet submitted to a cluster |
 | Tier 2 native mode | written, **not run** (needs an Ubuntu 26.04 / Linux 7.0 host) |
 | Cross-tier fidelity study, real-Mahimahi reference runs | not started (need Tier 2) |
@@ -139,6 +143,11 @@ musl-tools, perl, rustup and uv; no root.
     uv run expliccit mahak-query --build build/uml --cc bbr --metric first_power \
         --buffer 8000 --mrtt 4 --bw 70 --step 0.2
 
+    # Mahak's whole run (run_mahak.sh's arguments work as written): the map
+    # as Mahak_cubic.csv, every query, and a dataset of the queried episodes
+    uv run expliccit mahak --build build/uml --out out/map -cc cubic -budget 20 \
+        -metric first_power -buffer 2,200,4 -mRTT 5,50,5 -bw 2,20,5 -change 0.1,2,0.1
+
 Tier 2: `sudo scripts/tier2-setup.sh build/tier2` on the host, then add
 `--tier native --build build/tier2`.
 
@@ -168,7 +177,7 @@ later without rerunning), and `agent_action.parquet`.
 
 | Document | Contents |
 |---|---|
-| `docs/architecture.md` | Data flow and trust boundaries, exact link-model semantics, record ABI, time and determinism, decisions D1 to D17, known limits, how to extend |
+| `docs/architecture.md` | Data flow and trust boundaries, exact link-model semantics, record ABI, time and determinism, decisions D1 to D18, known limits, how to extend |
 | `docs/validation.md` | Every check that ran, with commands and results, and what has not run |
 | `docs/m0-report.md` | Feasibility measurements: UML build, speed, memory, determinism, BPF |
 | `kernel/modules/README.md` | The kernel modules and their ABIs |

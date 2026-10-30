@@ -33,7 +33,7 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - name: Mahak reference checkout (for the trace-port test)
+      - name: Mahak reference checkout (for the trace, metric and driver tests)
         env:
           MAHAK_DIR: ${{ runner.temp }}/mahak
         run: |

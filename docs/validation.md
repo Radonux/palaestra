@@ -15,7 +15,7 @@ executed in this environment unless it says CI.
       git clone https://github.com/Ppazhooh/mahak /tmp/mahak && git -C /tmp/mahak checkout 5077583
       EXPLICCIT_UML_DIR=build/uml EXPLICCIT_MAHAK_DIR=/tmp/mahak uv run pytest -q
 
-  Last result: 47 passed.
+  Last result: 51 passed.
 
 ## Ran: correctness of the ports and the link model
 
@@ -155,6 +155,42 @@ episodes of the BBRv3 check above were rerun on the M7 build and compared
 with the final BBRv3 build's output: every record file is byte-identical,
 and the `LINK_STATS` counters are identical apart from the appended
 `drops_random` field (0) that came with record ABI 3.
+
+## Ran: Mahak's driver (M8)
+
+**The port equals Mahak's own driver.** `test_driver_matches_mahak_online`
+runs Mahak's unmodified `mahak_online.py` (through `tests/mahak_ref.py`,
+which only replaces `helper.oracle_query` with a synthetic function and
+seeds numpy) in a separate environment, then runs the port on the same
+oracle and seed over `run_mahak.sh`'s space (51000 points, budget 15).
+
+| Mahak's environment | Queries | Map (posterior mean) |
+|---|---|---|
+| scikit-learn 1.7.2, numpy and scipy as locked here (the test) | 16 of 16 identical | identical |
+| Mahak's pinned one: Python 3.9, scikit-learn 1.1.3, numpy 1.23.5, scipy 1.9.3, pandas 1.5.2 (run once) | 16 of 16 identical | max difference 1.4e-13 |
+
+`test_grid_follows_mahaks_arange` pins the grid quirks the port keeps
+(axes can pass their maximum, a float step can add a point), and
+`test_failed_queries_never_become_labels` the failure rule.
+`test_cli_mahak_driver` runs `expliccit mahak` end to end on Tier 1.
+
+**First maps** (`run_mahak.sh`'s command, first_power, one core): 21
+episodes, 13 to 16 s wall each for Cubic, BBRv1 and BBRv3, no failed
+query. Each map was then compared with 60 held-out grid points run on
+Tier 1:
+
+| cc | budget | Spearman | Pearson | MAE | RMSE | lowest predicted value |
+|---|---|---|---|---|---|---|
+| cubic | 20 | 0.50 | 0.69 | 0.90 | 1.82 | -1.16 |
+| cubic | 100 (84 s) | 0.90 | 0.56 | 0.56 | 1.86 | -0.63 |
+| bbr | 20 | 0.81 | 0.78 | 3.49 | 5.16 | -1.23 |
+| bbr3 | 20 | 0.74 | 0.73 | 3.06 | 3.92 | -0.26 |
+
+At Mahak's default budget the maps rank regions only roughly and predict
+impossible negative powers; a budget of 100 ranks well (0.90) while a few
+very high-power points (small mRTT) keep the RMSE up. This is the
+algorithm's behaviour, not the port's. Since a Tier 1 query costs under a
+second, budgets in the hundreds are cheap.
 
 ## CI
 

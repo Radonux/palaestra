@@ -123,13 +123,16 @@ class PathSpec(_Frozen):
     loss: Loss = Loss()
 
 
+type StockName = Literal["cubic", "bbr", "bbr3", "reno"]
+
+
 class StockCC(_Frozen):
     """An in-kernel congestion control: Cubic, BBRv1 (``bbr``) and Reno as
     shipped in Linux 7.0, or Google's BBRv3 (``bbr3``, Tier 1 only: it needs
     the core patches imported under third_party/linux)."""
 
     kind: Literal["stock"] = "stock"
-    name: Literal["cubic", "bbr", "bbr3", "reno"]
+    name: StockName
 
 
 class OnnxPolicy(_Frozen):
@@ -168,7 +171,7 @@ class TcpCross(_Frozen):
     active over [start_ms, stop_ms) of trace time (stop: episode end)."""
 
     kind: Literal["tcp"] = "tcp"
-    cc: Literal["cubic", "bbr", "bbr3", "reno"]
+    cc: StockName
     start_ms: Annotated[int, Field(ge=0)] = 0
     stop_ms: PositiveInt | None = None
 

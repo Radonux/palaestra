@@ -253,3 +253,21 @@ def test_cli_episode_and_mahak_query(build: UmlBuild, tmp_path: Path) -> None:
         str(tmp_path),
     ]
     assert main(args) == 0
+
+
+def test_cli_mahak_driver(build: UmlBuild, tmp_path: Path) -> None:
+    # Mahak's flag spellings, a 2 x 2 x 1 x 2 grid, 3 queries after the first.
+    args = ["mahak", "--build", str(build.root), "--out", str(tmp_path / "map"), "--seed", "1"]
+    args += ["-cc", "bbr", "-budget", "3", "-metric", "first_power", "-buffer", "20,60,40"]
+    args += ["-mRTT", "5,10,5", "-bw", "10,10,5", "-change", "0.5,1,0.5"]
+    assert main(args) == 0
+    out = tmp_path / "map"
+    queries = [json.loads(line) for line in (out / "queries.jsonl").read_text().splitlines()]
+    assert len(queries) == 4
+    assert all(q["failure"] is None and q["first_power"] > 0 for q in queries)
+    rows = (out / "Mahak_bbr.csv").read_text().splitlines()
+    assert rows[0] == ",buffer_size,mRTT,BW,bw_step,first_power" and len(rows) == 1 + 8
+    # Each distinct queried point is one ok episode in the dataset shard.
+    eps = pq.read_table(out / "shards" / "00000-of-00001" / "episodes.parquet")
+    assert sorted(eps["episode_id"].to_pylist()) == sorted({q["episode_id"] for q in queries})
+    assert set(eps["status"].to_pylist()) == {"ok"}
