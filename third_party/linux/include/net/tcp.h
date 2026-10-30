@@ -1244,9 +1244,11 @@ enum tcp_ca_ack_event_flags {
 #define TCP_CONG_ECT_1_NEGOTIATION	BIT(3)
 /* Cannot fallback to RFC3168 during AccECN negotiation */
 #define TCP_CONG_NO_FALLBACK_RFC3168	BIT(4)
+/* Wants the app-limited check on every ACK and write timer (BBRv3) */
+#define TCP_CONG_BROAD_APP_LIMITED	BIT(5)
 #define TCP_CONG_MASK  (TCP_CONG_NON_RESTRICTED | TCP_CONG_NEEDS_ECN | \
 			TCP_CONG_NEEDS_ACCECN | TCP_CONG_ECT_1_NEGOTIATION | \
-			TCP_CONG_NO_FALLBACK_RFC3168)
+			TCP_CONG_NO_FALLBACK_RFC3168 | TCP_CONG_BROAD_APP_LIMITED)
 
 union tcp_cc_info;
 
@@ -1422,6 +1424,16 @@ static inline void tcp_ca_event(struct sock *sk, const enum tcp_ca_event event)
 
 	if (icsk->icsk_ca_ops->cwnd_event)
 		icsk->icsk_ca_ops->cwnd_event(sk, event);
+}
+
+/* The extra app-limited checks of the BBRv3 series, only for congestion
+ * controls that set TCP_CONG_BROAD_APP_LIMITED, so that the rate samples of
+ * every other congestion control are exactly as in an unpatched kernel.
+ */
+static inline void tcp_ca_check_app_limited(struct sock *sk)
+{
+	if (inet_csk(sk)->icsk_ca_ops->flags & TCP_CONG_BROAD_APP_LIMITED)
+		tcp_rate_check_app_limited(sk);
 }
 
 /* From tcp_cong.c */
