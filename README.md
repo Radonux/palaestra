@@ -69,7 +69,9 @@ run; a change that weakens one should say so in its commit message.
 1. **Real kernel TCP, unmodified congestion control.** Cubic, BBRv1 and Reno
    are the kernel's own. Every change to the kernel is a separate commit on
    top of the unmodified import: `git diff e8eadca -- third_party/linux`
-   (today: HZ set to 1000, and seeded randomness for reproducibility).
+   (today: HZ set to 1000, seeded randomness, and Google's BBRv3 with its
+   core prerequisites). Adding BBRv3 left seeded Cubic and BBRv1 episodes
+   byte-identical (`docs/validation.md`).
 2. **The link model is Mahimahi's.** The kernel's arrivals, drops, departures
    and opportunities equal an independent Python port of Mahimahi's
    `LinkQueue`, event for event:
@@ -98,13 +100,13 @@ CI runs the same on every push (`.github/workflows/ci.yml`).
 
 | Area | State |
 |---|---|
-| Tier 1: build, link model, observations, records, datasets, campaigns, CLI | done, tested (35 tests) |
+| Tier 1: build, link model, observations, records, datasets, campaigns, CLI | done, tested (36 tests) |
 | Agent controllers with ONNX policies, closed loop | done, tested |
 | Mahak metrics and trace generation | done, matched to the originals |
 | Slurm array scripts | generated and checked locally; not yet submitted to a cluster |
 | Tier 2 native mode | written, **not run** (needs an Ubuntu 26.04 / Linux 7.0 host) |
 | Cross-tier fidelity study, real-Mahimahi reference runs | not started (need Tier 2) |
-| BBRv3 | not started |
+| BBRv3 (Google's, as `bbr3`) | done in Tier 1, tested; not available on Tier 2's stock kernel |
 
 Measured speed: 8x to 53x real time per core in Tier 1, about 5400 twenty-second
 episodes per core-hour on Mahak's ICNP'25 space; about 2.5 MB of Parquet per

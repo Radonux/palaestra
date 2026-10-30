@@ -157,6 +157,8 @@ where the brief did not specify (its later sections were missing).
 | D11 | Vendored kernel and Mahimahi as unmodified import commits plus patch commits | Self-contained builds (kernel.org outages), and `git diff <import>` is the patch series. |
 | D12 | Parquet shards with a DONE marker | Few large files per worker (HPC filesystems), atomic visibility, rerunnable shards. |
 | D13 | ONNX via `tract` in the guest | Pure Rust, static musl, deterministic, zero virtual-time cost. Needs a C compiler for its SIMD kernels at build time (`musl-tools`). |
+| D14 | BBRv3 from google/bbr as a loadable module, its core changes kept inert for other CCs | The 12 core prerequisites are imported unchanged except one, made opt-in per CC (`TCP_CONG_BROAD_APP_LIMITED`); `tcp_bbr3` is a module loaded only for `bbr3` episodes, because building it in changed seeded BBRv1 runs. Verified by byte-identical stock episodes across the change. |
+| D15 | Pinned kernel build metadata | uname's version string seeds the guest's random pool; pinning it makes seeded runs comparable across builds, which is what the D14 check relies on. |
 
 ## Known ceilings (`ponytail` markers in the code)
 

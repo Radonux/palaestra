@@ -18,6 +18,9 @@ must keep. Implementation detail is in `docs/architecture.md`.
   copies the body into a commit.
 - Change the kernel only as separate commits under `third_party/linux`, on
   top of the unmodified import (`git diff e8eadca -- third_party/linux`).
+  Upstream kernel patches (for example Google's BBRv3 series) are imported
+  with `git am`, keeping their original author and message; only the
+  trailer above is added. Record each import in `third_party/README.md`.
 - Do not edit `.github/workflows/sync-skills.yml` or the `.github/skills`
   submodule by hand: the file is the verbatim updater from BTreeMap/SKILLs,
   and the workflow bumps the submodule itself.

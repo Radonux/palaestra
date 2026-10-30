@@ -85,6 +85,52 @@ follow-up once the LCF set settles.
 failing in the first cell; BBRv1 here keeps 7 ms of queueing. That is
 consistent with the failure being BBR2-specific, but one seed is not a map.
 
+## Ran: BBRv3 (M6)
+
+Google's BBRv3 is imported from google/bbr (`third_party/README.md`): 12
+core TCP prerequisites plus the `tcp_bbr3` module, ported to 7.0.
+
+**Stock congestion control stays unmodified.** With kernel build metadata
+pinned (so two builds of different source share one random stream per
+seed), four seeded 14 s episodes (Cubic and BBRv1, step and constant
+traces, 20 to 2000-packet buffers) were run on the kernel without the
+series and on the final kernel, and every record file was compared byte
+for byte. Steps that led there:
+
+| Kernel | Cubic, shallow | BBRv1 x2 | Cubic, deep (send-buffer-limited) |
+|---|---|---|---|
+| all 12 prerequisites, Google's code unchanged | identical | identical | links identical; `TCP_OBS` app-limited fields differ |
+| plus `tcp_bbr3` built in (`=y`) | identical | **differ** | differ |
+| final: app-limited checks opt-in, `tcp_bbr3` a module loaded only for `bbr3` | **identical** | **identical** | **identical** |
+
+Two mechanisms were found and removed: the broadened app-limited checks
+changed rate-sample marking for every socket (now opt-in per congestion
+control), and building BBRv3 into the kernel changed seeded BBRv1 runs
+through boot-time work alone (now a module). The procedure needs two
+kernel builds, so it is not in CI; rerun it when the kernel patch set
+changes.
+
+**BBRv3 runs correctly over the link model.** `bbr3` is now a case of
+`test_kernel_link_matches_mahimahi_oracle`, which also asserts the socket
+really ran `bbr3`: pass.
+
+**First look** (one seed per cell, not a map): BBRv1 against BBRv3 on the
+probe grid, 70 Mbit/s, 20 s:
+
+| cc | step | mRTT | buffer | util | mean qdelay ms | first_power | retrans |
+|---|---|---|---|---|---|---|---|
+| bbr | 0.2 | 4 | 100 | 0.983 | 6.5 | 0.609 | 287 |
+| bbr3 | 0.2 | 4 | 100 | 0.986 | 5.5 | 0.721 | 30 |
+| bbr | 0.2 | 4 | 8000 | 0.982 | 6.7 | 0.583 | 0 |
+| bbr3 | 0.2 | 4 | 8000 | 0.988 | 14.6 | 0.271 | 0 |
+| bbr | 1.0 | 40 | 100 | 0.942 | 3.8 | 9.897 | 2735 |
+| bbr3 | 1.0 | 40 | 100 | 0.951 | 2.8 | 13.480 | 941 |
+
+BBRv3 retransmits far less with shallow buffers, as designed. In Mahak's
+BBR2 failure cell (5x drop, 8000 packets, mRTT 4 ms) its queueing delay is
+about twice BBRv1's, the direction Mahak reported for BBR2; a map over
+seeds is needed before calling it a finding.
+
 ## CI
 
 `.github/workflows/ci.yml` runs Python (ruff, pyright strict, pytest with the
@@ -104,4 +150,3 @@ run; the Tier 1 job's first run exposed a toolchain-selection bug in
 | Mahak failure-region reproduction (BBR, Orca, Sage) | Partial: the probe above. Orca's and Sage's trained models are not in this repository; the agent controllers can run them once exported to ONNX under `tcpinfo-v1`. |
 | sparse (`C=1`) on the modules | UNRUN: Ubuntu 24.04's sparse is too old for 7.0. W=1 and checkpatch --strict are clean. |
 | Large campaigns on the CSLab Slurm cluster | UNRUN: script generation tested, never submitted. |
-| BBRv3 (M6) | Not started. |
