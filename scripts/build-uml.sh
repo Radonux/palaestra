@@ -23,6 +23,13 @@ JOBS="${JOBS:-$(nproc)}"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 
+# Reproducible builds: uname's version string feeds the guest's random pool
+# (random_init_early mixes init_utsname()), so a varying build timestamp or
+# host would change every seeded run. Pin all of it; BUILD_INFO identifies
+# the build instead.
+export KBUILD_BUILD_TIMESTAMP="Thu Jan  1 00:00:00 UTC 1970"
+export KBUILD_BUILD_USER=expliccit KBUILD_BUILD_HOST=expliccit KBUILD_BUILD_VERSION=1
+
 fragments=("$HERE/kernel/uml.config" "$@")
 make -s -C "$SRC" O="$OUT" ARCH=um x86_64_defconfig
 "$SRC/scripts/kconfig/merge_config.sh" -m -O "$OUT" "$OUT/.config" "${fragments[@]}" > /dev/null
