@@ -1,0 +1,15 @@
+/build/
+/.venv/
+__pycache__/
+*.pyc
+/guest/target/
+*.ko
+*.o
+*.mod
+*.mod.c
+.*.cmd
+modules.order
+Module.symvers
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
