@@ -52,9 +52,19 @@ executed in this environment unless it says CI.
 | 100 Mbit/s, 10 to 100 ms one-way, up to 20000 pkts | 1.47 to 1.52 s | 13 to 14x |
 | 100 to 800 Mbit/s step, 8000 pkts | 2.42 s | 8x |
 
-Peak RSS per guest: 85 to 117 MiB. At about 1 s per episode per core, a
-512-core node runs on the order of 1.8 million 20 s episodes per day
-(estimate from these numbers, not measured at that scale).
+Peak RSS per guest: 85 to 117 MiB.
+
+Aggregate throughput, measured: shard 0/50 of `examples/campaign-icnp25-sample.json`
+(40 episodes drawn log-uniformly from the ICNP'25 space, 20 s each, Cubic and
+BBR) took 6.6 s with 4 workers on 4 cores, all ok: about 5400 episodes per
+core-hour for that mix. Output: 98 MB of zstd Parquet, about 2.5 MB per
+episode (link_events 60%, obs 24%, link_opp 14%, labels 4%).
+
+Planning consequence (extrapolated, not measured at scale): one 512-core node
+would produce on the order of 2.8 million episodes and 7 TB per hour, so
+storage, not CPU, bounds Tier 1 campaigns. A retention option (for example
+dropping `link_opp`, which the trace and departures determine) is a cheap
+follow-up once the LCF set settles.
 
 ## Ran: an illustrative Mahak-style probe (one seed, not a reproduction)
 
