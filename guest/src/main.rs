@@ -4,9 +4,7 @@
 //! mounts the host directories named by the kernel command-line variables
 //! `expl_in` (plan) and `expl_out` (results) on /in and /out, loads the
 //! modules from /modules, runs the episode, writes result.json and powers
-//! off. On a Tier 2 host it runs as root:
-//!
-//!     expliccit-guest PLAN_DIR OUT_DIR MODULE_DIR
+//! off.
 //!
 //! Topology (one veth pair per hop, all in fresh namespaces):
 //!
@@ -32,7 +30,7 @@ use plan::{Control, CrossFlow, Link, Plan};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::ffi::CString;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
 use sys::{Context, Result, fail};
 
@@ -77,27 +75,13 @@ struct Report {
 
 fn main() -> ExitCode {
     // SAFETY: getpid has no preconditions.
-    let pid1 = unsafe { libc::getpid() } == 1;
-    let args: Vec<String> = std::env::args().collect();
-    let (out, result) = if pid1 {
-        (
-            PathBuf::from("/out"),
-            boot().and_then(|()| episode(Path::new("/in"), Path::new("/out"), Path::new("/modules"))),
-        )
-    } else if let [_, plan, out, modules] = args.as_slice() {
-        let out = PathBuf::from(out);
-        let r = episode(Path::new(plan), &out, Path::new(modules));
-        (out, r)
-    } else {
-        eprintln!("usage: expliccit-guest PLAN_DIR OUT_DIR MODULE_DIR (or run as PID 1)");
+    if unsafe { libc::getpid() } != 1 {
+        eprintln!("expliccit-guest runs only as PID 1 of a UML guest (init=/init)");
         return ExitCode::from(2);
-    };
-    let ok = result.is_ok();
-    write_outcome(&out, result);
-    if pid1 {
-        sys::power_off();
     }
-    if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+    let out = Path::new("/out");
+    write_outcome(out, boot().and_then(|()| episode(Path::new("/in"), out, Path::new("/modules"))));
+    sys::power_off()
 }
 
 fn write_outcome(out: &Path, result: Result<Report>) {
@@ -141,18 +125,7 @@ fn load_modules(dir: &Path, plan: &Plan) -> Result<()> {
         mods.push(("tcp_bbr3.ko", String::new()));
     }
     for (name, params) in mods {
-        match sys::finit_module(&dir.join(name), &params) {
-            Ok(()) => {}
-            // Tier 2 hosts keep modules loaded across episodes; only the
-            // observation mark is per-episode, and it is writable.
-            Err(e) if e.raw_os_error() == Some(libc::EEXIST) => {
-                if name == "expl_tcpobs.ko" {
-                    std::fs::write("/sys/module/expl_tcpobs/parameters/mark", plan.obs_mark.to_string())
-                        .ctx("setting expl_tcpobs mark")?;
-                }
-            }
-            Err(e) => return Err(e).ctx(format!("loading {name}")),
-        }
+        sys::finit_module(&dir.join(name), &params).ctx(format!("loading {name}"))?;
     }
     Ok(())
 }

@@ -15,8 +15,8 @@
  * spinning reader would distort virtual time.
  * ponytail: polled reader, add a wait queue with a fill threshold if read
  * latency ever matters.
- * ponytail: one global ring per kernel; per-netns rings if Tier 2 ever runs
- * concurrent episodes on one host.
+ * ponytail: one global ring per kernel (one episode per UML guest);
+ * per-netns rings if one kernel ever runs concurrent episodes.
  */
 #include <linux/atomic.h>
 #include <linux/fs.h>

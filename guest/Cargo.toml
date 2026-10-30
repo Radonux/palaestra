@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 publish = false
-description = "Episode runner for expliccit-env: PID 1 in a UML guest, or a root process on a Tier 2 host"
+description = "Episode runner for expliccit-env: PID 1 in a UML guest"
 license = "GPL-2.0-only"
 
 # libc: raw syscalls (namespaces, netlink, mount, finit_module, reboot).

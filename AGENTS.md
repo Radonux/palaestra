@@ -32,9 +32,8 @@ Run what the change touches, and report only what actually ran:
     uv run ruff format --check src tests && uv run ruff check src tests && uv run pyright
     uv run pytest -q                                       # unit tests
     scripts/build-uml.sh build/uml && scripts/build-guest.sh build/uml
-    EXPLICCIT_UML_DIR=build/uml uv run pytest -q            # adds the Tier 1 tests
-    (cd guest && cargo fmt --check && for t in x86_64 aarch64; do
-        cargo clippy --release --target $t-unknown-linux-musl -- -D warnings; done)
+    EXPLICCIT_UML_DIR=build/uml uv run pytest -q            # adds the UML tests
+    (cd guest && cargo fmt --check && cargo clippy --release --target x86_64-unknown-linux-musl -- -D warnings)
     scripts/check-kernel.sh                                # checkpatch on modules and kernel patches
     shellcheck scripts/*.sh tools/m0/*.sh
     uvx --from actionlint-py==1.7.12.25 actionlint && uvx zizmor==1.31.1 --offline .github/workflows
@@ -46,7 +45,7 @@ Run what the change touches, and report only what actually ran:
   write the least code that works. Mark deliberate limits with
   `ponytail: <ceiling>, <upgrade path>`.
 - Never let a failed or invalid episode produce metrics or labels.
-- In Tier 1 (UML, `time-travel=inf-cpu`), guest code must block or sleep,
-  never spin: spinning distorts virtual time.
+- Guest code runs under UML's `time-travel=inf-cpu`: it must block or sleep,
+  never spin, because spinning distorts virtual time.
 - Docs, comments and reports use plain English with no em dashes. Label
   anything not run as UNRUN.

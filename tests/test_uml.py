@@ -1,4 +1,4 @@
-"""End-to-end checks of Tier 1: real kernel, sch_mmlink, guest runner.
+"""End-to-end checks in UML: real kernel, sch_mmlink, guest runner.
 
 Needs a built UML tree (scripts/build-uml.sh, then build-guest.sh) named by
 EXPLICCIT_UML_DIR; skipped otherwise.

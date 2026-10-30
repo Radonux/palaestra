@@ -19,8 +19,8 @@ To list them, or the combined patch:
 
 | Commits | What | Why |
 |---|---|---|
-| `dea41ac` | `um`: HZ 1000 | Tier 2 kernels run HZ=1000; arch/um hard-codes 100. |
-| `12562c6` | `um`: `CONFIG_UML_SEEDED_RANDOM` | Bit-reproducible Tier 1 episodes. |
+| `dea41ac` | `um`: HZ 1000 | arch/um hard-codes 100, which makes TCP's jiffy timers 10x coarser than on an HZ=1000 host kernel. |
+| `12562c6` | `um`: `CONFIG_UML_SEEDED_RANDOM` | Bit-reproducible episodes. |
 | `3cb3ca7` .. `8eb2345` (12) | BBRv3 core prerequisites | Imported unchanged with `git am` from google/bbr branch `bbr-v3-2026-09-16-01` (commits `05406b11b` .. `c552eebe7`), original authors and messages kept. Listed in `linux-imports.txt`, so our style check skips them. |
 | `44162fe` | `tcp_bbr3` module | Same branch, commit `5dee74110`: BBRv3 as a separate congestion control `bbr3`, leaving BBRv1 as `bbr`. |
 | `814b1d9` | 7.0 port of `tcp_bbr3` | The branch targets a newer kernel with a `cwnd_event_tx_start` op. |

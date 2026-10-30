@@ -1,4 +1,4 @@
-"""Mahak's active-learning driver (``mahak_online.py``) with Tier 1 as its oracle.
+"""Mahak's active-learning driver (``mahak_online.py``) with UML episodes as its oracle.
 
 Mahak (HotNets'23) maps one metric of a congestion control over a grid of
 (buffer, mRTT, bandwidth, capacity step), asking its oracle for the point
@@ -209,7 +209,7 @@ def write_csv(m: MahakMap, metric: MahakMetric, path: Path) -> None:
             w.writerow([i, p.buffer_pkts, p.mrtt_ms, p.bw_mbps, f"{p.step:.2f}", value])
 
 
-# --- the Tier 1 oracle -------------------------------------------------------
+# --- the UML oracle ---------------------------------------------------------
 
 
 def mahak_spec(p: MahakPoint, cc: StockName, seed: int) -> EpisodeSpec:

@@ -380,7 +380,7 @@ static void mmlink_accept(struct Qdisc *sch, struct sk_buff *skb, u64 now)
 		return;
 	}
 	/* mm-loss: an i.i.d. drop before the delay line and the link. The
-	 * kernel RNG is seeded per run in Tier 1, so this is reproducible.
+	 * UML kernel's RNG is seeded per run, so this is reproducible.
 	 */
 	if (q->loss && get_random_u32() < q->loss) {
 		q->st.drops_random++;

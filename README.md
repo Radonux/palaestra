@@ -9,7 +9,7 @@ path with Mahimahi's semantics. It produces:
   congestion window;
 - Mahak-style performance maps (utilization, delay, power) for any congestion
   control, with kernel-level fidelity: Mahak's own active-learning driver,
-  ported, with Tier 1 as its oracle.
+  ported, with UML episodes as its oracle.
 
 This README is the map for human collaborators: what the parts are, how
 data flows, which guarantees the system makes, and how to check them.
@@ -20,10 +20,10 @@ Implementation detail lives in `docs/`.
 ```text
                         HOST (Python, src/expliccit_env)
   spec.json ──► parse ──► plan ──► launch ─────────────┐        ┌──► validate records
-  campaign.json  (specs)  (guest   (Tier 1: uml.py     │        │    ──► labels + metrics
-                           plan)    Tier 2: native.py) │        │    ──► Parquet shard
+  campaign.json  (specs)  (guest   (uml.py: boots      │        │    ──► labels + metrics
+                           plan)     UML, seeded)      │        │    ──► Parquet shard
                                                        ▼        │
-  ┌─────────────────────────── ONE KERNEL (Linux 7.0) ──────────┴─────────────┐
+  ┌───────────────────────── ONE UML KERNEL (Linux 7.0) ────────┴─────────────┐
   │  guest runner (Rust, static, guest/): builds the topology, runs traffic,  │
   │  runs the policy, drains records to files                                 │
   │                                                                           │
@@ -42,28 +42,30 @@ Implementation detail lives in `docs/`.
 | Part | Where | Responsibility |
 |---|---|---|
 | Specs and campaigns | `src/expliccit_env/spec.py`, `campaign.py` | What to run: path (trace, delay, buffer, random loss), congestion control, cross traffic, duration, seed; grids and samples of Mahak's space, each under a list of loss and cross-traffic conditions. |
-| Launchers | `uml.py` (Tier 1), `native.py` (Tier 2) | Boot a UML guest in virtual time, or run on a native host as root. |
+| Launcher | `uml.py` | Boot a UML guest in virtual time (`time-travel=inf-cpu`), seeded, under a wall-clock timeout. |
 | Guest runner | `guest/` (Rust) | Inside the kernel: namespaces, qdiscs, bulk TCP pair, cross-traffic flows, ONNX policy loop, record collection. |
 | Link model | `kernel/modules/sch_mmlink.c` | The bottleneck: Mahimahi's `mm-link` + `mm-delay` (+ `mm-loss`), as a qdisc. |
 | Observation | `kernel/modules/expl_tcpobs.c` | Sender state at every ACK, for any congestion control. |
 | Agent controllers | `kernel/modules/tcp_agent.c` | `agent` (Sage-style) and `agent_reno` (Orca-style) driven by a policy. |
 | Records | `kernel/modules/expl_rec.c`, `expliccit_rec.h` | One ring, one sequence of events; the only kernel-to-host data path. |
 | Decode, labels, metrics | `records.py`, `labels.py`, `mahimahi.py`, `episode.py` | Validate records, derive ground truth, compute Mahak's metrics. |
-| Mahak driver | `mahak.py` | Mahak's Gaussian-process active learning over its grid, querying Tier 1 episodes. |
+| Mahak driver | `mahak.py` | Mahak's Gaussian-process active learning over its grid, querying UML episodes. |
 | Datasets | `dataset.py` | Parquet shards joined on `episode_id`. |
 | Kernel and Mahimahi | `third_party/linux`, `third_party/mahimahi` | Vendored sources; our changes are separate commits. |
 
-### Two tiers, one runner
+### Where it runs
 
-| | Tier 1 | Tier 2 |
-|---|---|---|
-| Kernel | User-Mode Linux 7.0, `time-travel=inf-cpu` | native Linux 7.0 (Ubuntu 26.04 LTS) |
-| Time | virtual: CPU work is free | real |
-| Privileges | none: laptops, Slurm (no root, no KVM), GitHub Actions | root |
-| Role | datasets, Mahak maps, CI | calibration, final numbers |
+Everything runs in User-Mode Linux 7.0 with `time-travel=inf-cpu`. The
+kernel is an ordinary unprivileged process; time is virtual (CPU work is
+free, so a guest runs 8x to 53x faster than real time); and a seed fixes
+every random choice. It runs wherever x86_64 Linux runs, without root or
+KVM: laptops, Slurm clusters, GitHub Actions.
 
-Both tiers run the same runner binary and the same modules; only the launcher
-differs.
+A second, native tier (Linux 7.0 on Ubuntu 26.04 hosts, as root, in real
+time) was planned and dropped: no environment we have can easily boot a
+patched kernel, so it could never run BBRv3 or later kernel changes. The
+cost is that nothing checks UML's virtual time against a real-time kernel
+(`docs/architecture.md`, D19).
 
 ## Guarantees, and how to check them
 
@@ -85,19 +87,19 @@ run; a change that weakens one should say so in its commit message.
    the driver makes the same queries and the same map as Mahak's own
    `mahak_online.py` given the same oracle:
    `pytest tests/test_mahimahi.py tests/test_mahak.py`.
-4. **Tier 1 is reproducible.** Same build, spec and seed give byte-identical
+4. **Episodes are reproducible.** Same build, spec and seed give byte-identical
    records, random loss and cross traffic included:
    `pytest tests/test_uml.py -k "bit_identical or loss_and_cross"`.
 5. **No silent data.** An episode that times out, overflows a buffer it must
    not, drops records, or fails validation becomes a row with
    `status = "failed"` and a reason, never metrics or labels.
 6. **Provenance.** Every episode row names the kernel source tree hash,
-   kernel config hash, repository commit, tier and seed.
+   kernel config hash, repository commit and seed.
 7. **The mRTT trap is explicit.** Mahak's "mRTT" is a one-way delay (base RTT
    is twice it). A spec says `{"mahak_compat_mrtt_ms": 20}` or
    `{"base_rtt_ms": 40}` (the same path) and cannot say both.
 
-Run all checks at once (Tier 1 tests need a build, see below):
+Run all checks at once (the UML tests need a build, see below):
 
     EXPLICCIT_UML_DIR=build/uml uv run pytest -q
 
@@ -107,22 +109,22 @@ CI runs the same on every push (`.github/workflows/ci.yml`).
 
 | Area | State |
 |---|---|
-| Tier 1: build, link model, observations, records, datasets, campaigns, CLI | done, tested (51 tests) |
+| UML build, link model, observations, records, datasets, campaigns, CLI | done, tested (51 tests) |
 | Agent controllers with ONNX policies, closed loop | done, tested |
 | Mahak metrics, trace generation and active-learning driver | done, matched to the originals |
 | Slurm array scripts | generated and checked locally; not yet submitted to a cluster |
-| Tier 2 native mode | written, **not run** (needs an Ubuntu 26.04 / Linux 7.0 host) |
-| Cross-tier fidelity study, real-Mahimahi reference runs | not started (need Tier 2) |
-| BBRv3 (Google's, as `bbr3`) | done in Tier 1, tested; not available on Tier 2's stock kernel |
-| Random loss and cross traffic (TCP of any CC, constant-rate UDP), with their labels | done in Tier 1, tested |
+| BBRv3 (Google's, as `bbr3`) | done, tested |
+| Random loss and cross traffic (TCP of any CC, constant-rate UDP), with their labels | done, tested |
+| Reference runs of real Mahimahi against the link model | not started (needs a root host and a port of Mahak's `highbdp.patch`) |
+| Native tier (real-time kernel) | dropped (D19) |
 
-Measured speed: 8x to 53x real time per core in Tier 1, about 5400 twenty-second
+Measured speed: 8x to 53x real time per core, about 5400 twenty-second
 episodes per core-hour on Mahak's ICNP'25 space; about 2.5 MB of Parquet per
 episode. Details and open items: `docs/validation.md`.
 
 ## Running it
 
-Tier 1 needs x86_64 Linux with gcc, make, flex, bison, bc, libelf-dev,
+It needs x86_64 Linux with gcc, make, flex, bison, bc, libelf-dev,
 musl-tools, perl, rustup and uv; no root.
 
     scripts/build-uml.sh build/uml          # UML 7.0 from third_party/linux
@@ -139,7 +141,7 @@ musl-tools, perl, rustup and uv; no root.
     # a Slurm array job (one shard per task, one guest per core)
     uv run expliccit campaign slurm out/smoke --build build/uml --shards 200 --cpus-per-task 32
 
-    # Mahak's oracle_query(X, metric, CC), on Tier 1
+    # Mahak's oracle_query(X, metric, CC), in UML
     uv run expliccit mahak-query --build build/uml --cc bbr --metric first_power \
         --buffer 8000 --mrtt 4 --bw 70 --step 0.2
 
@@ -147,9 +149,6 @@ musl-tools, perl, rustup and uv; no root.
     # as Mahak_cubic.csv, every query, and a dataset of the queried episodes
     uv run expliccit mahak --build build/uml --out out/map -cc cubic -budget 20 \
         -metric first_power -buffer 2,200,4 -mRTT 5,50,5 -bw 2,20,5 -change 0.1,2,0.1
-
-Tier 2: `sudo scripts/tier2-setup.sh build/tier2` on the host, then add
-`--tier native --build build/tier2`.
 
 Each dataset shard holds `episodes.parquet` (one row per episode: parameters,
 status, metrics, provenance), `obs.parquet` (sender observations),
@@ -177,7 +176,7 @@ later without rerunning), and `agent_action.parquet`.
 
 | Document | Contents |
 |---|---|
-| `docs/architecture.md` | Data flow and trust boundaries, exact link-model semantics, record ABI, time and determinism, decisions D1 to D18, known limits, how to extend |
+| `docs/architecture.md` | Data flow and trust boundaries, exact link-model semantics, record ABI, time and determinism, decisions D1 to D19, known limits, how to extend |
 | `docs/validation.md` | Every check that ran, with commands and results, and what has not run |
 | `docs/m0-report.md` | Feasibility measurements: UML build, speed, memory, determinism, BPF |
 | `kernel/modules/README.md` | The kernel modules and their ABIs |

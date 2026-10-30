@@ -1,6 +1,6 @@
 # M0 feasibility report
 
-Status: complete for Tier 1. Results come from `tools/m0/` probes and, after
+Status: complete. Results come from `tools/m0/` probes and, after
 the link model existed, from the test suite and the benchmark below. Items
 not run are marked UNRUN.
 
@@ -19,7 +19,7 @@ not run are marked UNRUN.
 |---|---|---|---|
 | 1 | Does Linux 7.0 build as UML with time-travel, static link, veth, netem, fq, cubic, bbr? | Yes. 1m44s on 4 cores, static ELF. `build-uml.sh` verified every requested option in the final `.config`. | `scripts/build-uml.sh` |
 | 2 | Does it boot in `time-travel=inf-cpu` and keep virtual time? | Yes. Clocksource `time-travel-clock`. `sleep 10` measured 10.000064512 s in the guest. | boot probe |
-| 3 | HZ | Upstream arch/um hard-codes `HZ=100` (no prompt). Patched to 1000 in its own commit (`um: set HZ to 1000`); guest reports `CONFIG_HZ=1000`. Tier 2 HZ is VERIFY on the Ampere hosts. | `/proc/config.gz` |
+| 3 | HZ | Upstream arch/um hard-codes `HZ=100` (no prompt). Patched to 1000 in its own commit (`um: set HZ to 1000`); guest reports `CONFIG_HZ=1000`. | `/proc/config.gz` |
 | 4 | Do netns, veth, forwarding, netem and TCP work in the guest? | Yes, 3-namespace path (snd, path, rcv) with netem in `path`. | `run-net.sh` |
 | 5 | Speed (netem rate 100 Mbit/s, 10 ms each way, iperf3) | Cubic: 20.4 s virtual in 3.0 s wall incl. boot, 95.2 Mbit/s, 0 retrans. BBR: 20.2 s virtual in 3.5 s wall, 94.2 Mbit/s. That is about 6 to 7x real time on one core. | `run-net.sh ... 100mbit 10ms 20` |
 | 6 | Speed at 10 Mbit/s, 50 ms each way | BBR: 20.8 s virtual in 1.8 s wall. Cubic: 22.9 s virtual in 256 s wall (slower than real time). Cubic's cwnd grew to 2.4 MB and RTT to 1.6 s against netem's 100000-packet limit; see open item O1. | iperf3 JSON |
@@ -58,8 +58,8 @@ not run are marked UNRUN.
 ## Open items
 
 - O1, O2, O3: resolved (F3, item 8, item 12).
-- O4. HZ and `uname -r` on the Tier 2 Ampere hosts (VERIFY; `tier2-setup.sh`
-  records both and warns if HZ is not 1000).
+- O4. HZ and `uname -r` on the planned native hosts: dropped with the native
+  tier (`docs/architecture.md`, D19).
 
 ## Reproduce
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the guest side of Tier 1 into an existing UML build directory.
+# Build the guest side (modules, runner, root) into an existing UML build directory.
 #
 # Usage: scripts/build-guest.sh UML_BUILD_DIR
 #

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the Tier 1 User-Mode Linux kernel from the vendored tree.
+# Build the User-Mode Linux kernel from the vendored tree.
 #
 # Usage: scripts/build-uml.sh OUT_DIR [EXTRA_FRAGMENT ...]
 #

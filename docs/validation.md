@@ -7,7 +7,7 @@ executed in this environment unless it says CI.
 
 - Host: x86_64 cloud container, 4 vCPU, 15 GiB RAM, host kernel 6.18.44,
   Ubuntu 24.04 userland, gcc 13.3.0, Rust 1.97.0, Python 3.13, perl 5.38.
-- Tier 1 kernel: UML from `third_party/linux` (Linux 7.0 plus the patches in
+- Kernel: UML from `third_party/linux` (Linux 7.0 plus the patches in
   `third_party/README.md`), `kernel/uml.config`, `time-travel=inf-cpu`.
 - Reproduce everything below with:
 
@@ -43,7 +43,7 @@ executed in this environment unless it says CI.
 | `test_cli_episode_and_mahak_query` | CLI episode and Mahak oracle replacement work |
 | Mainline tripwire, run locally before the agent work: kernel.org mainline 7.3.0 plus our patches | patches applied, modules built, 6 UML tests passed |
 
-## Ran: performance (Tier 1, one core per guest, 20 s episodes)
+## Ran: performance (one core per guest, 20 s episodes)
 
 | Setting | Wall time incl. boot | Speed |
 |---|---|---|
@@ -62,7 +62,7 @@ episode (link_events 60%, obs 24%, link_opp 14%, labels 4%).
 
 Planning consequence (extrapolated, not measured at scale): one 512-core node
 would produce on the order of 2.8 million episodes and 7 TB per hour, so
-storage, not CPU, bounds Tier 1 campaigns. A retention option (for example
+storage, not CPU, bounds campaigns. A retention option (for example
 dropping `link_opp`, which the trace and departures determine) is a cheap
 follow-up once the LCF set settles.
 
@@ -172,12 +172,12 @@ oracle and seed over `run_mahak.sh`'s space (51000 points, budget 15).
 `test_grid_follows_mahaks_arange` pins the grid quirks the port keeps
 (axes can pass their maximum, a float step can add a point), and
 `test_failed_queries_never_become_labels` the failure rule.
-`test_cli_mahak_driver` runs `expliccit mahak` end to end on Tier 1.
+`test_cli_mahak_driver` runs `expliccit mahak` end to end in UML.
 
 **First maps** (`run_mahak.sh`'s command, first_power, one core): 21
 episodes, 13 to 16 s wall each for Cubic, BBRv1 and BBRv3, no failed
-query. Each map was then compared with 60 held-out grid points run on
-Tier 1:
+query. Each map was then compared with 60 held-out grid points run in
+UML:
 
 | cc | budget | Spearman | Pearson | MAE | RMSE | lowest predicted value |
 |---|---|---|---|---|---|---|
@@ -189,25 +189,24 @@ Tier 1:
 At Mahak's default budget the maps rank regions only roughly and predict
 impossible negative powers; a budget of 100 ranks well (0.90) while a few
 very high-power points (small mRTT) keep the RMSE up. This is the
-algorithm's behaviour, not the port's. Since a Tier 1 query costs under a
+algorithm's behaviour, not the port's. Since a UML query costs under a
 second, budgets in the hundreds are cheap.
 
 ## CI
 
 `.github/workflows/ci.yml` runs Python (ruff, pyright strict, pytest with the
-Mahak reference), Rust (fmt, clippy, x86_64 and aarch64 builds), Tier 1 (kernel
-style, UML build, all UML tests, a CLI campaign), the mainline tripwire and
-workflow lint. On GitHub: the Python, Rust and lint jobs passed on the first
-run; the Tier 1 job's first run exposed a toolchain-selection bug in
+Mahak reference), Rust (fmt, clippy, x86_64 build), UML (kernel style, UML
+build, all UML tests, a CLI campaign), the mainline tripwire and workflow
+lint. On GitHub: the Python, Rust and lint jobs passed on the first run; the
+UML job's first run exposed a toolchain-selection bug in
 `build-guest.sh`, since fixed. See the Actions tab for the current state.
 
 ## Not run (and why)
 
 | Item | Status |
 |---|---|
-| Tier 2 runs on Ubuntu 26.04 / Ampere A1 (setup, native episodes, HZ check) | UNRUN: no such host here; this container's kernel has no module support. Code: `scripts/tier2-setup.sh`, `native.py`. |
-| Cross-tier fidelity study (Tier 1 vs Tier 2, same specs and seeds sets) | UNRUN: needs Tier 2. Plan: run the HotNets'23 and ICNP'25 grids at matched points on both tiers, compare per-point metric distributions over seeds and per-ACK observation statistics. |
-| Link model vs real Mahimahi on Tier 2 | UNRUN. Mahimahi is vendored; Mahak's `highbdp.patch` does not apply to current Mahimahi (`configure.ac`, `linkshell.cc` changed) and must be ported first. |
+| UML against a real-time kernel | Will not run: the native tier was dropped (`docs/architecture.md`, D19), so virtual time is never compared with real time. |
+| Link model vs real Mahimahi | UNRUN: needs a root host (any kernel). Mahimahi is vendored; Mahak's `highbdp.patch` does not apply to current Mahimahi (`configure.ac`, `linkshell.cc` changed) and must be ported first. |
 | Mahak failure-region reproduction (BBR, Orca, Sage) | Partial: the probe above. Orca's and Sage's trained models are not in this repository; the agent controllers can run them once exported to ONNX under `tcpinfo-v1`. |
 | sparse (`C=1`) on the modules | UNRUN: Ubuntu 24.04's sparse is too old for 7.0. W=1 and checkpatch --strict are clean. |
 | Large campaigns on the CSLab Slurm cluster | UNRUN: script generation tested, never submitted. |

@@ -271,7 +271,7 @@ def parse_mm_log(text: str) -> MmLog:
     """Parse a log with mm-th-delay's validation. Stricter in one way: the
     delay field must be an integer, as Mahimahi always writes it.
 
-    ponytail: Python loop per line (~1 us); fine for fixtures and Tier 2
+    ponytail: Python loop per line (~1 us); fine for fixtures and
     reference logs, vectorize if logs ever reach campaign scale.
     """
     base: int | None = None

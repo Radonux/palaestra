@@ -13,14 +13,13 @@ from pydantic import ValidationError
 
 from expliccit_env import campaign, mahak
 from expliccit_env.dataset import ShardWriter
-from expliccit_env.episode import Build, EpisodeOk, run_episode
-from expliccit_env.native import NativeBuild
+from expliccit_env.episode import EpisodeOk, run_episode
 from expliccit_env.spec import CampaignSpec, EpisodeSpec
 from expliccit_env.uml import UmlBuild
 
 
-def _build(a: argparse.Namespace) -> Build:
-    return NativeBuild.at(Path(a.build)) if a.tier == "native" else UmlBuild.at(Path(a.build))
+def _build(a: argparse.Namespace) -> UmlBuild:
+    return UmlBuild.at(Path(a.build))
 
 
 def _episode(a: argparse.Namespace) -> int:
@@ -83,7 +82,7 @@ def _status(a: argparse.Namespace) -> int:
 
 
 def _mahak_query(a: argparse.Namespace) -> int:
-    """Drop-in for Mahak's helper.oracle_query(X, metric, CC) on Tier 1."""
+    """Drop-in for Mahak's helper.oracle_query(X, metric, CC), in UML."""
     point = mahak.MahakPoint(a.buffer, a.mrtt, a.bw, a.step)
     spec = mahak.mahak_spec(point, a.cc, a.seed)
     outcome = run_episode(spec, _build(a), Path(a.scratch), timeout_s=a.timeout)
@@ -97,7 +96,7 @@ def _mahak_query(a: argparse.Namespace) -> int:
 
 
 def _mahak(a: argparse.Namespace) -> int:
-    """Mahak's mahak_online.py, with every query a Tier 1 episode."""
+    """Mahak's mahak_online.py, with every query a UML episode."""
     space = mahak.MahakSpace.parse(a.buffer, a.mrtt, a.bw, a.change)
     out, build = Path(a.out), _build(a)
     out.mkdir(parents=True, exist_ok=True)
@@ -144,13 +143,7 @@ def _common(q: argparse.ArgumentParser) -> None:
     q.add_argument(
         "--build",
         required=True,
-        help="build-uml.sh + build-guest.sh dir, or tier2-setup.sh dir",
-    )
-    q.add_argument(
-        "--tier",
-        choices=["uml", "native"],
-        default="uml",
-        help="uml: Tier 1, virtual time; native: Tier 2, real time, needs root",
+        help="build-uml.sh + build-guest.sh dir",
     )
     q.add_argument("--timeout", type=float, default=1800.0, help="wall-clock seconds per episode")
 
@@ -223,9 +216,9 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("out")
     st.set_defaults(fn=_status)
 
-    m = sub.add_parser("mahak-query", help="Mahak oracle_query on Tier 1: print one metric")
+    m = sub.add_parser("mahak-query", help="Mahak oracle_query in UML: print one metric")
     _mahak_query_args(m)
-    d = sub.add_parser("mahak", help="Mahak's active-learning map (mahak_online.py) on Tier 1")
+    d = sub.add_parser("mahak", help="Mahak's active-learning map (mahak_online.py) in UML")
     _mahak_args(d)
 
     a = p.parse_args(argv)

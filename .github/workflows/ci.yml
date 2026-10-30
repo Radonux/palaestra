@@ -43,13 +43,13 @@ jobs:
       - run: uv run ruff format --check src tests
       - run: uv run ruff check src tests
       - run: uv run pyright
-      - name: pytest (UML tests skip here; the tier1 job runs them)
+      - name: pytest (UML tests skip here; the uml job runs them)
         env:
           EXPLICCIT_MAHAK_DIR: ${{ runner.temp }}/mahak
         run: uv run pytest -q
 
   rust:
-    name: rust guest (fmt, clippy, x86_64 and aarch64 musl)
+    name: rust guest (fmt, clippy, x86_64 musl)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -69,16 +69,14 @@ jobs:
             ~/.cargo/git
             guest/target
           key: rust-${{ runner.os }}-${{ hashFiles('guest/Cargo.lock', 'guest/rust-toolchain.toml') }}
-      - run: sudo apt-get update -q && sudo apt-get install -y -q musl-tools gcc-aarch64-linux-gnu
+      - run: sudo apt-get update -q && sudo apt-get install -y -q musl-tools
       - run: rustup toolchain install
       - run: cargo fmt --check
       - run: cargo clippy --locked --release --target x86_64-unknown-linux-musl -- -D warnings
-      - run: cargo clippy --locked --release --target aarch64-unknown-linux-musl -- -D warnings
       - run: cargo build --locked --release --target x86_64-unknown-linux-musl
-      - run: cargo build --locked --release --target aarch64-unknown-linux-musl
 
-  tier1:
-    name: tier 1 (UML 7.0 build, kernel style, end-to-end tests)
+  uml:
+    name: uml (7.0 build, kernel style, end-to-end tests)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:

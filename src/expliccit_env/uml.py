@@ -1,4 +1,4 @@
-"""Launch one Tier 1 guest: a UML kernel in time-travel=inf-cpu mode.
+"""Launch one guest: a UML kernel in time-travel=inf-cpu mode.
 
 The guest has no wall-clock bound of its own (docs/m0-report.md, F1), so
 every run gets a timeout and the whole UML process group is killed on

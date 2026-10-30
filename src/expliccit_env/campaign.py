@@ -20,8 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from expliccit_env.dataset import DATASET_VERSION, ShardWriter
-from expliccit_env.episode import Build, EpisodeOutcome, run_episode
-from expliccit_env.native import NativeBuild
+from expliccit_env.episode import EpisodeOutcome, run_episode
 from expliccit_env.spec import CampaignSpec, EpisodeSpec
 from expliccit_env.uml import UmlBuild
 
@@ -72,7 +71,6 @@ class Shard:
 class _Job:
     spec: EpisodeSpec
     build: Path
-    native: bool
     scratch: Path
     keep_raw: bool
     timeout_s: float
@@ -90,7 +88,7 @@ def _run(job: _Job) -> EpisodeOutcome:
 
 def run_shard(
     out: Path,
-    build: Build,
+    build: UmlBuild,
     shard: Shard,
     *,
     workers: int,
@@ -102,10 +100,7 @@ def run_shard(
     specs = load_episodes(out)[shard.index :: shard.count]
     with tempfile.TemporaryDirectory(prefix="expliccit-", dir=scratch) as tmp:
         work = out / "raw" if keep_raw else Path(tmp)
-        jobs = [
-            _Job(s, build.root, isinstance(build, NativeBuild), work, keep_raw, timeout_s)
-            for s in specs
-        ]
+        jobs = [_Job(s, build.root, work, keep_raw, timeout_s) for s in specs]
         with (
             ShardWriter(out / "shards" / shard.name()) as writer,
             ProcessPoolExecutor(

@@ -128,7 +128,7 @@ type StockName = Literal["cubic", "bbr", "bbr3", "reno"]
 
 class StockCC(_Frozen):
     """An in-kernel congestion control: Cubic, BBRv1 (``bbr``) and Reno as
-    shipped in Linux 7.0, or Google's BBRv3 (``bbr3``, Tier 1 only: it needs
+    shipped in Linux 7.0, or Google's BBRv3 (``bbr3``: it needs
     the core patches imported under third_party/linux)."""
 
     kind: Literal["stock"] = "stock"

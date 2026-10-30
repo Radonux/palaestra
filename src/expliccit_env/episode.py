@@ -21,12 +21,9 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from expliccit_env import labels
 from expliccit_env import mahimahi as mm
-from expliccit_env.native import NativeBuild, run_native
 from expliccit_env.records import ABI, RecordError, Records, Table, load_records
 from expliccit_env.spec import BaseRtt, EpisodeSpec, MahakMrtt, MahakStep, TcpCross, UdpCross
 from expliccit_env.uml import UmlBuild, run_guest
-
-type Build = UmlBuild | NativeBuild
 
 RESULT_VERSION: Final = 2
 _SKIP_COLUMNS: Final = frozenset({"type", "len", "pad"})
@@ -124,7 +121,7 @@ def _spec_columns(spec: EpisodeSpec) -> dict[str, object]:
     }
 
 
-def _provenance(build: Build) -> dict[str, object]:
+def _provenance(build: UmlBuild) -> dict[str, object]:
     info = build.build_info()
     return {
         "env_version": importlib.metadata.version("expliccit-env"),
@@ -134,7 +131,6 @@ def _provenance(build: Build) -> dict[str, object]:
         "source_dirty_paths": info.get("source_dirty_paths"),
         "record_abi": ABI,
         "host": socket.gethostname(),
-        "tier": "uml" if isinstance(build, UmlBuild) else "native",
     }
 
 
@@ -211,7 +207,7 @@ def _collect(
 
 def run_episode(
     spec: EpisodeSpec,
-    build: Build,
+    build: UmlBuild,
     workdir: Path,
     *,
     timeout_s: float = 1800.0,
@@ -233,13 +229,9 @@ def run_episode(
         return failed(f"spec: {e}")
     plan.write(d / "in")
     (d / "spec.json").write_text(spec.canonical_json())
-    match build:
-        case UmlBuild():
-            run = run_guest(
-                build, d / "in", d / "raw", seed=spec.seed, timeout_s=timeout_s, mem_mib=mem_mib
-            )
-        case NativeBuild():
-            run = run_native(build, d / "in", d / "raw", timeout_s=timeout_s)
+    run = run_guest(
+        build, d / "in", d / "raw", seed=spec.seed, timeout_s=timeout_s, mem_mib=mem_mib
+    )
     timing: dict[str, object] = {"wall_s": run.wall_s}
     try:
         match _collect(d / "raw", run.returncode, timeout_s, spec):

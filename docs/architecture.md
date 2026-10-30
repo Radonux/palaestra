@@ -6,9 +6,9 @@
             |  guest_plan(): traces as per-ms counts, policy file
             v
     plan dir: plan.json, *.trace, policy.onnx  src/expliccit_env/guest_plan.py
-            |  uml.py (Tier 1: UML, inf-cpu, seed)  or  native.py (Tier 2: root, real time)
+            |  uml.py: boots UML with time-travel=inf-cpu and the spec's seed
             v
-    expliccit-guest (PID 1 in UML, or root process)                guest/src/
+    expliccit-guest (PID 1 in UML)                                 guest/src/
             |  Plan::load                                          <- trust boundary
             |  namespaces, veths, 2 x mmlink qdisc (rtnetlink), modules
             |  bulk TCP pair, optional policy loop
@@ -84,9 +84,9 @@ A port of `third_party/mahimahi/src/frontend/link_queue.cc`:
 
 The qdisc processes events lazily (on enqueue, dequeue and its watchdog) but
 always in time order, and it uses the *semantic* instants (opportunity times,
-release times), never the moment its code happened to run. So timer slack
-(native) or the 256 ns UML clock tick (Tier 1) cannot change the model's
-decisions. Cost: O(1) per packet event plus O(1) per elapsed trace ms.
+release times), never the moment its code happened to run. So the 256 ns
+UML clock tick (or timer slack, on any other kernel) cannot change the
+model's decisions. Cost: O(1) per packet event plus O(1) per elapsed trace ms.
 
 The trace travels as one netlink attribute of per-ms u8 counts. Netlink
 attributes carry a 16-bit length, which a list of up to 900000 timestamps
@@ -119,7 +119,7 @@ top of `tcp_rcv_established`, so record k is the state left by segment k-1
 plus any timer-driven changes since; labels and training code must treat it
 as "state observed when segment k arrived".
 
-## Time and determinism (Tier 1)
+## Time and determinism
 
 `time-travel=inf-cpu` makes CPU work free: virtual time advances only when the
 guest idles or sleeps. Three consequences shape the design (measured in
@@ -163,7 +163,7 @@ the model (scikit-learn's Gaussian process, RBF kernel with length scale
 0.1, 10 optimizer restarts, normalized targets, `random_state=100`), the
 first point (`choice` on a legacy numpy RandomState, which is Mahak under
 `np.random.seed`) and the query rule (largest predictive standard deviation,
-first index on ties) are Mahak's. The oracle is one Tier 1 episode per query,
+first index on ties) are Mahak's. The oracle is one UML episode per query,
 20 s as in `helper.py`, with the same seed for every query, so it is a pure
 function of the point and a repeated point reuses its result.
 
@@ -177,15 +177,16 @@ training data.
 
 D1 to D5 are the brief's (real kernel TCP; Tier 1 UML; Tier 2 native 7.0;
 kernel 7.0 only; custom controllers as modules). M0 confirmed D2 and D5 and
-measured their consequences. The decisions below were made during the build,
+measured their consequences; D19 later dropped D3, which leaves UML as the
+only tier. The decisions below were made during the build,
 where the brief did not specify (its later sections were missing).
 
 | | Decision | Why, and what was rejected |
 |---|---|---|
-| D6 | The link model is a kernel qdisc (`sch_mmlink`) | Same code in both tiers, no per-packet user/kernel crossings, exact semantic times. Rejected: Mahimahi itself inside the guest (TUN copies, heavy build, ms timers in userspace); netem for the delay plus a separate link (four namespaces, two models to validate). |
+| D6 | The link model is a kernel qdisc (`sch_mmlink`) | Runs inside the kernel under test, no per-packet user/kernel crossings, exact semantic times. Rejected: Mahimahi itself inside the guest (TUN copies, heavy build, ms timers in userspace); netem for the delay plus a separate link (four namespaces, two models to validate). |
 | D7 | One shared record ring, one global sequence, split by type in the guest | Detectable loss (sequence gaps), a total order of events, and vectorized decoding on the host. |
 | D8 | Observations from the `tcp_probe` tracepoint | No kprobes in UML; stock CCs stay unmodified. Rejected: polling `TCP_INFO` (not per-ACK, and spinning distorts virtual time). |
-| D9 | `arch/um` HZ patched to 1000 | UML hard-codes 100; TCP's jiffy timers would be 10x coarser than on the Tier 2 kernels. |
+| D9 | `arch/um` HZ patched to 1000 | UML hard-codes 100; TCP's jiffy timers would be 10x coarser than on an HZ=1000 host kernel. |
 | D10 | Seeded randomness patch for UML | Bit-reproducible episodes; host entropy leaked in through three paths (see `third_party/README.md`). |
 | D11 | Vendored kernel and Mahimahi as unmodified import commits plus patch commits | Self-contained builds (kernel.org outages), and `git diff <import>` is the patch series. |
 | D12 | Parquet shards with a DONE marker | Few large files per worker (HPC filesystems), atomic visibility, rerunnable shards. |
@@ -195,16 +196,17 @@ where the brief did not specify (its later sections were missing).
 | D16 | Random loss sits in `sch_mmlink`, before the link, in both directions | One qdisc keeps one event order and one record stream; lost packets never consume capacity, so capacity and cross-traffic labels stay exact. No single Mahimahi shell nesting matches this in both directions (`mm-loss` between `mm-delay` and `mm-link` matches it for data only); Mahak uses no loss, so nothing in its semantics depends on the choice. Rejected: netem (a second model and a fourth namespace). |
 | D17 | Cross traffic is generated by the guest runner, through the same bottleneck, told apart by sender port | No extra hosts or namespaces, deterministic under the seed, and the link records already carry ports. Rejected: replaying captured traffic (not reactive), and observing cross flows (the label is the share they take, not their state). |
 | D18 | Mahak's driver ported onto scikit-learn, not run from Mahak's repository | Mahak vendors an old modAL that breaks on scikit-learn 1.8 and later, and the algorithm itself is about 30 lines. The port is checked against the unmodified original, run in a separate environment, on a shared synthetic oracle (`tests/test_mahak.py`). |
+| D19 | The native tier (D3: Linux 7.0 on Ubuntu 26.04 hosts, as root, in real time) is dropped | No environment we have can easily boot a patched kernel, and Ubuntu 26.04 ships stock 7.0, so a native tier could run Cubic, BBRv1 and the agent controllers but never BBRv3 or later kernel changes; packaging a custom image is too much work for what it adds. Cost: UML's virtual time is never checked against a real-time kernel, so effects of CPU cost (free under `inf-cpu`) on TCP are not measured. Its code was last present in commit `faad5be` (`src/expliccit_env/native.py`, `scripts/tier2-setup.sh`). |
 
 ## Known ceilings (`ponytail` markers in the code)
 
 - One global record ring and one global agent action per kernel: fine for one
-  episode per guest (Tier 1) or per host at a time (Tier 2).
+  episode per UML guest.
 - Per-ms u8 trace counts: at most 255 opportunities per ms (3 Gbit/s) and
   traces up to about 65 s.
 - The record reader polls every 20 ms of virtual time.
 - `parse_mm_log` (Mahimahi text logs) loops in Python; it is for fixtures and
-  Tier 2 reference logs, not campaign data.
+  reference logs, not campaign data.
 - Labels v1 are the candidates listed in `labels.py`.
 - At most 16 cross flows per episode, all sender to receiver (no reverse
   traffic sharing the ACK path).
