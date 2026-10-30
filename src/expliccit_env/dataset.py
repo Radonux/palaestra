@@ -30,8 +30,9 @@ import pyarrow.parquet as pq
 
 from expliccit_env.episode import EpisodeOk, EpisodeOutcome
 
-DATASET_VERSION: Final = 3
-TABLES: Final = ("obs", "labels", "link_events", "link_opp", "agent_action")
+DATASET_VERSION: Final = 4
+# "steps" exists only for episodes that record them (spec.steps or a policy).
+TABLES: Final = ("obs", "labels", "link_events", "link_opp", "agent_action", "steps")
 
 
 class ShardWriter:
@@ -49,8 +50,8 @@ class ShardWriter:
     def add(self, outcome: EpisodeOutcome) -> None:
         self.rows.append(outcome.row)
         if isinstance(outcome, EpisodeOk):
-            for name in TABLES:
-                table = outcome.tables[name]
+            for name, table in outcome.tables.items():
+                assert name in TABLES, name
                 if name not in self.writers:
                     self.writers[name] = pq.ParquetWriter(
                         self.dir / f"{name}.parquet.tmp", table.schema, compression="zstd"

@@ -15,7 +15,7 @@ executed in this environment unless it says CI.
       git clone https://github.com/Ppazhooh/mahak /tmp/mahak && git -C /tmp/mahak checkout 5077583
       EXPLICCIT_UML_DIR=build/uml EXPLICCIT_MAHAK_DIR=/tmp/mahak uv run pytest -q
 
-  Last result: 51 passed.
+  Last result: 54 passed, 2 skipped (the `sage.cc` comparison, see below).
 
 ## Ran: correctness of the ports and the link model
 
@@ -35,10 +35,13 @@ executed in this environment unless it says CI.
 
 | Check | Result |
 |---|---|
-| `test_hold_agent_follows_constant_policy`: ONNX constant policy, `agent` CC | 149 actions, cwnd 40 after the first, initial window before |
-| `test_policy_sees_tcp_info`: `cwnd' = 0.5 cwnd + 20` | converges to the fixed point 40 through TCP_INFO feedback |
+| `test_hold_agent_follows_sage_window`: constant a = 0.1, `agent` | every window set equals Sage's accumulator (from 10, times 2^a, rounded up, capped at 20000); one step per 10 ms; column 76 of the next step reports a; the socket holds the set window |
+| `test_policy_reads_the_observation`: a = 0.5 x70 - 0.35 | every action equals the policy applied, in float32, to the very message the step table recorded |
+| `test_recurrent_state_round_trips`: a counter in the state | the state fed back each step, a = 0.001 k exactly |
 | `test_reno_agent_grows_between_actions`: `agent_reno` | Reno regrows the window between actions |
-| `test_bad_policy_output_fails_the_episode` | explicit failure row, no data |
+| `test_bad_policy_output_fails_the_episode`: a = 20 | explicit failure row, no data |
+| `test_step_table` (Cubic, 24 then 12 Mbit/s): steps, labels at steps, reward | column 76 equals the logged window ratio; the action is the next step's column 76; capacity labels 24 and 12 Mbit/s within 2%; busy fraction in [0, 1]; reward finite, peaking above 10 (Sage's scale tops at 25) |
+| `test_step_record_matches_the_guest` | the Python record layout equals the Rust constants |
 | `test_campaign_shards_and_tables`: 8 episodes in 2 shards | all ok; obs and labels row-aligned |
 | `test_cli_episode_and_mahak_query` | CLI episode and Mahak oracle replacement work |
 | Mainline tripwire, run locally before the agent work: kernel.org mainline 7.3.0 plus our patches | patches applied, modules built, 6 UML tests passed |
@@ -192,6 +195,20 @@ very high-power points (small mRTT) keep the RMSE up. This is the
 algorithm's behaviour, not the port's. Since a UML query costs under a
 second, budgets in the hundreds are cheap.
 
+## Not run to completion: the port of Sage's step against `sage.cc` (M9)
+
+`test_step_matches_sage_cc` (`tests/sage_ref.py`) is written to compile
+Sage's own step code, taken by line range from `sage.cc` at `eedd281`
+with only the clock and the `TCP_INFO` read stubbed, replay the recorded
+readings of a Cubic and a BBRv1-with-loss episode, and compare every
+column printed with `%.7f`. Its first run built the harness, but the harness
+died with SIGSEGV before printing anything. The cause is not found: the
+message fits Sage's 1000-byte buffers (873 bytes at most on that episode),
+and the struct layout matches (224 bytes). Debugging means running Sage's
+compiled code again, which this session's permission policy then blocked.
+The test is skipped unless `EXPLICCIT_SAGE_DIR` is set, so until it passes,
+the port is checked only by review and by the tests above. UNRUN.
+
 ## CI
 
 `.github/workflows/ci.yml` runs Python (ruff, pyright strict, pytest with the
@@ -207,6 +224,9 @@ UML job's first run exposed a toolchain-selection bug in
 |---|---|
 | UML against a real-time kernel | Will not run: the native tier was dropped (`docs/architecture.md`, D19), so virtual time is never compared with real time. |
 | Link model vs real Mahimahi | UNRUN: needs a root host (any kernel). Mahimahi is vendored; Mahak's `highbdp.patch` does not apply to current Mahimahi (`configure.ac`, `linkshell.cc` changed) and must be ported first. |
-| Mahak failure-region reproduction (BBR, Orca, Sage) | Partial: the probe above. Orca's and Sage's trained models are not in this repository; the agent controllers can run them once exported to ONNX under `tcpinfo-v1`. |
+| Mahak failure-region reproduction (BBR, Orca, Sage) | Partial: the probe above. Orca's and Sage's trained models are not in this repository; the agent controllers can run them once exported to ONNX under `sage-v1` (for Sage, a recurrent graph with its LSTM state in `state`). |
+| Port of Sage's step against `sage.cc`'s own code | UNRUN: see the section above. |
+| DeepCC pacing (Sage's patched kernel, `PACE_WITH_SRTT`, coefficient 100) | UNVERIFIED: the kernel patch source is not public; the guest paces at cwnd * mss / srtt. |
+| Inference latency in the closed loop | Parked: inference is free in virtual time; measure it outside the environment and add a fixed decision delay later. |
 | sparse (`C=1`) on the modules | UNRUN: Ubuntu 24.04's sparse is too old for 7.0. W=1 and checkpatch --strict are clean. |
 | Large campaigns on the CSLab Slurm cluster | UNRUN: script generation tested, never submitted. |

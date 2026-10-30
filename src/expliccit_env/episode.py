@@ -22,10 +22,19 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from expliccit_env import labels
 from expliccit_env import mahimahi as mm
 from expliccit_env.records import ABI, RecordError, Records, Table, load_records
-from expliccit_env.spec import BaseRtt, EpisodeSpec, MahakMrtt, MahakStep, TcpCross, UdpCross
+from expliccit_env.spec import (
+    AgentCC,
+    BaseRtt,
+    EpisodeSpec,
+    MahakMrtt,
+    MahakStep,
+    TcpCross,
+    UdpCross,
+)
+from expliccit_env.steps import StepError, Steps, load_steps, step_table
 from expliccit_env.uml import UmlBuild, run_guest
 
-RESULT_VERSION: Final = 2
+RESULT_VERSION: Final = 3
 _SKIP_COLUMNS: Final = frozenset({"type", "len", "pad"})
 
 
@@ -49,12 +58,13 @@ class GuestEpisode(_Strict):
     agent_actions: int
     # Bytes each cross flow's sender wrote, in spec order.
     cross_bytes_sent: list[int]
+    steps: int
 
 
 class GuestResult(_Strict):
     """result.json written by the guest runner (trust boundary)."""
 
-    result_version: Literal[2]
+    result_version: Literal[3]
     status: Literal["ok", "failed"]
     error: str | None
     kernel_release: str
@@ -92,6 +102,12 @@ def _columns(table: Table, episode_id: str) -> pa.Table:
         if name not in _SKIP_COLUMNS:
             cols[name] = pa.array(np.ascontiguousarray(table[name]))
     return pa.Table.from_pydict(cols)
+
+
+def _with_id(table: pa.Table, episode_id: str) -> pa.Table:
+    return table.add_column(
+        0, "episode_id", dict_column(np.zeros(table.num_rows, np.int32), [episode_id])
+    )
 
 
 def _spec_columns(spec: EpisodeSpec) -> dict[str, object]:
@@ -184,10 +200,14 @@ def _metrics(
     return out
 
 
+def _records_steps(spec: EpisodeSpec) -> bool:
+    return spec.steps or isinstance(spec.cc, AgentCC)
+
+
 def _collect(
     raw: Path, returncode: int | None, timeout_s: float, spec: EpisodeSpec
-) -> tuple[GuestResult, GuestEpisode, Records] | str:
-    """The guest's validated result and records, or why there are none."""
+) -> tuple[GuestResult, GuestEpisode, Records, Steps | None] | str:
+    """The guest's validated result, records and steps, or why there are none."""
     if returncode is None:
         return f"timeout after {timeout_s} s"
     try:
@@ -198,11 +218,15 @@ def _collect(
         return f"guest: {result.error}"
     try:
         rec = load_records(raw)
-    except RecordError as e:
+        steps = load_steps(raw / "steps.bin") if _records_steps(spec) else None
+    except (OSError, RecordError, StepError) as e:
         return f"records: {e}"
-    if problems := validity_problems(result.episode, rec, spec):
+    problems = validity_problems(result.episode, rec, spec)
+    if steps is not None and (steps.size == 0 or steps.size != result.episode.steps):
+        problems.append(f"{steps.size} steps in steps.bin, guest reported {result.episode.steps}")
+    if problems:
         return "invalid: " + "; ".join(problems)
-    return result, result.episode, rec
+    return result, result.episode, rec, steps
 
 
 def run_episode(
@@ -237,7 +261,7 @@ def run_episode(
         match _collect(d / "raw", run.returncode, timeout_s, spec):
             case str(reason):
                 return failed(reason, **timing)
-            case (result, g, rec):
+            case (result, g, rec, steps):
                 pass
         timing |= {"kernel_release": result.kernel_release, "kernel_version": result.kernel_version}
         trace = spec.path.trace.timestamps()
@@ -249,7 +273,7 @@ def run_episode(
             spec.path.loss.downlink,
         )
         lab = labels.labels_table(rec, trace, consts, spec.duration_ms)
-        lab = lab.add_column(0, "episode_id", dict_column(np.zeros(lab.num_rows, np.int32), [eid]))
+        lab = _with_id(lab, eid)
         link_events = pa.concat_tables(
             [_columns(t, eid) for t in (rec.link_arrival, rec.link_drop, rec.link_depart)]
         )
@@ -272,6 +296,7 @@ def run_episode(
             "bytes_received": g.bytes_received,
             "cross_bytes_sent": g.cross_bytes_sent,
             "agent_actions": g.agent_actions,
+            "n_steps": g.steps,
             "n_obs": rec.tcp_obs.size,
             "n_link_events": link_events.num_rows,
             **_metrics(spec, rec, g, trace),
@@ -285,6 +310,15 @@ def run_episode(
                 "link_events": link_events,
                 "link_opp": _columns(rec.link_opp, eid),
                 "agent_action": _columns(rec.agent_action, eid),
+                **(
+                    {}
+                    if steps is None
+                    else {
+                        "steps": _with_id(
+                            step_table(steps, rec, trace, consts, duration_ms=spec.duration_ms), eid
+                        )
+                    }
+                ),
             },
         )
     finally:

@@ -15,12 +15,12 @@
 //! path namespace orphans each skb, so the sender's TCP Small Queues see the
 //! bottleneck as remote, like a Mahimahi shell.
 
-mod agent;
 mod cross;
 mod netlink;
 mod netns;
 mod plan;
 mod recorder;
+mod step;
 mod sys;
 mod traffic;
 
@@ -34,7 +34,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use sys::{Context, Result, fail};
 
-const RESULT_VERSION: u32 = 2;
+const RESULT_VERSION: u32 = 3;
 const SND_ADDR: [u8; 4] = [10, 0, 0, 1];
 const PATH_SND_ADDR: [u8; 4] = [10, 0, 0, 2];
 const RCV_ADDR: [u8; 4] = [10, 0, 1, 1];
@@ -71,6 +71,8 @@ struct Report {
     netdev_max_backlog: &'static str,
     agent_actions: u64,
     cross_bytes_sent: Vec<u64>,
+    /// Steps written to steps.bin (0 when the step loop did not run).
+    steps: u64,
 }
 
 fn main() -> ExitCode {
@@ -243,26 +245,28 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
     };
     let end_ns = base_ns + u64::from(plan.duration_ms.get()) * 1_000_000;
     let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let agent = match &plan.control {
-        Control::Stock => None,
-        Control::Agent { policy, interval_ms } => {
-            let policy = agent::Policy::load(policy)?;
-            let interval_ns = u64::from(interval_ms.get()) * 1_000_000;
-            Some(agent::spawn(
-                std::sync::Arc::clone(&conn),
-                policy,
-                base_ns,
-                interval_ns,
-                end_ns,
-                std::sync::Arc::clone(&stop),
-            )?)
-        }
+    let steps = if plan.steps {
+        let policy = match &plan.control {
+            Control::Stock => None,
+            Control::Agent { policy } => Some(step::Policy::load(policy)?),
+        };
+        Some(step::spawn(
+            std::sync::Arc::clone(&conn),
+            policy,
+            &out.join("steps.bin"),
+            base_ns,
+            base_ns,
+            end_ns,
+            std::sync::Arc::clone(&stop),
+        )?)
+    } else {
+        None
     };
     sys::sleep_until(end_ns);
     stop.store(true, std::sync::atomic::Ordering::Release);
-    let agent_actions = match agent {
-        Some(h) => traffic::join(h, "agent")?,
-        None => 0,
+    let (steps, agent_actions) = match steps {
+        Some(h) => traffic::join(h, "steps").map(|s| (s.count, s.actions))?,
+        None => (0, 0),
     };
     sys::shutdown(std::os::fd::AsFd::as_fd(&*conn));
     sys::shutdown(std::os::fd::AsFd::as_fd(&*receiver.conn));
@@ -297,5 +301,6 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
         netdev_max_backlog: NETDEV_MAX_BACKLOG,
         agent_actions,
         cross_bytes_sent,
+        steps,
     })
 }

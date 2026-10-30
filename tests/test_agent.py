@@ -1,15 +1,16 @@
-"""Closed-loop agent controllers in UML (needs EXPLICCIT_UML_DIR)."""
+"""Closed-loop sage-v1 policies driving tcp_agent in UML (needs EXPLICCIT_UML_DIR)."""
 
 from __future__ import annotations
 
 import hashlib
+import math
 from pathlib import Path
 
 import numpy as np
+import pyarrow as pa
 import pytest
 
 from expliccit_env.episode import EpisodeOk, run_episode
-from expliccit_env.policy import FEATURES
 from expliccit_env.records import Records, load_records
 from expliccit_env.spec import (
     AgentCC,
@@ -26,12 +27,11 @@ from tests import onnx_policies
 pytestmark = pytest.mark.uml
 
 
-def agent_spec(tmp: Path, policy: bytes, mode: str, interval_ms: int = 20) -> EpisodeSpec:
+def agent_spec(tmp: Path, policy: bytes, mode: str) -> EpisodeSpec:
     path = tmp / "policy.onnx"
     path.write_bytes(policy)
     cc = AgentCC(
-        mode=mode,
-        interval_ms=interval_ms,  # type: ignore[arg-type]
+        mode=mode,  # type: ignore[arg-type]
         policy=OnnxPolicy(path=path, sha256=hashlib.sha256(policy).hexdigest()),
     )
     return EpisodeSpec(
@@ -52,50 +52,82 @@ def run_raw(build: UmlBuild, tmp: Path, spec: EpisodeSpec) -> tuple[EpisodeOk, R
     return outcome, load_records(tmp / "work" / outcome.episode_id / "raw")
 
 
-def test_hold_agent_follows_constant_policy(build: UmlBuild, tmp_path: Path) -> None:
+def sage_window(actions: list[float]) -> list[int]:
+    """Sage's accumulator: from 10 packets, times 2^a, rounded up, in [4, 20000]."""
+    precise, out = 10.0, []
+    for a in actions:
+        precise = min(precise * 2.0 ** float(np.float32(a)), 2147483647.0)
+        cwnd = min(math.ceil(precise), 2147483647)
+        if cwnd < 4:
+            cwnd, precise = 4, 4.0
+        if cwnd > 20000:
+            cwnd, precise = 20000, 20000.0
+        out.append(cwnd)
+    return out
+
+
+def steps_of(outcome: EpisodeOk) -> pa.Table:
+    return outcome.tables["steps"]
+
+
+def test_hold_agent_follows_sage_window(build: UmlBuild, tmp_path: Path) -> None:
     outcome, rec = run_raw(
-        build, tmp_path, agent_spec(tmp_path, onnx_policies.constant(40), "hold")
+        build, tmp_path, agent_spec(tmp_path, onnx_policies.constant(0.1), "hold")
     )
-    acts = rec.agent_action
-    assert acts.size == 3000 // 20 - 1  # every 20 ms strictly before the end
-    assert set(acts["cwnd"].tolist()) == {40} and set(acts["pacing_rate"].tolist()) == {0}
+    acts, steps = rec.agent_action, steps_of(outcome)
+    n = steps.num_rows
+    assert 250 <= n <= 300  # about one step per 10 ms over 3 s
+    assert acts.size == n == outcome.row["agent_actions"]
+    assert acts["cwnd"].tolist() == sage_window([0.1] * n)
+    assert set(steps["applied_action"].to_numpy().tolist()) == {float(np.float32(0.1))}
+    # The next step reports the action taken as Sage's column 76.
+    assert np.all(steps["action"].to_numpy()[:-1] == 0.1)
+    assert np.all(acts["pacing_rate"][5:] > 0)  # paced once srtt is known
+    # Hold keeps the socket at exactly what the policy set.
     obs = rec.tcp_obs
-    after = obs["t_ns"] > acts["t_ns"][0]
-    # obs shows the state before each ACK is processed, so skip the first one.
-    assert np.all(obs["snd_cwnd"][after][1:] == 40)
-    assert np.all(obs["snd_cwnd"][~after] == 10)  # initial window held until then
-    assert outcome.row["agent_actions"] == acts.size
+    k = np.searchsorted(acts["t_ns"], obs["t_ns"], side="right") - 1
+    seen = obs["snd_cwnd"][1:][k[1:] >= 0]
+    want = acts["cwnd"][k[1:][k[1:] >= 0]]
+    assert np.mean(seen == want) > 0.95
 
 
-def test_policy_sees_tcp_info(build: UmlBuild, tmp_path: Path) -> None:
-    # cwnd' = 0.5 * cwnd + 20: the loop converges to 40 only if the policy
-    # really reads the socket's cwnd back through TCP_INFO.
-    w = np.zeros((len(FEATURES), 2))
-    w[FEATURES.index("cwnd_pkts"), 0] = 0.5
-    _, rec = run_raw(
-        build,
-        tmp_path,
-        agent_spec(tmp_path, onnx_policies.linear(w, np.array([20.0, 0.0])), "hold"),
+def test_policy_reads_the_observation(build: UmlBuild, tmp_path: Path) -> None:
+    # a = 0.5 r - 0.35 with r = Sage's column 70 (max delivered rate times min
+    # RTT over the window). Every action must be that function of the very
+    # message the step table recorded, and the window must react to it.
+    w = np.zeros(77)
+    w[70] = 0.5
+    outcome, rec = run_raw(
+        build, tmp_path, agent_spec(tmp_path, onnx_policies.linear(w, -0.35), "hold")
     )
-    cwnd = rec.agent_action["cwnd"].tolist()
-    assert cwnd[0] == 25  # from the initial window of 10
-    assert len(set(cwnd)) > 3  # it moves with what TCP_INFO reports
-    assert set(cwnd[-10:]) == {40}  # the fixed point of c = 0.5 c + 20
+    steps = steps_of(outcome)
+    obs = np.asarray(steps["obs"].combine_chunks().flatten()).reshape(-1, 77)
+    want = np.float32(0.5) * obs[:, 70].astype(np.float32) + np.float32(-0.35)
+    assert np.array_equal(steps["applied_action"].to_numpy(), want.astype(np.float64))
+    cwnd = rec.agent_action["cwnd"]
+    assert len(set(cwnd.tolist())) > 5 and cwnd[-1] > cwnd.min()
+
+
+def test_recurrent_state_round_trips(build: UmlBuild, tmp_path: Path) -> None:
+    outcome, _ = run_raw(build, tmp_path, agent_spec(tmp_path, onnx_policies.counter(1e-3), "hold"))
+    applied = steps_of(outcome)["applied_action"].to_numpy()
+    expect = np.array(
+        [float(np.float32(np.float32(k) * np.float32(1e-3))) for k in range(applied.size)]
+    )
+    assert np.array_equal(applied, expect)
 
 
 def test_reno_agent_grows_between_actions(build: UmlBuild, tmp_path: Path) -> None:
-    _, rec = run_raw(
-        build, tmp_path, agent_spec(tmp_path, onnx_policies.constant(30), "reno", interval_ms=200)
-    )
+    _, rec = run_raw(build, tmp_path, agent_spec(tmp_path, onnx_policies.constant(0.0), "reno"))
     obs, acts = rec.tcp_obs, rec.agent_action
-    assert set(acts["cwnd"].tolist()) == {30}
+    assert set(acts["cwnd"].tolist()) == {10}
     between = (obs["t_ns"] > acts["t_ns"][3]) & (obs["t_ns"] < acts["t_ns"][4])
-    assert obs["snd_cwnd"][between].max() > 30  # Reno grew it again
+    assert obs["snd_cwnd"][between].max() > 10  # Reno grew it before the next action
 
 
 def test_bad_policy_output_fails_the_episode(build: UmlBuild, tmp_path: Path) -> None:
     outcome = run_episode(
-        agent_spec(tmp_path, onnx_policies.constant(1.0), "hold"), build, tmp_path / "w"
+        agent_spec(tmp_path, onnx_policies.constant(20.0), "hold"), build, tmp_path / "w"
     )
     assert not isinstance(outcome, EpisodeOk)
-    assert "outside [2" in str(outcome.row["failure"])
+    assert "exceeds" in str(outcome.row["failure"])

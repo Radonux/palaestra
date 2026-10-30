@@ -14,7 +14,7 @@ from typing import Final
 import numpy as np
 import numpy.typing as npt
 
-PLAN_VERSION: Final = 2
+PLAN_VERSION: Final = 3
 U32: Final = 2**32
 MAX_TRACE_BYTES: Final = 65_000
 
@@ -46,14 +46,13 @@ class LinkPlan:
 
 @dataclass(frozen=True, slots=True)
 class AgentPlan:
-    """An ONNX policy (tcpinfo-v1 contract, see policy.py) run every interval."""
+    """An ONNX policy (sage-v1 contract, see policy.py) run every step."""
 
     policy_onnx: bytes
-    interval_ms: int
 
     def __post_init__(self) -> None:
-        if self.interval_ms <= 0 or not self.policy_onnx:
-            raise ValueError("agent needs a policy and a positive interval")
+        if not self.policy_onnx:
+            raise ValueError("agent needs a policy")
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +84,8 @@ class GuestPlan:
     sysctls: tuple[tuple[str, str], ...] = ()
     agent: AgentPlan | None = None
     cross: tuple[CrossPlan, ...] = ()
+    # Record Sage's steps (steps.bin); always on under a policy.
+    steps: bool = False
 
     def __post_init__(self) -> None:
         if (self.cc in ("agent", "agent_reno")) != (self.agent is not None):
@@ -114,10 +115,11 @@ class GuestPlan:
             "sysctls": [list(s) for s in self.sysctls],
             "agent": None,
             "cross": [_cross_json(c) for c in self.cross],
+            "steps": self.steps,
         }
         if self.agent is not None:
             (directory / "policy.onnx").write_bytes(self.agent.policy_onnx)
-            plan["agent"] = {"policy_file": "policy.onnx", "interval_ms": self.agent.interval_ms}
+            plan["agent"] = {"policy_file": "policy.onnx"}
         (directory / "plan.json").write_text(json.dumps(plan, indent=2))
 
 

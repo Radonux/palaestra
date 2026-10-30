@@ -90,3 +90,27 @@ def test_load_rejects_truncated_file(tmp_path: Path) -> None:
     (tmp_path / "link_opp.bin").write_bytes(b"\0" * 41)
     with pytest.raises(records.RecordError, match="multiple"):
         records.load_records(tmp_path)
+
+
+def test_step_record_matches_the_guest() -> None:
+    """steps.STEP must lay out like the record guest/src/step.rs writes."""
+    import re  # noqa: PLC0415
+
+    from expliccit_env import policy, steps  # noqa: PLC0415
+
+    src = (Path(__file__).parents[1] / "guest" / "src" / "step.rs").read_text()
+
+    def const(name: str) -> int:
+        m = re.search(rf"pub const {name}: usize = ([0-9_]+);", src)
+        assert m, name
+        return int(m.group(1).replace("_", ""))
+
+    assert const("OBS") == policy.OBS_DIM
+    assert const("INFO_LEN") == steps.INFO_LEN
+    assert steps.STEP.itemsize == 8 + steps.INFO_LEN + 8 * policy.OBS_DIM + 8 + 4 + 4
+    assert [steps.STEP.fields[f][1] for f in ("t_us", "info", "obs", "applied_action")] == [
+        0,
+        8,
+        8 + steps.INFO_LEN,
+        8 + steps.INFO_LEN + 8 * policy.OBS_DIM,
+    ]

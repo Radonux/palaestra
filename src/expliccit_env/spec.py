@@ -149,14 +149,14 @@ class OnnxPolicy(_Frozen):
 
 
 class AgentCC(_Frozen):
-    """A policy driving tcp_agent. "hold" is Sage-style (the policy sets cwnd
-    and pacing outright); "reno" is Orca-style (the policy sets cwnd, Reno
-    evolves it until the next action; Orca proper uses Cubic as the base)."""
+    """A sage-v1 policy (policy.py) driving tcp_agent after every step.
+    "hold" is Sage-style (the window and pacing stay as the policy set
+    them); "reno" is Orca-style (the policy sets the window, Reno evolves it
+    until the next action; Orca proper uses Cubic as the base)."""
 
     kind: Literal["agent"] = "agent"
     mode: Literal["hold", "reno"] = "hold"
     policy: OnnxPolicy
-    interval_ms: PositiveInt = 20
 
     @property
     def name(self) -> str:
@@ -201,6 +201,8 @@ class EpisodeSpec(_Frozen):
     cross: Annotated[list[CrossFlow], Field(max_length=MAX_CROSS)] = Field(
         default_factory=list[CrossFlow]
     )
+    # Record Sage's steps (training data); always on under a policy.
+    steps: bool = False
 
     @model_validator(mode="after")
     def _cross_windows(self) -> Self:
@@ -241,11 +243,7 @@ class EpisodeSpec(_Frozen):
                 case UdpCross():
                     return UdpCrossPlan(round(c.rate_mbps * 1e6), c.start_ms, stop)
 
-        agent = (
-            AgentPlan(self.cc.policy.read(), self.cc.interval_ms)
-            if isinstance(self.cc, AgentCC)
-            else None
-        )
+        agent = AgentPlan(self.cc.policy.read()) if isinstance(self.cc, AgentCC) else None
         return GuestPlan(
             duration_ms=self.duration_ms,
             cc=self.cc.name,
@@ -254,6 +252,7 @@ class EpisodeSpec(_Frozen):
             sysctls=tuple(sorted(self.sysctls.items())),
             agent=agent,
             cross=tuple(cross(c) for c in self.cross),
+            steps=self.steps or agent is not None,
         )
 
 
@@ -342,6 +341,7 @@ class CampaignSpec(_Frozen):
         default_factory=lambda: [Condition()]
     )
     replicates: PositiveInt = 1
+    steps: bool = False
     duration_ms: PositiveInt = 20_000
     seed: Annotated[int, Field(ge=0, lt=U64)] = 0
     sysctls: dict[str, str] = Field(default_factory=dict[str, str])
@@ -372,6 +372,7 @@ class CampaignSpec(_Frozen):
                     seed=int(rng.integers(0, U64, dtype=np.uint64)),
                     sysctls=self.sysctls,
                     cross=cond.cross,
+                    steps=self.steps,
                 )
             )
         return out

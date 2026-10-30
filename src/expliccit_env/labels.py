@@ -24,6 +24,19 @@ Definitions (link 1 is the data-direction bottleneck):
                       one) took from the bottleneck over the trailing
                       ``window_ms``, as a fraction of the trace's capacity
                       over the same ms; in [0, 1], NaN where the capacity is 0
+
+Windowed labels (expliCCit's candidate LCFs; trailing ``window_ms`` of whole
+trace ms before the sample, as for capacity_bps):
+  queue_delay_mean_ns mean queueing delay of the packets (all flows) that left
+                      the bottleneck in the window; NaN if none did
+  free_buffer_pkts    buffer_pkts minus queue_pkts; NaN without a packet limit
+  buffer_fill         queue over its limit (the larger of the packet and the
+                      byte fraction); 1 means the next arrival is dropped
+  busy_fraction       bottleneck bytes used over the bytes the trace offered
+                      in the window; NaN where the capacity is 0
+  receive_rate_bps    the observed flow's bits leaving the bottleneck per
+                      second (link bytes, as capacity_bps counts them); the
+                      receiver sees them one propagation delay later
 """
 
 from __future__ import annotations
@@ -136,47 +149,87 @@ def _accepted_delays(rec: Records, link_id: int) -> tuple[mm.I64, F64]:
     return acc_t, delay
 
 
-def labels_table(
-    rec: Records, trace: mm.I64, k: PathConstants, duration_ms: int, window_ms: int = 100
-) -> pa.Table:
-    t = rec.tcp_obs["t_ns"].astype(np.int64)
+def _window_sums(ms: mm.I64, values: F64, lo: mm.I64, hi: mm.I64) -> tuple[F64, mm.I64]:
+    """Sum and count of ``values`` whose (nondecreasing) ``ms`` lies in [lo, hi)."""
+    cum = np.concatenate(([0.0], np.cumsum(values)))
+    a, b = np.searchsorted(ms, lo), np.searchsorted(ms, hi)
+    return cum[b] - cum[a], (b - a).astype(np.int64)
+
+
+def labels_at(
+    rec: Records,
+    trace: mm.I64,
+    k: PathConstants,
+    t: mm.I64,
+    *,
+    duration_ms: int,
+    window_ms: int = 100,
+) -> dict[str, npt.NDArray[np.generic]]:
+    """Every label at the instants ``t`` (CLOCK_MONOTONIC ns, nondecreasing)."""
+    n = t.size
     ev_t, ev_pkts, ev_bytes = _queue_after_events(rec, DOWNLINK)
     i = np.searchsorted(ev_t, t, side="right") - 1
     q_pkts = (
-        np.where(i >= 0, ev_pkts[np.clip(i, 0, None)], 0)
-        if ev_t.size
-        else np.zeros(t.size, np.int64)
+        np.where(i >= 0, ev_pkts[np.clip(i, 0, None)], 0) if ev_t.size else np.zeros(n, np.int64)
     )
     q_bytes = (
-        np.where(i >= 0, ev_bytes[np.clip(i, 0, None)], 0)
-        if ev_t.size
-        else np.zeros(t.size, np.int64)
+        np.where(i >= 0, ev_bytes[np.clip(i, 0, None)], 0) if ev_t.size else np.zeros(n, np.int64)
     )
     acc_t, acc_delay = _accepted_delays(rec, DOWNLINK)
     j = np.searchsorted(acc_t, t, side="right") - 1
     qdelay = (
         np.where(j >= 0, acc_delay[np.clip(j, 0, None)], np.nan)
         if acc_t.size
-        else np.full(t.size, np.nan)
+        else np.full(n, np.nan)
     )
-    n = t.size
+    lo, hi = _window_ms(k.base_ns, t, window_ms, duration_ms)
+    cap = capacity_bps(trace, k.base_ns, t, window_ms, duration_ms)
+    window_s = window_ms / 1000.0
+    dep = rec.link(rec.link_depart, DOWNLINK)
+    dep_ms = dep["ms"].astype(np.int64)
+    # FIFO: the i-th departure carries the i-th accepted arrival's delay.
+    dep_delay = acc_delay[: dep.size]
+    delay_sum, delay_n = _window_sums(dep_ms, dep_delay, lo, hi)
+    main = dep["sport"] == MAIN_SPORT
+    recv_bytes, _ = _window_sums(dep_ms[main], dep["bytes"][main].astype(np.float64), lo, hi)
+    opp = rec.link(rec.link_opp, DOWNLINK)
+    used, _ = _window_sums(opp["ms"].astype(np.int64), opp["used_bytes"].astype(np.float64), lo, hi)
+    fills = [q_pkts / k.buffer_pkts] if k.buffer_pkts else []
+    fills += [q_bytes / k.buffer_bytes] if k.buffer_bytes else []
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return {
+            "capacity_bps": cap,
+            "queue_pkts": q_pkts.astype(np.int64),
+            "queue_bytes": q_bytes.astype(np.int64),
+            "queue_delay_ns": qdelay,
+            "queue_delay_mean_ns": np.where(delay_n > 0, delay_sum / delay_n, np.nan),
+            "free_buffer_pkts": (
+                k.buffer_pkts - q_pkts.astype(np.float64) if k.buffer_pkts else np.full(n, np.nan)
+            ),
+            "buffer_fill": np.maximum.reduce(fills),
+            "busy_fraction": np.where(cap > 0, used * 8 / (cap * window_s), np.nan),
+            "receive_rate_bps": recv_bytes * 8 / window_s,
+            "base_rtt_ns": np.full(n, 2 * k.one_way_ns, dtype=np.int64),
+            "buffer_pkts": np.full(n, k.buffer_pkts, dtype=np.int64),
+            "buffer_bytes": np.full(n, k.buffer_bytes, dtype=np.int64),
+            "random_loss_rate": np.full(n, k.loss_downlink),
+            "cross_traffic_share": cross_traffic_share(
+                rec, trace, k.base_ns, t, window_ms=window_ms, end_ms=duration_ms
+            ),
+        }
+
+
+def labels_table(
+    rec: Records, trace: mm.I64, k: PathConstants, duration_ms: int, window_ms: int = 100
+) -> pa.Table:
+    """Labels row for row with the sender observations (TCP_OBS)."""
+    t = rec.tcp_obs["t_ns"].astype(np.int64)
+    cols = labels_at(rec, trace, k, t, duration_ms=duration_ms, window_ms=window_ms)
     return pa.Table.from_pydict(
         {
-            "obs_index": pa.array(np.arange(n, dtype=np.int64)),
+            "obs_index": pa.array(np.arange(t.size, dtype=np.int64)),
             "t_ns": pa.array(rec.tcp_obs["t_ns"]),  # uint64, the join key with obs
-            "capacity_bps": pa.array(capacity_bps(trace, k.base_ns, t, window_ms, duration_ms)),
-            "queue_pkts": pa.array(q_pkts.astype(np.int64)),
-            "queue_bytes": pa.array(q_bytes.astype(np.int64)),
-            "queue_delay_ns": pa.array(qdelay),
-            "base_rtt_ns": pa.array(np.full(n, 2 * k.one_way_ns, dtype=np.int64)),
-            "buffer_pkts": pa.array(np.full(n, k.buffer_pkts, dtype=np.int64)),
-            "buffer_bytes": pa.array(np.full(n, k.buffer_bytes, dtype=np.int64)),
-            "random_loss_rate": pa.array(np.full(n, k.loss_downlink)),
-            "cross_traffic_share": pa.array(
-                cross_traffic_share(
-                    rec, trace, k.base_ns, t, window_ms=window_ms, end_ms=duration_ms
-                )
-            ),
+            **{name: pa.array(v) for name, v in cols.items()},
         }
     )
 

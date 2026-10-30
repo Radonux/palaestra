@@ -8,7 +8,7 @@ use serde::Deserialize;
 use std::num::{NonZeroU32, NonZeroU64};
 use std::path::{Path, PathBuf};
 
-pub const PLAN_VERSION: u32 = 2;
+pub const PLAN_VERSION: u32 = 3;
 /// Cross-traffic flows per episode (ports 6000 to 6015). ponytail: 16 flows,
 /// all sender to receiver; widen the port range or add reverse flows if needed.
 pub const MAX_CROSS: usize = 16;
@@ -31,6 +31,7 @@ struct RawPlan {
     sysctls: Vec<(String, String)>,
     agent: Option<RawAgent>,
     cross: Vec<RawCross>,
+    steps: bool,
 }
 
 #[derive(Deserialize)]
@@ -46,7 +47,6 @@ enum RawCross {
 #[serde(deny_unknown_fields)]
 struct RawAgent {
     policy_file: String,
-    interval_ms: u32,
 }
 
 #[derive(Deserialize)]
@@ -87,11 +87,12 @@ pub struct Sysctl {
     pub value: String,
 }
 
-/// Who decides cwnd: the kernel's own congestion control, or a policy
-/// driving tcp_agent ("agent" or "agent_reno") through /dev/expl_agent.
+/// Who decides cwnd: the kernel's own congestion control, or a sage-v1
+/// policy driving tcp_agent ("agent" or "agent_reno") through
+/// /dev/expl_agent after every step.
 pub enum Control {
     Stock,
-    Agent { policy: PathBuf, interval_ms: NonZeroU32 },
+    Agent { policy: PathBuf },
 }
 
 pub struct Plan {
@@ -105,6 +106,8 @@ pub struct Plan {
     pub sysctls: Vec<Sysctl>,
     pub control: Control,
     pub cross: Vec<CrossFlow>,
+    /// Run Sage's step loop (always, under a policy) and write steps.bin.
+    pub steps: bool,
 }
 
 impl Plan {
@@ -123,14 +126,12 @@ impl Plan {
         let is_agent = matches!(raw.cc.as_str(), "agent" | "agent_reno");
         let control = match (is_agent, raw.agent) {
             (false, None) => Control::Stock,
-            (true, Some(a)) => Control::Agent {
-                policy: dir.join(plain_file_name(&a.policy_file)?),
-                interval_ms: nonzero(a.interval_ms, "agent.interval_ms")?,
-            },
+            (true, Some(a)) => Control::Agent { policy: dir.join(plain_file_name(&a.policy_file)?) },
             (true, None) => return fail(format!("cc {} needs an agent section", raw.cc)),
             (false, Some(_)) => return fail(format!("cc {} takes no agent section", raw.cc)),
         };
         Ok(Plan {
+            steps: raw.steps || matches!(control, Control::Agent { .. }),
             control,
             cross,
             duration_ms: nonzero(raw.duration_ms, "duration_ms")?,

@@ -43,7 +43,9 @@ Implementation detail lives in `docs/`.
 |---|---|---|
 | Specs and campaigns | `src/expliccit_env/spec.py`, `campaign.py` | What to run: path (trace, delay, buffer, random loss), congestion control, cross traffic, duration, seed; grids and samples of Mahak's space, each under a list of loss and cross-traffic conditions. |
 | Launcher | `uml.py` | Boot a UML guest in virtual time (`time-travel=inf-cpu`), seeded, under a wall-clock timeout. |
-| Guest runner | `guest/` (Rust) | Inside the kernel: namespaces, qdiscs, bulk TCP pair, cross-traffic flows, ONNX policy loop, record collection. |
+| Guest runner | `guest/` (Rust) | Inside the kernel: namespaces, qdiscs, bulk TCP pair, cross-traffic flows, Sage's step loop and the ONNX policy, record collection. |
+| Policy contract | `policy.py`, `guest/src/step.rs` | `sage-v1`: Sage's 77-value state message in (a port of `sage.cc`), log2 of the window multiplier out, optional recurrent state; the graph picks and scales its own inputs. |
+| Step data | `steps.py` | Each step with the labels at its instant, Sage's reward from the exact capacity, and the action taken: net1 and net2 training rows. |
 | Link model | `kernel/modules/sch_mmlink.c` | The bottleneck: Mahimahi's `mm-link` + `mm-delay` (+ `mm-loss`), as a qdisc. |
 | Observation | `kernel/modules/expl_tcpobs.c` | Sender state at every ACK, for any congestion control. |
 | Agent controllers | `kernel/modules/tcp_agent.c` | `agent` (Sage-style) and `agent_reno` (Orca-style) driven by a policy. |
@@ -109,8 +111,9 @@ CI runs the same on every push (`.github/workflows/ci.yml`).
 
 | Area | State |
 |---|---|
-| UML build, link model, observations, records, datasets, campaigns, CLI | done, tested (51 tests) |
-| Agent controllers with ONNX policies, closed loop | done, tested |
+| UML build, link model, observations, records, datasets, campaigns, CLI | done, tested (54 tests) |
+| Agent controllers with ONNX policies, closed loop (`sage-v1`) | done, tested |
+| Sage's step and step training data (labels, reward, action per step) | done, tested; the comparison with `sage.cc`'s own code is UNRUN |
 | Mahak metrics, trace generation and active-learning driver | done, matched to the originals |
 | Slurm array scripts | generated and checked locally; not yet submitted to a cluster |
 | BBRv3 (Google's, as `bbr3`) | done, tested |
