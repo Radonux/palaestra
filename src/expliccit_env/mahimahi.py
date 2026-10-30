@@ -383,9 +383,10 @@ def mm_th_delay(log: MmLog) -> MmThDelay | MmThDelayUndefined:
 type MahakMetric = Literal["utilization", "first_power", "delay"]
 
 
-def mahak_metric(result: MmThDelay, metric: MahakMetric, mahak_compat_mrtt_ms: int) -> float:
-    """helper.py ``oracle_query``'s metric, with Mahak's one-way "mRTT"."""
-    mrtt = float(mahak_compat_mrtt_ms)
+def mahak_metric(result: MmThDelay, metric: MahakMetric, one_way_ms: float) -> float:
+    """helper.py ``oracle_query``'s metric. Mahak divides by its "mRTT", which
+    is the one-way delay; pass ``mahak_compat_mrtt_ms`` for Mahak specs."""
+    mrtt = float(one_way_ms)
     match metric:
         case "utilization":
             return result.utilization
