@@ -9,7 +9,8 @@ from pathlib import Path
 
 from expliccit_env import campaign
 from expliccit_env.dataset import ShardWriter
-from expliccit_env.episode import EpisodeOk, run_episode
+from expliccit_env.episode import Build, EpisodeOk, run_episode
+from expliccit_env.native import NativeBuild
 from expliccit_env.spec import (
     CampaignSpec,
     DropTail,
@@ -22,12 +23,16 @@ from expliccit_env.spec import (
 from expliccit_env.uml import UmlBuild
 
 
+def _build(a: argparse.Namespace) -> Build:
+    return NativeBuild.at(Path(a.build)) if a.tier == "native" else UmlBuild.at(Path(a.build))
+
+
 def _episode(a: argparse.Namespace) -> int:
     spec = EpisodeSpec.parse(Path(a.spec).read_text())
     out = Path(a.out)
     with ShardWriter(out) as w:
         outcome = run_episode(
-            spec, UmlBuild.at(Path(a.build)), out / "work", keep_raw=a.keep_raw, timeout_s=a.timeout
+            spec, _build(a), out / "work", keep_raw=a.keep_raw, timeout_s=a.timeout
         )
         w.add(outcome)
     print(json.dumps(outcome.row, indent=2, default=str))
@@ -44,7 +49,7 @@ def _run(a: argparse.Namespace) -> int:
     failed = 0
     for o in campaign.run_shard(
         Path(a.out),
-        UmlBuild.at(Path(a.build)),
+        _build(a),
         campaign.Shard.parse(a.shard),
         workers=a.workers,
         scratch=Path(a.scratch) if a.scratch else None,
@@ -92,7 +97,7 @@ def _mahak_query(a: argparse.Namespace) -> int:
         cc=StockCC(name=a.cc),
         seed=a.seed,
     )
-    outcome = run_episode(spec, UmlBuild.at(Path(a.build)), Path(a.scratch), timeout_s=a.timeout)
+    outcome = run_episode(spec, _build(a), Path(a.scratch), timeout_s=a.timeout)
     value = outcome.row.get(a.metric if a.metric != "delay" else "mahak_delay")
     if not isinstance(outcome, EpisodeOk) or value is None:
         print(json.dumps(outcome.row, default=str), file=sys.stderr)
