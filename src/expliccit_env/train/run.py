@@ -22,7 +22,13 @@ def train(spec: TrainSpec, out: Path) -> dict[str, Any]:
     net2.pt, policy.onnx, report.json, train_spec.json}."""
     out.mkdir(parents=True, exist_ok=True)
     (out / "train_spec.json").write_text(spec.model_dump_json(indent=2))
-    steps = data.load(spec.data, seed=spec.seed, val=spec.val_fraction, test=spec.test_fraction)
+    steps = data.load(
+        spec.data,
+        seed=spec.seed,
+        val=spec.val_fraction,
+        test=spec.test_fraction,
+        controllers=spec.controllers,
+    )
     if spec.net1_from is None:
         net1, net1_log = fit.fit_net1(spec.net1, steps, spec.seed)
         net1_spec = spec.net1

@@ -46,6 +46,12 @@ Run what the change touches, and report only what actually ran:
   write the least code that works. Mark deliberate limits with
   `ponytail: <ceiling>, <upgrade path>`.
 - Never let a failed or invalid episode produce metrics or labels.
+- Make no claim about a learned model's performance before tuning it:
+  inspect its training diagnostics (critic and actor scales, saturation,
+  actions outside the data), search the hyperparameters that matter on
+  validation paths (brute-force grid where affordable, successive halving
+  where not), confirm the winners over several seeds, then report once on
+  the held-out test paths, saying what was searched.
 - Guest code runs under UML's `time-travel=inf-cpu`: it must block or sleep,
   never spin, because spinning distorts virtual time.
 - Docs, comments and reports use plain English with no em dashes. Label

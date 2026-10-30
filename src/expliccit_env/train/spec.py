@@ -91,8 +91,10 @@ class Net2Spec(_Frozen):
     # action_head.py objective (one critic, a penalty on uniform random
     # actions, an actor that only maximizes Q), kept to compare against.
     # "bc": regress the logged actions only (no critic), the baseline that
-    # shows what imitation alone gives.
-    algo: Literal["td3bc", "expliccit-v1", "bc"] = "td3bc"
+    # shows what imitation alone gives. "iql": implicit Q-learning (Kostrikov
+    # et al., 2021): the critic never sees an action outside the data, and
+    # the actor regresses the logged actions weighted by exp(beta * advantage).
+    algo: Literal["td3bc", "expliccit-v1", "bc", "iql"] = "td3bc"
     # "true_lcfs" trains on the labels instead of net1's beliefs: an ablation
     # that splits the gap to a teacher into the bottleneck's cost and net1's
     # error. Such a policy needs ground truth to run, so it is not exported.
@@ -124,6 +126,11 @@ class Net2Spec(_Frozen):
     noise_clip: Annotated[float, Field(ge=0)] = 0.5
     policy_delay: PositiveInt = 2
     cql_alpha: Annotated[float, Field(ge=0)] = 1.0  # expliccit-v1 only
+    # iql only: the expectile V(s) fits to Q(s, a) over the logged actions,
+    # the advantage temperature, and the cap on an action's weight.
+    expectile: Annotated[float, Field(ge=0.5, lt=1)] = 0.7
+    beta: Annotated[float, Field(ge=0)] = 3.0
+    max_weight: Annotated[float, Field(gt=0)] = 100.0
 
 
 class TrainSpec(_Frozen):
@@ -135,6 +142,9 @@ class TrainSpec(_Frozen):
     val_fraction: Annotated[float, Field(ge=0, lt=1)] = 0.1
     test_fraction: Annotated[float, Field(ge=0, lt=1)] = 0.1
     seed: Annotated[int, Field(ge=0)] = 0
+    # Train only on episodes of these controllers (the episodes table's
+    # "controller": a stock name, or agent:<sha12>); all when unset.
+    controllers: frozenset[str] | None = None
     net1: Net1Spec = Net1Spec()
     # A trained net1 to reuse (a run's net1.pt): net1 is then not trained, and
     # its saved spec replaces the "net1" field.

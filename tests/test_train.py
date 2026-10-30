@@ -99,6 +99,82 @@ def test_utility_reward_prices_unused_capacity_delay_and_loss() -> None:
     assert np.allclose(r, [1.0, 0.5, 1.0 - 0.25 - 0.04])
 
 
+def _bandit(n: int = 4096) -> fit.Transitions:
+    """One step per transition, two logged actions, the larger one better."""
+    g = torch.Generator().manual_seed(0)
+    s = torch.randn(n, 3, generator=g)
+    a = (torch.randint(0, 2, (n, 1), generator=g).float() - 0.5).clone()
+    return fit.Transitions(s, a, a.squeeze(1).clone(), torch.randn(n, 3, generator=g))
+
+
+def test_iql_prefers_the_better_logged_action_where_cloning_averages() -> None:
+    t = _bandit()
+    means = {}
+    for algo in ("iql", "bc"):
+        torch.manual_seed(0)
+        learner = fit.Learner(Net2Spec(algo=algo, hidden=32, discount=0.0, beta=10.0), 3)
+        rng = np.random.default_rng(0)
+        for step in range(1500):
+            b = torch.from_numpy(rng.integers(0, t.s.shape[0], 256))
+            log = learner.update(fit.Transitions(*(x[b] for x in t.parts())), step)
+        with torch.no_grad():
+            means[algo] = float(learner.actor(t.s).mean())
+        assert {"pi_mean", "pi_std", "sat"} <= log.keys()
+    assert means["iql"] > 0.25 and abs(means["bc"]) < 0.1, means
+
+
+def test_td3bc_reports_where_its_critic_extrapolates() -> None:
+    t = _bandit(512)
+    near_zero = fit.Transitions(t.s, t.a / 50, t.r, t.s2)  # logged actions +-0.01
+    learner = fit.Learner(Net2Spec(hidden=32, batch_size=512), 3)
+    log = learner.update(near_zero, 0)
+    assert {"ood", "q", "q_pull", "bc_pull", "sat"} <= log.keys()
+    # Target smoothing noise of 0.2 leaves actions logged near 0, as the
+    # teachers' are, almost everywhere.
+    assert log["ood"] > 0.8, log
+
+
+def test_load_keeps_only_the_named_controllers(tmp_path: Path) -> None:
+    import pyarrow as pa  # noqa: PLC0415
+    import pyarrow.parquet as pq  # noqa: PLC0415
+
+    shard = tmp_path / "shards" / "0"
+    shard.mkdir(parents=True)
+    eps = [("e0", "bbr", 3), ("e1", "cubic", 2), ("e2", "agent:abc", 4)]
+    pq.write_table(
+        pa.table(
+            {
+                "episode_id": [e for e, _, _ in eps],
+                "status": ["ok"] * 3,
+                "spec_json": [json.dumps({"path": {"bw": i}}) for i in range(3)],
+                "controller": [c for _, c, _ in eps],
+            }
+        ),
+        shard / "episodes.parquet",
+    )
+    ids = [e for e, _, n in eps for _ in range(n)]
+    obs = pa.FixedSizeListArray.from_arrays(
+        pa.array(np.zeros(len(ids) * OBS_DIM, np.float32)), OBS_DIM
+    )
+    pq.write_table(
+        pa.table(
+            {
+                "episode_id": ids,
+                "obs": obs,
+                "action": np.zeros(len(ids), np.float32),
+                "reward": np.zeros(len(ids), np.float32),
+                "label_capacity_bps": np.ones(len(ids), np.float32),
+            }
+        ),
+        shard / "steps.parquet",
+    )
+    steps = data.load([tmp_path], seed=0, val=0.0, test=0.0, controllers=frozenset({"bbr"}))
+    assert steps.episode_ids == ("e0",) and steps.obs.shape == (3, OBS_DIM)
+    assert data.load([tmp_path], seed=0, val=0.0, test=0.0).obs.shape[0] == 9
+    with pytest.raises(ValueError, match="no steps"):
+        data.load([tmp_path], seed=0, val=0.0, test=0.0, controllers=frozenset({"vegas"}))
+
+
 def test_as_deployed_rounds_beliefs_and_actions() -> None:
     lcf = Scaler.fit(
         tuple(range(7)), np.random.default_rng(0).normal(size=(50, 7)).astype(np.float32), "minmax"

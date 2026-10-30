@@ -171,6 +171,20 @@ class Critic(nn.Module):
         return self.net(torch.cat([s, a], dim=1)).squeeze(1)
 
 
+class Value(nn.Module):
+    """LCF beliefs -> V (implicit Q-learning's state value)."""
+
+    def __init__(self, lcfs: int, hidden: int = 256) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(lcfs, hidden), nn.ReLU(), nn.Linear(hidden, hidden), nn.ReLU(),
+            nn.Linear(hidden, 1),
+        )  # fmt: skip
+
+    def forward(self, s: torch.Tensor) -> torch.Tensor:
+        return self.net(s).squeeze(1)
+
+
 NET1 = {"expliccit-v1": ExpliccitNet1}
 NET2 = {"expliccit-v1": ExpliccitActor}
 

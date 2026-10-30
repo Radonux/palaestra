@@ -54,10 +54,11 @@ action taken (the next step's column 76) and whether the policy set it.
 | `net1.obs_cols` | expliCCit's 70 | message columns net1 reads |
 | `net1.scaling` | `robust` | `robust` clips to training quantiles then standardizes; `minmax` is expliCCit's |
 | `net1.lcfs` | expliCCit's 7 | `queue_delay_mean_ns, queue_pkts, capacity_bps, free_buffer_pkts, busy_fraction, one_way_delay_ns, receive_rate_bps` |
-| `net2.algo` | `td3bc` | TD3+BC; `expliccit-v1` is expliCCit's objective, kept for comparison |
+| `controllers` | all | train only on these controllers' episodes (`["bbr", "vegas"]`) |
+| `net2.algo` | `td3bc` | TD3+BC; `iql` is implicit Q-learning (`expectile`, `beta`); `bc` clones; `expliccit-v1` is expliCCit's objective, kept for comparison |
 | `net2.inputs` | `net1` | `true_lcfs` trains on the labels instead (an ablation; not exported) |
 | `net2.reward_alignment` | `next` | the reward step t+1 reports; `same` is step t's, as expliCCit and Sage's offline data pair them |
-| `net2.action_max` | 1.0 | a = action_max * tanh(...) |
+| `net2.action_max` | 1.0 | a = action_max * tanh(...); the critic and the noise settings work in units of it |
 
 Splits are by path: episodes that differ only in congestion control or
 seed land in the same split, so no path is both trained and tested on.
@@ -73,6 +74,25 @@ syncing again:
     uv run --no-sync expliccit train run train.json out/model
 
 The CUDA index above is UNRUN here (no GPU in this environment).
+
+### Tuning
+
+Every learner update returns diagnostics next to its losses (`report.json`
+for `train run`, `history.json` for `train online`):
+
+| Key | Meaning | Read it as |
+|---|---|---|
+| `q`, `q_pull`, `bc_pull` | TD3+BC: mean Q of the policy's action; per row, the critic's and the data's pull on that action | `q_pull` far above `bc_pull`: the actor follows the critic, not the data |
+| `ood` | TD3+BC: share of target actions outside the batch's logged actions (0.5% to 99.5%) | high: the critic's targets are extrapolation |
+| `pi_mean`, `pi_std`, `sat` | the actor's output on the batch, and the share near the tanh limits | a mean far from the data's, or saturation, before any closed-loop run |
+| `adv_std`, `w_mean`, `w_capped` | IQL: spread of advantages, mean weight, share at `max_weight` | `w_capped` high: beta too large for the reward scale |
+
+The teachers' actions are 0 at 80% of steps and between -0.002 and +0.013
+at 90%, so TD3's default noise (0.05 exploration, 0.2 target smoothing
+clipped at 0.5, all in units of `action_max`) is many times the data's
+spread unless `action_max` is small. A bias of 0.001 per step in the
+policy's mean action moves the window by 7% a second, so tune on closed-loop
+results, not on the regression loss.
 
 ## 3. Run a policy
 
@@ -154,7 +174,7 @@ losses and, every `eval_every` iterations, the noise-free policy on the
 unused capacity against queueing delay (`delay_weight`, per base RTT) and
 the flow's dropped fraction (`loss_weight`).
 
-## Reproduction: an expliCCit-shaped controller (one seed)
+## Reproduction: an expliCCit-shaped controller (one seed, untuned)
 
 Data: the expliCCit-like campaign above. net1: expliCCit's encoder, robust
 scaling, 4 epochs (early stop), on held-out paths R^2 0.988 (mean queueing
@@ -205,7 +225,12 @@ policy's mean action is -0.021 per step against the teachers' +0.0014.
 Sage's reward credits lower delay at once but delivered rate only over a
 1 s window, which a 0.95 discount (about 200 ms) barely sees.
 
-## Offline against online (one seed each)
+## Offline against online (one seed each, untuned)
+
+Each run below used one hand-set configuration; none was tuned (see
+"Tuning" in section 2, and the TD3 noise scales there). They show that
+these configurations fail, not that online or offline training does. The
+tuning is in progress.
 
 Four online runs, each from a cloned policy with its net1 frozen, on the
 utility reward (delay weight 0.5, loss weight 4, discount 0.99), TD3+BC
@@ -234,7 +259,7 @@ steadily: point 0.70, 0.04, 0.11, 0.21 utilization after 5, 10, 15 and
 faster (point 0.44, 0.25, 0.25 after 4, 8, 12; interval 0.10, 0.09,
 0.08).
 
-**Online training, as configured here, makes the cloned policy worse.**
+**Online training, in these two configurations, makes the cloned policy worse.**
 The reward is not why: it ranks BBRv1, Vegas and BBRv3 above cloning on
 the evaluation paths, and on the training paths BBRv1 scores +0.83 (Vegas
 +0.68, Cubic -2.25), so a policy that fills the link without a standing
@@ -262,9 +287,9 @@ first:
    on the true LCFs (arm A0, `docs/methodology.md`); that needs ground
    truth fed to a running policy, which the environment cannot do yet.
 
-Until one of these closes the gap, cloning is the best learned net2 here,
-and the claim that closed-loop training on intervals learns when to probe
-is untested rather than refuted.
+Until tuning closes the gap, cloning is the best learned net2 found so far
+(untuned), and the claim that closed-loop training on intervals learns when
+to probe is untested rather than refuted.
 
 ## Earlier results (October 2026, one dataset, one seed)
 

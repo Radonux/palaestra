@@ -43,6 +43,8 @@ class OnlineSpec(BaseModel):
     init_from: Path | None = None  # a training run's net2.pt to start from
     # Teacher step data to put in the replay buffer before the first update.
     offline_data: list[Path] = Field(default_factory=list[Path])
+    # Only these controllers' episodes from offline_data; all when unset.
+    offline_controllers: frozenset[str] | None = None
     net2: Net2Spec = Net2Spec(algo="td3bc", reward="utility", discount=0.99)
     iterations: PositiveInt = 10
     episodes_per_iteration: PositiveInt = 16
@@ -84,8 +86,13 @@ class _Replay:
         return 0 if self.t is None else int(self.t.s.shape[0])
 
 
-def _transitions_from(dirs: list[Path], net1: fit.Net1, spec: Net2Spec) -> fit.Transitions:
-    steps = data.load(dirs, seed=0, val=0.0, test=0.0)
+def _transitions_from(
+    dirs: list[Path],
+    net1: fit.Net1,
+    spec: Net2Spec,
+    controllers: frozenset[str] | None = None,
+) -> fit.Transitions:
+    steps = data.load(dirs, seed=0, val=0.0, test=0.0, controllers=controllers)
     t, _ = fit.transitions(steps, net1.beliefs(steps.obs), spec, "train")
     return t
 
@@ -128,7 +135,7 @@ def run_online(
         learner.actor_t.load_state_dict(state)
     replay = _Replay(spec.replay_capacity)
     if spec.offline_data:
-        replay.add(_transitions_from(spec.offline_data, net1, spec.net2))
+        replay.add(_transitions_from(spec.offline_data, net1, spec.net2, spec.offline_controllers))
     for u in range(spec.critic_warmup if len(replay) else 0):
         learner.update(replay.sample(rng, spec.net2.batch_size), u, actor=False)
     train_paths: list[PathSpec] = paths_of(

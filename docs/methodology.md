@@ -117,7 +117,7 @@ rate over capacity, minus a weight times queueing delay over base RTT,
 minus a weight times the fraction of the flow's packets the bottleneck
 dropped. The second is what prices probing.
 
-First result (one seed, `docs/training.md`): four online runs, from
+First result (one seed, untuned, `docs/training.md`): four online runs, from
 cloned policies on point and interval net1, with and without the
 teachers' data in the replay buffer, all end worse than they started,
 near the corner where the sender barely sends. The reward ranks BBRv1,

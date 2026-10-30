@@ -30,6 +30,7 @@ from expliccit_env.train.models import (
     IntervalNet1,
     PolicyGraph,
     Scaler,
+    Value,
 )
 from expliccit_env.train.spec import EXPLICCIT_LCFS, LCF_UNITS, Net1Spec, Net2Spec
 
@@ -276,20 +277,32 @@ def _soft_update(target: nn.Module, source: nn.Module, tau: float) -> None:
             t.mul_(1 - tau).add_(s, alpha=tau)
 
 
+def _policy_stats(pi: torch.Tensor) -> dict[str, float]:
+    """The actor's output on a batch: its mean, spread and saturation."""
+    return {
+        "pi_mean": float(pi.mean()),
+        "pi_std": float(pi.std()),
+        "sat": float((pi.abs() > 0.98).float().mean()),
+    }
+
+
 class Learner:
-    """Actor, critics and their targets, updated one batch at a time."""
+    """Actor, critics and their targets, updated one batch at a time. Each
+    update returns its losses and diagnostics (docs/training.md, "Tuning")."""
 
     def __init__(self, spec: Net2Spec, k: int) -> None:
         self.spec = spec
         self.actor = NET2[spec.arch](k, spec.hidden)
-        n_critics = {"td3bc": 2, "expliccit-v1": 1, "bc": 0}[spec.algo]
+        n_critics = {"td3bc": 2, "expliccit-v1": 1, "bc": 0, "iql": 2}[spec.algo]
         self.critics = [Critic(k, spec.hidden) for _ in range(n_critics)]
+        self.value = Value(k, spec.hidden) if spec.algo == "iql" else None
         self.actor_t = copy.deepcopy(self.actor)
         self.critics_t = [copy.deepcopy(c) for c in self.critics]
-        # expliCCit's learning rates for its objective, the spec's for TD3+BC.
+        # expliCCit's learning rates for its objective, the spec's otherwise.
         theirs = spec.algo == "expliccit-v1"
         self.opt_a = torch.optim.Adam(self.actor.parameters(), lr=1e-4 if theirs else spec.lr)
         critic_params = [p for c in self.critics for p in c.parameters()]
+        critic_params += list(self.value.parameters()) if self.value is not None else []
         self.opt_c = (
             torch.optim.Adam(critic_params, lr=1e-3 if theirs else spec.lr)
             if critic_params
@@ -309,11 +322,16 @@ class Learner:
         unless ``actor`` is False) on the actor."""
         spec, (s, a, r, s2) = self.spec, (t.s, t.a, t.r, t.s2)
         if self.opt_c is None:  # bc
-            bc = ((self.actor(s) - a) ** 2).mean()
+            pi = self.actor(s)
+            bc = ((pi - a) ** 2).mean()
             self.opt_a.zero_grad()
             bc.backward()
             self.opt_a.step()
-            return {"actor": float(bc.detach()), "bc": float(bc.detach())}
+            return {"actor": float(bc.detach()), "bc": float(bc.detach())} | _policy_stats(
+                pi.detach()
+            )
+        if spec.algo == "iql":
+            return self._iql(t, actor=actor)
         with torch.no_grad():
             a2 = self.actor_t(s2)
             if spec.algo == "td3bc":
@@ -321,26 +339,75 @@ class Learner:
                 a2 = (a2 + noise.clamp(-spec.noise_clip, spec.noise_clip)).clamp(-1, 1)
             q2 = torch.stack([c(s2, a2) for c in self.critics_t]).min(dim=0).values
             y = r + spec.discount * q2
+            # Target actions outside what the batch's data did: where the
+            # critic's target is extrapolation.
+            lo, hi = torch.quantile(a, 0.005), torch.quantile(a, 0.995)
+            ood = float(((a2 < lo) | (a2 > hi)).float().mean())
         critic_loss = self._critic_loss(s, a, y)
         self.opt_c.zero_grad()
         critic_loss.backward()
         self.opt_c.step()
-        out = {"critic": float(critic_loss.detach())}
+        out = {"critic": float(critic_loss.detach()), "ood": ood}
         if actor and (spec.algo == "expliccit-v1" or step % spec.policy_delay == 0):
             pi = self.actor(s)
             q = self.critics[0](s, pi)
             bc = ((pi - a) ** 2).mean()
-            if spec.algo == "td3bc":
-                actor_loss = -(spec.alpha / q.abs().mean().detach()) * q.mean() + bc
-            else:
-                actor_loss = -q.mean()
+            lam = (spec.alpha / q.abs().mean().detach()) if spec.algo == "td3bc" else 1.0
+            actor_loss = -lam * q.mean() + (bc if spec.algo == "td3bc" else 0.0)
+            # Per row, the pull of the critic against the pull of the data.
+            (dq,) = torch.autograd.grad(q.sum(), pi, retain_graph=True)
             self.opt_a.zero_grad()
             actor_loss.backward()
             self.opt_a.step()
-            out |= {"actor": float(actor_loss.detach()), "bc": float(bc.detach())}
+            out |= {
+                "actor": float(actor_loss.detach()),
+                "bc": float(bc.detach()),
+                "q": float(q.mean().detach()),
+                "q_pull": float((lam * dq).abs().mean()),
+                "bc_pull": float((2 * (pi - a)).abs().mean().detach()),
+            } | _policy_stats(pi.detach())
             _soft_update(self.actor_t, self.actor, spec.tau)
             for c, ct in zip(self.critics, self.critics_t, strict=True):
                 _soft_update(ct, c, spec.tau)
+        return out
+
+    def _iql(self, t: Transitions, *, actor: bool) -> dict[str, float]:
+        spec, (s, a, r, s2) = self.spec, t.parts()
+        assert self.value is not None and self.opt_c is not None
+        with torch.no_grad():
+            qt = torch.stack([c(s, a) for c in self.critics_t]).min(dim=0).values
+            y = r + spec.discount * self.value(s2)
+        v = self.value(s)
+        u = qt - v
+        value_loss = (torch.abs(spec.expectile - (u < 0).float()) * u**2).mean()
+        critic_loss = torch.stack([((c(s, a) - y) ** 2).mean() for c in self.critics]).sum()
+        self.opt_c.zero_grad()
+        (critic_loss + value_loss).backward()
+        self.opt_c.step()
+        for c, ct in zip(self.critics, self.critics_t, strict=True):
+            _soft_update(ct, c, spec.tau)
+        out = {
+            "critic": float(critic_loss.detach()),
+            "value": float(value_loss.detach()),
+            "v": float(v.mean().detach()),
+        }
+        if actor:
+            with torch.no_grad():
+                adv = qt - v.detach()
+                w = torch.exp(spec.beta * adv).clamp(max=spec.max_weight)
+            pi = self.actor(s)
+            bc = ((pi - a) ** 2).sum(dim=1)
+            actor_loss = (w * bc).mean()
+            self.opt_a.zero_grad()
+            actor_loss.backward()
+            self.opt_a.step()
+            out |= {
+                "actor": float(actor_loss.detach()),
+                "bc": float(bc.mean().detach()),
+                "adv_std": float(adv.std()),
+                "w_mean": float(w.mean()),
+                "w_capped": float((w >= spec.max_weight).float().mean()),
+            } | _policy_stats(pi.detach())
         return out
 
 
@@ -359,12 +426,12 @@ def fit_net2(
     if data.s.shape[0] == 0:
         raise ValueError("no training transitions")
     learner = Learner(spec, states.shape[1])
-    log: dict[str, list[float]] = {"critic": [], "actor": [], "bc": []}
+    log: dict[str, list[float]] = {}
     for step in range(spec.steps):
         b = torch.from_numpy(rng.integers(0, data.s.shape[0], spec.batch_size))
         batch = Transitions(data.s[b], data.a[b], data.r[b], data.s2[b])
         for name, v in learner.update(batch, step).items():
-            log[name].append(v)
+            log.setdefault(name, []).append(v)
     actor = learner.actor.eval()
     val, _ = transitions(steps, states, spec, "val")
     with torch.no_grad():
