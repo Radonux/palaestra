@@ -1,0 +1,4 @@
+# Static musl binaries; aarch64 links with the bundled rust-lld so no cross
+# toolchain is needed.
+[target.aarch64-unknown-linux-musl]
+linker = "rust-lld"

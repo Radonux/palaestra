@@ -1,0 +1,23 @@
+[package]
+name = "expliccit-guest"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+description = "Episode runner for expliccit-env: PID 1 in a UML guest, or a root process on a Tier 2 host"
+license = "GPL-2.0-only"
+
+# libc: raw syscalls (namespaces, netlink, mount, finit_module, reboot).
+# serde, serde_json: the plan and result files exchanged with the host.
+[dependencies]
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[lints.clippy]
+unwrap_used = "deny"
+indexing_slicing = "deny"
