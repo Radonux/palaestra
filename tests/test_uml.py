@@ -15,8 +15,8 @@ import pyarrow.parquet as pq
 import pytest
 
 from expliccit_env import campaign
-from expliccit_env.cli import main
 from expliccit_env import mahimahi as mm
+from expliccit_env.cli import main
 from expliccit_env.guest_plan import GuestPlan, LinkPlan
 from expliccit_env.records import Records, load_records
 from expliccit_env.spec import CampaignSpec
