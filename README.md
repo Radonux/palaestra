@@ -8,9 +8,11 @@ emulated path and produces two things:
 - Mahak-style performance maps (utilization, delay, power) with kernel-level
   fidelity.
 
-Everything needed to build it is in this repository, including the Linux 7.0
-source (`third_party/linux`, imported unmodified, with our kernel patches as
-separate commits) and Mahimahi (`third_party/mahimahi`).
+The large sources are vendored, so no build depends on kernel.org: Linux 7.0
+(`third_party/linux`, imported unmodified, with our kernel patches as
+separate commits) and Mahimahi (`third_party/mahimahi`). Rust crates and
+Python packages are fetched from crates.io and PyPI, pinned by
+`guest/Cargo.lock` and `uv.lock`.
 
 ## Two tiers, one runner
 
@@ -95,6 +97,32 @@ do ours, so Mahak maps are reproduced like for like.
 
 A failed episode is a row with `status = "failed"` and a reason. No metric is
 ever computed from an incomplete or invalid run.
+
+## Extending
+
+- **A new candidate LCF (label).** Add a pure function to
+  `src/expliccit_env/labels.py` that maps an episode's records and constants
+  to one value per observation row, and a column in `labels_table`. Existing
+  datasets keep `link_events` and `link_opp`, so the new label can be
+  recomputed from them without rerunning episodes.
+- **A new trace shape.** Add a variant next to `MahakStep` in `spec.py` with a
+  `timestamps()` method returning Mahimahi trace timestamps; the kernel only
+  ever sees per-ms counts. `TraceFile` already accepts any Mahimahi trace
+  (pinned by sha256).
+- **A learned controller.** Export it to ONNX with the `tcpinfo-v1` contract
+  (`src/expliccit_env/policy.py`: input float32 [1, 8], output float32
+  [1, 2] = cwnd packets, pacing Mbit/s) and use
+  `{"kind": "agent", "mode": "hold" | "reno", "policy": {"path": ..., "sha256": ...}}`
+  as the spec's `cc`.
+- **A new in-kernel congestion control.** Build it into the UML kernel
+  (`kernel/uml.config`) or as a module next to `tcp_agent`, then add its name
+  to `StockCC` in `spec.py`.
+- **A kernel change.** Commit it under `third_party/linux` as its own commit;
+  `scripts/check-kernel.sh` checks every such commit, and
+  `git diff e8eadca -- third_party/linux` lists them all. Record ABI changes go
+  in `kernel/modules/expliccit_rec.h` together with `guest/src/recorder.rs`
+  and `src/expliccit_env/records.py` (bump `EXPL_REC_ABI`;
+  `tests/test_records_abi.py` checks the layouts agree).
 
 ## Documentation
 
