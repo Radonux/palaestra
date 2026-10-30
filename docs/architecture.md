@@ -169,3 +169,29 @@ where the brief did not specify (its later sections were missing).
   Tier 2 reference logs, not campaign data.
 - Labels v1 are the candidates listed in `labels.py`; cross traffic and random
   loss are fixed at 0 because no episode generates them yet.
+
+## Extending
+
+- **A new candidate LCF (label).** Add a pure function to
+  `src/expliccit_env/labels.py` that maps an episode's records and constants
+  to one value per observation row, and a column in `labels_table`. Existing
+  datasets keep `link_events` and `link_opp`, so the new label can be
+  recomputed from them without rerunning episodes.
+- **A new trace shape.** Add a variant next to `MahakStep` in `spec.py` with a
+  `timestamps()` method returning Mahimahi trace timestamps; the kernel only
+  ever sees per-ms counts. `TraceFile` already accepts any Mahimahi trace
+  (pinned by sha256).
+- **A learned controller.** Export it to ONNX with the `tcpinfo-v1` contract
+  (`src/expliccit_env/policy.py`: input float32 [1, 8], output float32
+  [1, 2] = cwnd packets, pacing Mbit/s) and use
+  `{"kind": "agent", "mode": "hold" | "reno", "policy": {"path": ..., "sha256": ...}}`
+  as the spec's `cc`.
+- **A new in-kernel congestion control.** Build it into the UML kernel
+  (`kernel/uml.config`) or as a module next to `tcp_agent`, then add its name
+  to `StockCC` in `spec.py`.
+- **A kernel change.** Commit it under `third_party/linux` as its own commit;
+  `scripts/check-kernel.sh` checks every such commit, and
+  `git diff e8eadca -- third_party/linux` lists them all. Record ABI changes go
+  in `kernel/modules/expliccit_rec.h` together with `guest/src/recorder.rs`
+  and `src/expliccit_env/records.py` (bump `EXPL_REC_ABI`;
+  `tests/test_records_abi.py` checks the layouts agree).

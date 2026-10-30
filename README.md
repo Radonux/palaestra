@@ -1,145 +1,169 @@
 # palaestra: the expliCCit experiment environment
 
-`expliccit-env` runs the real Linux 7.0 TCP stack over a Mahimahi-equivalent
-emulated path and produces two things:
+`expliccit-env` runs the real Linux 7.0 TCP stack over an emulated network
+path with Mahimahi's semantics. It produces:
 
-- labeled training data for expliCCit's net1 (sender observations paired with
-  exact ground-truth path labels) and closed-loop rollouts for net2;
-- Mahak-style performance maps (utilization, delay, power) with kernel-level
-  fidelity.
+- labeled training data for expliCCit's net1: per-ACK sender observations
+  paired with exact ground truth about the path (capacity, queue, delay);
+- closed-loop rollouts for net2: learned policies (ONNX) driving the kernel's
+  congestion window;
+- Mahak-style performance maps (utilization, delay, power) for any congestion
+  control, with kernel-level fidelity.
 
-The large sources are vendored, so no build depends on kernel.org: Linux 7.0
-(`third_party/linux`, imported unmodified, with our kernel patches as
-separate commits) and Mahimahi (`third_party/mahimahi`). Rust crates and
-Python packages are fetched from crates.io and PyPI, pinned by
-`guest/Cargo.lock` and `uv.lock`.
+This README is the map for human collaborators: what the parts are, how
+data flows, which guarantees the system makes, and how to check them.
+Implementation detail lives in `docs/`.
 
-## Two tiers, one runner
+## Architecture
+
+```text
+                        HOST (Python, src/expliccit_env)
+  spec.json ──► parse ──► plan ──► launch ─────────────┐        ┌──► validate records
+  campaign.json  (specs)  (guest   (Tier 1: uml.py     │        │    ──► labels + metrics
+                           plan)    Tier 2: native.py) │        │    ──► Parquet shard
+                                                       ▼        │
+  ┌─────────────────────────── ONE KERNEL (Linux 7.0) ──────────┴─────────────┐
+  │  guest runner (Rust, static, guest/): builds the topology, runs traffic,  │
+  │  runs the policy, drains records to files                                 │
+  │                                                                           │
+  │   [snd netns]  ── veth ──  [path netns]  ── veth ──  [rcv netns]          │
+  │   TCP sender               sch_mmlink x2             TCP receiver         │
+  │   (cubic | bbr |           (Mahimahi link +                               │
+  │    tcp_agent)               delay, each way)                              │
+  │        │                         │                                        │
+  │   expl_tcpobs ─────────────► expl_rec ◄────── tcp_agent actions           │
+  │   (per-ACK state)           (record ring, /dev/expl_rec)                  │
+  └───────────────────────────────────────────────────────────────────────────┘
+```
+
+| Part | Where | Responsibility |
+|---|---|---|
+| Specs and campaigns | `src/expliccit_env/spec.py`, `campaign.py` | What to run: path (trace, delay, buffer), congestion control, duration, seed; grids and samples of Mahak's space. |
+| Launchers | `uml.py` (Tier 1), `native.py` (Tier 2) | Boot a UML guest in virtual time, or run on a native host as root. |
+| Guest runner | `guest/` (Rust) | Inside the kernel: namespaces, qdiscs, bulk TCP pair, ONNX policy loop, record collection. |
+| Link model | `kernel/modules/sch_mmlink.c` | The bottleneck: Mahimahi's `mm-link` + `mm-delay`, as a qdisc. |
+| Observation | `kernel/modules/expl_tcpobs.c` | Sender state at every ACK, for any congestion control. |
+| Agent controllers | `kernel/modules/tcp_agent.c` | `agent` (Sage-style) and `agent_reno` (Orca-style) driven by a policy. |
+| Records | `kernel/modules/expl_rec.c`, `expliccit_rec.h` | One ring, one sequence of events; the only kernel-to-host data path. |
+| Decode, labels, metrics | `records.py`, `labels.py`, `mahimahi.py`, `episode.py` | Validate records, derive ground truth, compute Mahak's metrics. |
+| Datasets | `dataset.py` | Parquet shards joined on `episode_id`. |
+| Kernel and Mahimahi | `third_party/linux`, `third_party/mahimahi` | Vendored sources; our changes are separate commits. |
+
+### Two tiers, one runner
 
 | | Tier 1 | Tier 2 |
 |---|---|---|
-| Kernel | User-Mode Linux 7.0, `time-travel=inf-cpu` | native Linux 7.0 (Ubuntu 26.04) |
-| Time | virtual: CPU work is free, runs are bit-reproducible per seed | real |
-| Privileges | none (no root, no KVM): laptops, Slurm, GitHub Actions | root |
-| Use | datasets, Mahak maps, CI | calibration, final numbers |
-| Status | built and tested here | code written, **not yet run** (needs a 7.0 host) |
+| Kernel | User-Mode Linux 7.0, `time-travel=inf-cpu` | native Linux 7.0 (Ubuntu 26.04 LTS) |
+| Time | virtual: CPU work is free | real |
+| Privileges | none: laptops, Slurm (no root, no KVM), GitHub Actions | root |
+| Role | datasets, Mahak maps, CI | calibration, final numbers |
 
-Both tiers run the same static guest runner (`guest/`, Rust) and the same
-kernel modules (`kernel/modules/`):
+Both tiers run the same runner binary and the same modules; only the launcher
+differs.
 
-- `sch_mmlink`: a qdisc that is one direction of `mm-delay D mm-link TRACE`
-  with a droptail buffer, a port of Mahimahi's `LinkQueue` checked event for
-  event against an independent Python port;
-- `expl_rec`: the record ring every module reports into;
-- `expl_tcpobs`: per-ACK sender observations from the `tcp:tcp_probe`
-  tracepoint, for any congestion control;
-- `tcp_agent`: congestion controls driven by a userspace policy
-  (`agent`: Sage-style, `agent_reno`: Orca-style), used to run ONNX policies
-  in closed loop.
+## Guarantees, and how to check them
 
-Stock Cubic, BBRv1 and Reno run unmodified.
+These are the properties the system is built around. Each has a check you can
+run; a change that weakens one should say so in its commit message.
 
-## Quick start (Tier 1)
+1. **Real kernel TCP, unmodified congestion control.** Cubic, BBRv1 and Reno
+   are the kernel's own. Every change to the kernel is a separate commit on
+   top of the unmodified import: `git diff e8eadca -- third_party/linux`
+   (today: HZ set to 1000, and seeded randomness for reproducibility).
+2. **The link model is Mahimahi's.** The kernel's arrivals, drops, departures
+   and opportunities equal an independent Python port of Mahimahi's
+   `LinkQueue`, event for event:
+   `pytest tests/test_uml.py -k mahimahi_oracle`.
+3. **Mahak's numbers are Mahak's.** Trace generation matches Mahak's
+   `helper.py` bit for bit, and metrics match its Perl `mm-th-delay` exactly:
+   `pytest tests/test_mahimahi.py`.
+4. **Tier 1 is reproducible.** Same build, spec and seed give byte-identical
+   records: `pytest tests/test_uml.py -k bit_identical`.
+5. **No silent data.** An episode that times out, overflows a buffer it must
+   not, drops records, or fails validation becomes a row with
+   `status = "failed"` and a reason, never metrics or labels.
+6. **Provenance.** Every episode row names the kernel source tree hash,
+   kernel config hash, repository commit, tier and seed.
+7. **The mRTT trap is explicit.** Mahak's "mRTT" is a one-way delay (base RTT
+   is twice it). A spec says `{"mahak_compat_mrtt_ms": 20}` or
+   `{"base_rtt_ms": 40}` (the same path) and cannot say both.
 
-Needs: x86_64 Linux, gcc, make, flex, bison, bc, libelf-dev, musl-tools,
-perl, rustup, uv.
+Run all checks at once (Tier 1 tests need a build, see below):
 
-    scripts/build-uml.sh build/uml          # UML 7.0 from third_party/linux (~2 min, 4 cores)
-    scripts/build-guest.sh build/uml        # modules, static runner, rootfs
+    EXPLICCIT_UML_DIR=build/uml uv run pytest -q
+
+CI runs the same on every push (`.github/workflows/ci.yml`).
+
+## Status
+
+| Area | State |
+|---|---|
+| Tier 1: build, link model, observations, records, datasets, campaigns, CLI | done, tested (35 tests) |
+| Agent controllers with ONNX policies, closed loop | done, tested |
+| Mahak metrics and trace generation | done, matched to the originals |
+| Slurm array scripts | generated and checked locally; not yet submitted to a cluster |
+| Tier 2 native mode | written, **not run** (needs an Ubuntu 26.04 / Linux 7.0 host) |
+| Cross-tier fidelity study, real-Mahimahi reference runs | not started (need Tier 2) |
+| BBRv3 | not started |
+
+Measured speed: 8x to 53x real time per core in Tier 1, about 5400 twenty-second
+episodes per core-hour on Mahak's ICNP'25 space; about 2.5 MB of Parquet per
+episode. Details and open items: `docs/validation.md`.
+
+## Running it
+
+Tier 1 needs x86_64 Linux with gcc, make, flex, bison, bc, libelf-dev,
+musl-tools, perl, rustup and uv; no root.
+
+    scripts/build-uml.sh build/uml          # UML 7.0 from third_party/linux
+    scripts/build-guest.sh build/uml        # modules, runner, guest root
     uv sync
 
-    # one episode into a one-shard dataset
+    # one episode
     uv run expliccit episode examples/episode-mahak.json out/one --build build/uml
 
     # a campaign: plan once, run shards anywhere
     uv run expliccit campaign plan examples/campaign-smoke.json out/smoke
     uv run expliccit campaign run out/smoke --build build/uml --workers 4
-    uv run expliccit campaign status out/smoke
+
+    # a Slurm array job (one shard per task, one guest per core)
+    uv run expliccit campaign slurm out/smoke --build build/uml --shards 200 --cpus-per-task 32
 
     # Mahak's oracle_query(X, metric, CC), on Tier 1
     uv run expliccit mahak-query --build build/uml --cc bbr --metric first_power \
         --buffer 8000 --mrtt 4 --bw 70 --step 0.2
 
-On a Slurm cluster (unprivileged x86_64 nodes), write an array script:
+Tier 2: `sudo scripts/tier2-setup.sh build/tier2` on the host, then add
+`--tier native --build build/tier2`.
 
-    uv run expliccit campaign slurm out/big --build build/uml --shards 200 --cpus-per-task 32
+Each dataset shard holds `episodes.parquet` (one row per episode: parameters,
+status, metrics, provenance), `obs.parquet` (sender observations),
+`labels.parquet` (ground truth, row for row with `obs`), `link_events.parquet`
+and `link_opp.parquet` (the full bottleneck log, so new labels can be derived
+later without rerunning), and `agent_action.parquet`.
 
-Each array task runs one shard with one UML guest per core and writes its own
-Parquet files, so failed or preempted tasks are just rerun.
+## Working conventions
 
-## The mRTT trap
+- **Commits** go directly to `main`, in Conventional Commits form, each ending
+  with the single trailer
+  `Co-Authored-By: Joe Fang <25814618+MinecraftFuns@users.noreply.github.com>`.
+  No session ids in commit messages. Force-push is disabled; history is never
+  rewritten.
+- **Kernel changes** are their own commits under `third_party/linux`;
+  `scripts/check-kernel.sh` style-checks them and our modules.
+- **Agent skills** come from [BTreeMap/SKILLs](https://github.com/BTreeMap/SKILLs),
+  a submodule at `.github/skills` aliased as `.claude/skills` and
+  `.agents/skills`. `.github/workflows/sync-skills.yml` (installed verbatim
+  from that repository) fast-forwards it twice a day. Clone with
+  `git clone --recurse-submodules`.
+- Instructions for coding agents: `AGENTS.md` (also `CLAUDE.md`).
 
-Mahak passes its "mRTT" straight to `mm-delay`, which delays each direction by
-that much, so Mahak's base RTT is twice its mRTT. Specs say which one they
-mean, and cannot say both:
+## Where the details are
 
-    "delay": {"mahak_compat_mrtt_ms": 20}   # Mahak semantics: 20 ms each way, 40 ms RTT
-    "delay": {"base_rtt_ms": 40}            # the same path, said explicitly
-
-Mahak's `delay` and `first_power` metrics divide by the one-way value, and so
-do ours, so Mahak maps are reproduced like for like.
-
-## What a dataset contains
-
-`campaign run` writes `shards/<k>/` with zstd Parquet tables joined on
-`episode_id` (see `src/expliccit_env/dataset.py`):
-
-- `episodes.parquet`: parameters, status or the reason for failure, Mahak
-  metrics, provenance (kernel git tree hash, config hash, repo commit, tier);
-- `obs.parquet`: sender state at every incoming segment (cwnd, RTTs, delivery
-  rate sample, losses, pacing rate and more; see `expliccit_rec.h`);
-- `labels.parquet`: ground truth aligned row for row with `obs` (capacity,
-  bottleneck queue, exact queueing delay, base RTT, buffer);
-- `link_events.parquet`, `link_opp.parquet`: every bottleneck arrival, drop,
-  departure and delivery opportunity, so new labels can be derived later
-  without rerunning anything;
-- `agent_action.parquet`: actions applied by `tcp_agent`.
-
-A failed episode is a row with `status = "failed"` and a reason. No metric is
-ever computed from an incomplete or invalid run.
-
-## Extending
-
-- **A new candidate LCF (label).** Add a pure function to
-  `src/expliccit_env/labels.py` that maps an episode's records and constants
-  to one value per observation row, and a column in `labels_table`. Existing
-  datasets keep `link_events` and `link_opp`, so the new label can be
-  recomputed from them without rerunning episodes.
-- **A new trace shape.** Add a variant next to `MahakStep` in `spec.py` with a
-  `timestamps()` method returning Mahimahi trace timestamps; the kernel only
-  ever sees per-ms counts. `TraceFile` already accepts any Mahimahi trace
-  (pinned by sha256).
-- **A learned controller.** Export it to ONNX with the `tcpinfo-v1` contract
-  (`src/expliccit_env/policy.py`: input float32 [1, 8], output float32
-  [1, 2] = cwnd packets, pacing Mbit/s) and use
-  `{"kind": "agent", "mode": "hold" | "reno", "policy": {"path": ..., "sha256": ...}}`
-  as the spec's `cc`.
-- **A new in-kernel congestion control.** Build it into the UML kernel
-  (`kernel/uml.config`) or as a module next to `tcp_agent`, then add its name
-  to `StockCC` in `spec.py`.
-- **A kernel change.** Commit it under `third_party/linux` as its own commit;
-  `scripts/check-kernel.sh` checks every such commit, and
-  `git diff e8eadca -- third_party/linux` lists them all. Record ABI changes go
-  in `kernel/modules/expliccit_rec.h` together with `guest/src/recorder.rs`
-  and `src/expliccit_env/records.py` (bump `EXPL_REC_ABI`;
-  `tests/test_records_abi.py` checks the layouts agree).
-
-## Documentation
-
-- `docs/architecture.md`: components, data flow, ABIs, the link model's exact
-  semantics, decisions and their reasons.
-- `docs/m0-report.md`: feasibility measurements (UML build, speed, memory,
-  determinism, BPF struct_ops, HZ).
-- `docs/validation.md`: what has been validated, how, with exact commands, and
-  what is still unrun.
-- `kernel/modules/README.md`, `third_party/README.md`.
-
-## Repository layout
-
-    kernel/uml.config, kernel/modules/   Tier 1 kernel config, our modules and ABIs
-    guest/                               the episode runner (Rust, static musl)
-    src/expliccit_env/                   host side: specs, launch, decode, labels, datasets, CLI
-    scripts/                             build and check scripts
-    tests/                               pytest; UML tests need EXPLICCIT_UML_DIR
-    third_party/linux, third_party/mahimahi
-    tools/m0/, tools/ci/                 feasibility probes, CI helpers
+| Document | Contents |
+|---|---|
+| `docs/architecture.md` | Data flow and trust boundaries, exact link-model semantics, record ABI, time and determinism, decisions D1 to D13, known limits, how to extend |
+| `docs/validation.md` | Every check that ran, with commands and results, and what has not run |
+| `docs/m0-report.md` | Feasibility measurements: UML build, speed, memory, determinism, BPF |
+| `kernel/modules/README.md` | The kernel modules and their ABIs |
+| `third_party/README.md` | Vendored sources and our patches on them |
