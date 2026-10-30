@@ -1,20 +1,21 @@
 """Campaigns: plan once, run shards anywhere (locally, Slurm array tasks, CI).
 
 A shard is the episodes whose index is congruent to k modulo the shard
-count, run by a bounded local process pool (one UML guest per worker
-core) and written by one ShardWriter. Shards are independent and
+count, run by a local process pool (one UML guest per worker core) with a
+bounded submission window, and written by one ShardWriter. Shards are independent and
 idempotent, so a failed or preempted array task is simply rerun.
 """
 
 from __future__ import annotations
 
+import itertools
 import json
 import multiprocessing
 import os
 import shlex
 import tempfile
 from collections.abc import Iterator
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -111,11 +112,22 @@ def run_shard(
                 max_workers=max(1, workers), mp_context=multiprocessing.get_context("forkserver")
             ) as pool,
         ):
-            # map() keeps at most `workers` episodes in flight plus results
-            # waiting for the single writer, and preserves episode order.
-            for outcome in pool.map(_run, jobs):
-                writer.add(outcome)
-                yield outcome
+            # At most 2 x workers episodes are submitted at once, and each is
+            # written as soon as it finishes (rows carry episode_id, so order
+            # does not matter). Memory stays bounded by the window, not by the
+            # shard size, even when one episode is slow.
+            todo = iter(jobs)
+            window = 2 * max(1, workers)
+            pending = {pool.submit(_run, j) for j in itertools.islice(todo, window)}
+            while pending:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for future in done:
+                    outcome = future.result()
+                    writer.add(outcome)
+                    yield outcome
+                pending |= {
+                    pool.submit(_run, j) for j in itertools.islice(todo, window - len(pending))
+                }
 
 
 def slurm_script(
