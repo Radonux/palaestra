@@ -7,6 +7,7 @@
 #   modules/*.ko   the expliccit kernel modules, built against that kernel
 #   rootfs/        the guest root: /init (the static runner), /modules, and
 #                  empty mount points; booted read-only through hostfs
+# KERNEL_SRC must match the one given to build-uml.sh, if any.
 set -euo pipefail
 
 BUILD="${1:?usage: build-guest.sh UML_BUILD_DIR}"
@@ -20,7 +21,7 @@ mods="$BUILD/modules"
 rm -rf "$mods"
 mkdir -p "$mods"
 cp "$HERE"/kernel/modules/{Kbuild,*.c,*.h} "$mods/"
-make -s -C "$HERE/third_party/linux" O="$BUILD" ARCH=um M="$mods" W=1 modules
+make -s -C "${KERNEL_SRC:-$HERE/third_party/linux}" O="$BUILD" ARCH=um M="$mods" W=1 modules
 
 target=x86_64-unknown-linux-musl
 cargo build --quiet --release --locked --manifest-path "$HERE/guest/Cargo.toml" --target "$target"
