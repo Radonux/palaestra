@@ -1,1 +1,1 @@
-obj-m := expl_rec.o sch_mmlink.o expl_tcpobs.o
+obj-m := expl_rec.o sch_mmlink.o expl_tcpobs.o tcp_agent.o

@@ -15,7 +15,7 @@
 
 #include <linux/types.h>
 
-#define EXPL_REC_ABI 1
+#define EXPL_REC_ABI 2
 #define EXPL_REC_MAGIC 0x52504c45 /* "ELPR" little-endian */
 
 enum expl_rec_type {
@@ -26,6 +26,7 @@ enum expl_rec_type {
 	EXPL_REC_LINK_OPP = 5,
 	EXPL_REC_LINK_STATS = 6,
 	EXPL_REC_TCP_OBS = 7,
+	EXPL_REC_AGENT_ACTION = 8,
 };
 
 struct expl_rec_hdr {
@@ -165,6 +166,34 @@ struct expl_rec_tcp_obs {
 	__u64 bytes_retrans;
 	__u64 pacing_rate;
 	__u64 delivered_mstamp;
+};
+
+/*
+ * AGENT_ACTION: tcp_agent accepted an action written to /dev/expl_agent
+ *   (struct expl_agent_action). t_ns is the write time; the action takes
+ *   effect at each agent socket's next ACK. action_seq counts accepted
+ *   actions from 1.
+ */
+struct expl_rec_agent_action {
+	struct expl_rec_hdr hdr;
+	__u32 cwnd;
+	__u32 action_seq;
+	__u64 pacing_rate;
+};
+
+/*
+ * What a policy writes to /dev/expl_agent: exactly one struct per write().
+ * cwnd is in packets, 2..EXPL_AGENT_MAX_CWND; pacing_rate is in bytes per
+ * second, 0 meaning unpaced, at most EXPL_AGENT_MAX_PACING.
+ */
+#define EXPL_AGENT_ABI 1
+#define EXPL_AGENT_MAX_CWND 1048576U		/* 2^20 */
+#define EXPL_AGENT_MAX_PACING 1099511627776ULL	/* 2^40 */
+
+struct expl_agent_action {
+	__u32 abi;
+	__u32 cwnd;
+	__u64 pacing_rate;
 };
 
 #endif /* _EXPLICCIT_REC_H */

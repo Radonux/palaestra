@@ -69,6 +69,7 @@ jobs:
             ~/.cargo/git
             guest/target
           key: rust-${{ runner.os }}-${{ hashFiles('guest/Cargo.lock', 'guest/rust-toolchain.toml') }}
+      - run: sudo apt-get update -q && sudo apt-get install -y -q musl-tools gcc-aarch64-linux-gnu
       - run: rustup toolchain install
       - run: cargo fmt --check
       - run: cargo clippy --locked --release --target x86_64-unknown-linux-musl -- -D warnings
@@ -90,7 +91,7 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - run: sudo apt-get update -q && sudo apt-get install -y -q flex bison bc libelf-dev
+      - run: sudo apt-get update -q && sudo apt-get install -y -q flex bison bc libelf-dev musl-tools
       - run: scripts/check-kernel.sh
       - run: scripts/build-uml.sh build/uml
       - run: cd guest && rustup toolchain install
@@ -119,7 +120,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-      - run: sudo apt-get update -q && sudo apt-get install -y -q flex bison bc libelf-dev
+      - run: sudo apt-get update -q && sudo apt-get install -y -q flex bison bc libelf-dev musl-tools
       - name: unpack mainline and apply our kernel patches
         env:
           DEST: ${{ runner.temp }}/linux-mainline

@@ -22,7 +22,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from expliccit_env import mahimahi as mm
-from expliccit_env.guest_plan import GuestPlan, LinkPlan
+from expliccit_env.guest_plan import AgentPlan, GuestPlan, LinkPlan
 
 SPEC_VERSION: Final = 1
 U64: Final = 2**64
@@ -111,7 +111,35 @@ class StockCC(_Frozen):
     name: Literal["cubic", "bbr", "reno"]
 
 
-type CongestionControl = Annotated[StockCC, Field(discriminator="kind")]
+class OnnxPolicy(_Frozen):
+    """An exported policy file, pinned by content hash (contract: policy.py)."""
+
+    path: Path
+    sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+    def read(self) -> bytes:
+        raw = self.path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != self.sha256:
+            raise ValueError(f"{self.path}: sha256 does not match the spec")
+        return raw
+
+
+class AgentCC(_Frozen):
+    """A policy driving tcp_agent. "hold" is Sage-style (the policy sets cwnd
+    and pacing outright); "reno" is Orca-style (the policy sets cwnd, Reno
+    evolves it until the next action; Orca proper uses Cubic as the base)."""
+
+    kind: Literal["agent"] = "agent"
+    mode: Literal["hold", "reno"] = "hold"
+    policy: OnnxPolicy
+    interval_ms: PositiveInt = 20
+
+    @property
+    def name(self) -> str:
+        return "agent" if self.mode == "hold" else "agent_reno"
+
+
+type CongestionControl = Annotated[StockCC | AgentCC, Field(discriminator="kind")]
 
 
 class EpisodeSpec(_Frozen):
@@ -143,12 +171,18 @@ class EpisodeSpec(_Frozen):
         def link(ts: mm.I64) -> LinkPlan:
             return LinkPlan(delay, mm.dense_counts(ts), buf.packets, buf.bytes)
 
+        agent = (
+            AgentPlan(self.cc.policy.read(), self.cc.interval_ms)
+            if isinstance(self.cc, AgentCC)
+            else None
+        )
         return GuestPlan(
             duration_ms=self.duration_ms,
             cc=self.cc.name,
             downlink=link(down_ts),
             uplink=link(up_ts),
             sysctls=tuple(sorted(self.sysctls.items())),
+            agent=agent,
         )
 
 

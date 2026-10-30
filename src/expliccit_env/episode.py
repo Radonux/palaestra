@@ -46,6 +46,7 @@ class GuestEpisode(_Strict):
     ring_dropped: int
     softnet_dropped: int
     netdev_max_backlog: str
+    agent_actions: int
 
 
 class GuestResult(_Strict):
@@ -254,6 +255,7 @@ def run_episode(
             "hz": rec.hz,
             "bytes_sent": g.bytes_sent,
             "bytes_received": g.bytes_received,
+            "agent_actions": g.agent_actions,
             "n_obs": rec.tcp_obs.size,
             "n_link_events": link_events.num_rows,
             **_metrics(spec, rec, g, trace),
@@ -266,6 +268,7 @@ def run_episode(
                 "labels": lab,
                 "link_events": link_events,
                 "link_opp": _columns(rec.link_opp, eid),
+                "agent_action": _columns(rec.agent_action, eid),
             },
         )
     finally:

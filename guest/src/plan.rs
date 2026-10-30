@@ -6,7 +6,7 @@
 use crate::sys::{Context, Result, fail};
 use serde::Deserialize;
 use std::num::NonZeroU32;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub const PLAN_VERSION: u32 = 1;
 /// Largest trace that fits one netlink attribute next to the other options.
@@ -26,6 +26,14 @@ struct RawPlan {
     downlink: RawLink,
     uplink: RawLink,
     sysctls: Vec<(String, String)>,
+    agent: Option<RawAgent>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawAgent {
+    policy_file: String,
+    interval_ms: u32,
 }
 
 #[derive(Deserialize)]
@@ -54,6 +62,13 @@ pub struct Sysctl {
     pub value: String,
 }
 
+/// Who decides cwnd: the kernel's own congestion control, or a policy
+/// driving tcp_agent ("agent" or "agent_reno") through /dev/expl_agent.
+pub enum Control {
+    Stock,
+    Agent { policy: PathBuf, interval_ms: NonZeroU32 },
+}
+
 pub struct Plan {
     pub duration_ms: NonZeroU32,
     pub start_offset_ms: u32,
@@ -63,6 +78,7 @@ pub struct Plan {
     pub downlink: Link,
     pub uplink: Link,
     pub sysctls: Vec<Sysctl>,
+    pub control: Control,
 }
 
 impl Plan {
@@ -78,7 +94,18 @@ impl Plan {
         if !valid_cc {
             return fail(format!("invalid congestion control name {:?}", raw.cc));
         }
+        let is_agent = matches!(raw.cc.as_str(), "agent" | "agent_reno");
+        let control = match (is_agent, raw.agent) {
+            (false, None) => Control::Stock,
+            (true, Some(a)) => Control::Agent {
+                policy: dir.join(plain_file_name(&a.policy_file)?),
+                interval_ms: nonzero(a.interval_ms, "agent.interval_ms")?,
+            },
+            (true, None) => return fail(format!("cc {} needs an agent section", raw.cc)),
+            (false, Some(_)) => return fail(format!("cc {} takes no agent section", raw.cc)),
+        };
         Ok(Plan {
+            control,
             duration_ms: nonzero(raw.duration_ms, "duration_ms")?,
             start_offset_ms: raw.start_offset_ms,
             cc: raw.cc,
@@ -91,19 +118,22 @@ impl Plan {
     }
 }
 
+/// A file name inside the plan directory: no separators, no leading dot.
+fn plain_file_name(name: &str) -> Result<&str> {
+    let plain = !name.is_empty()
+        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+        && !name.starts_with('.');
+    if plain { Ok(name) } else { fail(format!("{name:?} must be a plain file name")) }
+}
+
 fn nonzero(v: u32, what: &str) -> Result<NonZeroU32> {
     NonZeroU32::new(v).map_or_else(|| fail(format!("{what} must be nonzero")), Ok)
 }
 
 impl Link {
     fn load(dir: &Path, raw: RawLink) -> Result<Link> {
-        let plain_name = !raw.trace_file.is_empty()
-            && raw.trace_file.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
-            && !raw.trace_file.starts_with('.');
-        if !plain_name {
-            return fail(format!("trace_file {:?} must be a plain file name", raw.trace_file));
-        }
-        let trace = std::fs::read(dir.join(&raw.trace_file)).ctx(format!("reading {}", raw.trace_file))?;
+        let trace = std::fs::read(dir.join(plain_file_name(&raw.trace_file)?))
+            .ctx(format!("reading {}", raw.trace_file))?;
         if trace.len() < 2 || trace.len() > MAX_TRACE_BYTES {
             return fail(format!("trace has {} bytes, need 2..={MAX_TRACE_BYTES}", trace.len()));
         }

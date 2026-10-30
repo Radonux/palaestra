@@ -9,6 +9,7 @@
         labels.parquet       ground-truth labels aligned 1:1 with obs rows
         link_events.parquet  bottleneck arrivals, drops, departures
         link_opp.parquet     processed delivery opportunities per ms
+        agent_action.parquet actions accepted by tcp_agent (agent episodes)
         DONE                 written last; a shard without it is incomplete
 
 Tables share ``episode_id``. Files are written as ``*.tmp`` and renamed on
@@ -30,7 +31,7 @@ import pyarrow.parquet as pq
 from expliccit_env.episode import EpisodeOk, EpisodeOutcome
 
 DATASET_VERSION: Final = 1
-TABLES: Final = ("obs", "labels", "link_events", "link_opp")
+TABLES: Final = ("obs", "labels", "link_events", "link_opp", "agent_action")
 
 
 class ShardWriter:

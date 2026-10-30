@@ -7,7 +7,6 @@ EXPLICCIT_UML_DIR; skipped otherwise.
 from __future__ import annotations
 
 import json
-import os
 import shutil
 from pathlib import Path
 
@@ -24,14 +23,6 @@ from expliccit_env.uml import UmlBuild, run_guest
 from tests.perl_ref import run_perl
 
 pytestmark = pytest.mark.uml
-
-
-@pytest.fixture(scope="module")
-def build() -> UmlBuild:
-    path = os.environ.get("EXPLICCIT_UML_DIR")
-    if not path:
-        pytest.skip("set EXPLICCIT_UML_DIR to a built UML tree")
-    return UmlBuild.at(Path(path))
 
 
 def episode(
