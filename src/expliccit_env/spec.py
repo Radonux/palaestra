@@ -105,10 +105,12 @@ class PathSpec(_Frozen):
 
 
 class StockCC(_Frozen):
-    """An unmodified in-kernel congestion control."""
+    """An in-kernel congestion control: Cubic, BBRv1 (``bbr``) and Reno as
+    shipped in Linux 7.0, or Google's BBRv3 (``bbr3``, Tier 1 only: it needs
+    the core patches imported under third_party/linux)."""
 
     kind: Literal["stock"] = "stock"
-    name: Literal["cubic", "bbr", "reno"]
+    name: Literal["cubic", "bbr", "bbr3", "reno"]
 
 
 class OnnxPolicy(_Frozen):

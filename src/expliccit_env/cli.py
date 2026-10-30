@@ -160,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
     st.set_defaults(fn=_status)
 
     m = sub.add_parser("mahak-query", help="Mahak oracle_query on Tier 1: print one metric")
-    m.add_argument("--cc", required=True, choices=["cubic", "bbr", "reno"])
+    m.add_argument("--cc", required=True, choices=["cubic", "bbr", "bbr3", "reno"])
     m.add_argument("--metric", required=True, choices=["utilization", "first_power", "delay"])
     m.add_argument("--buffer", type=int, required=True, help="packets")
     m.add_argument("--mrtt", type=int, required=True, help="Mahak mRTT: ONE-WAY delay, ms")

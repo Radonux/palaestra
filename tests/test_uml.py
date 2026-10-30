@@ -75,7 +75,7 @@ def assert_matches_oracle(rec: Records, trace: mm.I64, buffer: int) -> None:
         assert kernel_opp == ev.opportunities
 
 
-@pytest.mark.parametrize("cc", ["cubic", "bbr"])
+@pytest.mark.parametrize("cc", ["cubic", "bbr", "bbr3"])
 def test_kernel_link_matches_mahimahi_oracle(build: UmlBuild, tmp_path: Path, cc: str) -> None:
     # 14 s crosses Mahak's 12 s capacity step (20 -> 4 Mbit/s) into a small buffer.
     rec, trace, result = episode(

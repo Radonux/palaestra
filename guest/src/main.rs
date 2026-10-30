@@ -126,12 +126,17 @@ fn boot() -> Result<()> {
 }
 
 fn load_modules(dir: &Path, plan: &Plan) -> Result<()> {
-    let mods = [
+    let mut mods = vec![
         ("expl_rec.ko", format!("ring_mib={}", plan.ring_mib)),
         ("sch_mmlink.ko", String::new()),
         ("expl_tcpobs.ko", format!("mark={}", plan.obs_mark)),
         ("tcp_agent.ko", String::new()),
     ];
+    // BBRv3 is loaded only when an episode uses it, so every other episode
+    // runs without any BBRv3 code in the kernel (docs/validation.md).
+    if plan.cc == "bbr3" {
+        mods.push(("tcp_bbr3.ko", String::new()));
+    }
     for (name, params) in mods {
         match sys::finit_module(&dir.join(name), &params) {
             Ok(()) => {}

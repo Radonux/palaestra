@@ -33,4 +33,6 @@ rm -rf "$root"
 mkdir -p "$root"/{proc,sys,dev,in,out,modules}
 install -m 0755 "$HERE/guest/target/$target/release/expliccit-guest" "$root/init"
 install -m 0644 "$mods"/*.ko "$root/modules/"
+# BBRv3 is an in-tree module of the kernel build (kernel/uml.config).
+install -m 0644 "$BUILD/net/ipv4/tcp_bbr3.ko" "$root/modules/"
 echo "guest ready in $root"
