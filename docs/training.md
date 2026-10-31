@@ -112,6 +112,26 @@ queueing delay, drop fraction, power and goodput. Read utilization next to
 drops: a policy that holds its window above what the path holds keeps the
 link full while the queue drops most of what it sends.
 
+### Oracle and patched policies
+
+A policy can read the path's true state at each step (the contract's
+`truth` input: the seven LCFs, computed live in the guest and equal to the
+labels). Two uses:
+
+- **Oracle (arm A1):** `"net2": {"inputs": "true_lcfs"}` trains net2 on
+  the labels, and the exported `policy.onnx` takes its LCFs from `truth`.
+  Comparing it with the same net2 on net1's beliefs splits a policy's loss
+  into what the LCF set costs and what net1's errors cost.
+- **Patch:** some LCFs from `truth`, the rest from net1, to test whether one
+  wrong belief explains a fault (expliCCit's repair experiment).
+  `fit.policy_graph(..., truth={"capacity_bps"})` builds one;
+  `train import-expliccit ... --truth capacity_bps` patches expliCCit's
+  released policy.
+
+The truth passes through net1's LCF scaler exactly as net2's training
+targets did, so a patched belief is what a perfect net1 would have said; for
+an interval net1, the centre and both bounds become the truth.
+
 ## 4. expliCCit's released models
 
 expliCCit's code is not in this repository and must not be. With a local

@@ -253,6 +253,28 @@ evaluation campaign of the four teachers and ten policies on 18 paths for
 policy, and only cloning among the offline net2 keeps its drops near the
 teachers'.
 
+## Ran: the path's true state as a policy input (M13)
+
+`tests/test_truth.py`, in UML:
+
+- On a 14 s BBRv1 episode with a capacity step (20 to 4 Mbit/s), a
+  60-packet buffer, random loss in both directions, and UDP and TCP cross
+  traffic, the truth the guest computed at each of 1,378 steps equals the
+  host's labels for all seven LCFs, bit for bit and NaN for NaN. Steps fall
+  on whole milliseconds, the instants of delivery opportunities: on a rerun,
+  753 of the 1,378 steps had a departure at exactly their nanosecond, and
+  the truth still matched, so the qdisc's events at an instant are drained
+  before the step reads them.
+- A policy that reads only the true queue acts, at every step, exactly as
+  the float32 function of the truth the step recorded.
+- A net2 on the true LCFs, exported as the trainer exports it, acts in the
+  guest as torch computes it from the recorded truth (within 1e-6).
+
+`tests/test_train.py`: a patched graph replaces exactly the named LCFs (the
+centre and both bounds for an interval net1), an oracle graph ignores the
+message, and NaN in the truth is zeroed as in net2's training targets;
+`tests/test_records_abi.py` pins the step record's new layout.
+
 ## Ran: tuning net2 (M12)
 
 `tests/test_train.py`: IQL prefers the better of two logged actions

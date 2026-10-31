@@ -152,7 +152,7 @@ fraction.
 | Exploration held over several steps, one decision per RTT | not yet |
 | Interval net1 (centre and 90% interval per LCF, conformally calibrated) | yes; held-out coverage 0.84 to 0.91, except 0.76 for mean queueing delay |
 | The flow's drop fraction per step (label) and per episode (summary) | yes |
-| Ground truth or patched LCFs fed to a running policy (arms A0, A1, repair) | not yet |
+| True or patched LCFs fed to a running policy (arm A1, repair) | yes: the policy contract's `truth` input, equal to the labels at every step; the full true state beyond the seven LCFs (arm A0) not yet |
 | net1's beliefs logged during closed loop | not yet |
 | Raw-signal net2 (arms A4, A5), LCF subsets | not yet |
 | Training sweeps over seeds | run once, with a harness kept outside the repository (fitted to one dataset) |

@@ -19,7 +19,7 @@ import numpy.typing as npt
 import torch
 from torch import nn
 
-from expliccit_env.policy import EXPLICCIT_OBS_COLS
+from expliccit_env.policy import EXPLICCIT_OBS_COLS, TRUTH_COLUMNS
 from expliccit_env.train.data import Split, Steps
 from expliccit_env.train.models import (
     NET1,
@@ -482,10 +482,30 @@ def _net1_module(spec: Net1Spec) -> nn.Module:
 
 
 def policy_graph(
-    net1: Net1, actor: nn.Module, action_max: float, action_decimals: int | None = None
+    net1: Net1,
+    actor: nn.Module,
+    action_max: float,
+    action_decimals: int | None = None,
+    *,
+    truth: frozenset[str] = frozenset(),
 ) -> PolicyGraph:
+    """The exported policy; the LCFs named in ``truth`` come from the
+    contract's "truth" input (policy.TRUTH_COLUMNS) instead of net1."""
     graph = PolicyGraph(net1.scaler, net1.net, net1.lcf_scaler, actor, action_max)
     graph.action_decimals = action_decimals
+    if truth:
+        missing = sorted(truth - set(net1.lcfs))
+        if missing or not set(net1.lcfs) <= set(TRUTH_COLUMNS):
+            raise ValueError(
+                f"cannot take {missing or sorted(truth)} from the truth input: net1's LCFs "
+                f"{list(net1.lcfs)} must all be among {list(TRUTH_COLUMNS)}"
+            )
+        graph.take_from_truth(
+            [TRUTH_COLUMNS.index(n) for n in net1.lcfs],
+            [LCF_UNITS[n][0] for n in net1.lcfs],
+            [n in truth for n in net1.lcfs],
+            3 if net1.intervals else 1,
+        )
     return graph.eval()
 
 

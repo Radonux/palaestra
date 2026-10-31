@@ -35,7 +35,7 @@ from expliccit_env.spec import (
 from expliccit_env.steps import StepError, Steps, load_steps, step_table
 from expliccit_env.uml import UmlBuild, run_guest
 
-RESULT_VERSION: Final = 3
+RESULT_VERSION: Final = 4
 _SKIP_COLUMNS: Final = frozenset({"type", "len", "pad"})
 
 
@@ -65,7 +65,7 @@ class GuestEpisode(_Strict):
 class GuestResult(_Strict):
     """result.json written by the guest runner (trust boundary)."""
 
-    result_version: Literal[3]
+    result_version: Literal[4]
     status: Literal["ok", "failed"]
     error: str | None
     kernel_release: str

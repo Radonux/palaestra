@@ -160,13 +160,25 @@ column 1 (Sage's nominal capacity, from its command line) and column 75
 (its reward, which uses that capacity).
 
 The policy contract (`src/expliccit_env/policy.py`): an ONNX graph takes the
-full message as `obs` float32 [1, 77], plus an optional recurrent `state`
-[1, S] that the guest feeds back from the graph's second output, and returns
-a, the log2 of the window multiplier. The graph selects its columns and
+full message as `obs` float32 [1, 78] (Sage's 77 plus the min RTT expliCCit
+added), plus an optional recurrent `state` [1, S] that the guest feeds back
+from the graph's second output, and an optional `truth` [1, 7], and returns
+a, the log2 of the window multiplier. Inputs are matched by name. The graph selects its columns and
 scales them itself, so a new network design needs no guest change. The
 window follows Sage: a precise accumulator from 10 packets, multiplied by
 2^a, rounded up and kept in [4, 20000]; pacing is cwnd * mss / srtt,
 refreshed every step. |a| > 8 or a non-finite a fails the episode.
+
+`truth` is the path's true state at the step: the seven LCFs of
+`policy.TRUTH_COLUMNS`, which an oracle policy (net2 on the true LCFs) or a
+patched one (some of net1's beliefs replaced) reads. `guest/src/truth.rs`
+computes it live, with the labels' definitions: the recorder's drain of the
+record ring is shared with the step loop, which drains it at its own
+instant, so every link record emitted by then counts. The value is causal
+(the queue after the last event at or before the step, sums over the
+trailing 100 trace ms), its integer sums are exact and divided in the host's
+order, and it equals the labels the step is stored with, bit for bit and NaN
+for NaN (`tests/test_truth.py`). Every step records it in `steps.bin`.
 
 Column 76 is the window multiplier since the previous step: the policy's
 2^a, or under a stock controller the observed change of the window (Sage's
@@ -233,6 +245,7 @@ where the brief did not specify (its later sections were missing).
 | D20 | Sage's step is ported into the guest, and is the only implementation | Training data and deployment then use the same code, with no train/serve skew, and the message equals Sage's, so Sage's and expliCCit's column choices apply unchanged. Rejected: computing features on the host from per-ACK records (a second implementation for deployment), and feeding raw `TCP_INFO` to the graph (it would have to reimplement Sage's windows in ONNX). The raw `TCP_INFO` of every step is kept in `steps.bin` for other feature designs. |
 | D21 | One policy contract: the whole message in, the graph selects and scales, optional recurrent state | Any network design (MLP, recurrent, a different column set, uncertainty heads) runs without guest changes. Replaced `tcpinfo-v1` (8 features in, absolute cwnd and pacing out), which no policy used. |
 | D22 | The trainer lives here, on PyTorch, with architectures and algorithms chosen by name, and exports one ONNX graph per policy | A network redesign is a registry entry, not a new pipeline, and the scaling travels inside the graph, so deployment needs no scaler files. expliCCit's layer layout and parameter names are kept, so its released checkpoints load unchanged (from a local copy; its code is not in this repository). Splits are by path, never by row, so held-out numbers are not training accuracy. Default scaling is robust (quantile clipping, then standardization); TD3+BC is the default net2 objective, with expliCCit's own kept for comparison. |
+| D23 | The truth a policy can read is computed live in the guest from the link records, with the labels' definitions, and checked equal to them | Arms that feed true or patched LCFs to a running policy (oracle, repair) need ground truth during the episode, and a policy must see exactly what training called the truth. Rejected: an independent estimate in the kernel module (a second definition), and replaying an episode with the truth injected (the closed loop would change the trajectory). |
 
 ## Known ceilings (`ponytail` markers in the code)
 

@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from expliccit_env import campaign, mahak
 from expliccit_env.dataset import TABLES, ShardWriter
 from expliccit_env.episode import EpisodeOk, run_episode
+from expliccit_env.policy import TRUTH_COLUMNS
 from expliccit_env.spec import STOCK_NAMES, CampaignSpec, EpisodeSpec
 from expliccit_env.uml import UmlBuild
 
@@ -170,7 +171,9 @@ def _import_expliccit(a: argparse.Namespace) -> int:
     from expliccit_env.train import run  # noqa: PLC0415
 
     data = [Path(d) for d in a.data]
-    report = run.import_expliccit(Path(a.models), Path(a.out), data, as_deployed=a.as_deployed)
+    report = run.import_expliccit(
+        Path(a.models), Path(a.out), data, as_deployed=a.as_deployed, truth=frozenset(a.truth)
+    )
     print(json.dumps(report, indent=2))
     return 0
 
@@ -288,6 +291,13 @@ def main(argv: list[str] | None = None) -> int:
         "--as-deployed",
         action="store_true",
         help="round beliefs and actions as expliCCit's deployed controller does",
+    )
+    ti.add_argument(
+        "--truth",
+        nargs="*",
+        default=[],
+        choices=TRUTH_COLUMNS,
+        help="LCFs to take from the guest's live truth instead of net1 (a patch)",
     )
     ti.set_defaults(fn=_import_expliccit)
 

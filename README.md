@@ -44,7 +44,7 @@ Implementation detail lives in `docs/`.
 | Specs and campaigns | `src/expliccit_env/spec.py`, `campaign.py` | What to run: path (trace, delay, buffer, random loss), congestion control, cross traffic, duration, seed; grids and samples of Mahak's space, each under a list of loss and cross-traffic conditions. |
 | Launcher | `uml.py` | Boot a UML guest in virtual time (`time-travel=inf-cpu`), seeded, under a wall-clock timeout. |
 | Guest runner | `guest/` (Rust) | Inside the kernel: namespaces, qdiscs, bulk TCP pair, cross-traffic flows, Sage's step loop and the ONNX policy, record collection. |
-| Policy contract | `policy.py`, `guest/src/step.rs` | `sage-v1`: Sage's 77-value state message in (a port of `sage.cc`), log2 of the window multiplier out, optional recurrent state; the graph picks and scales its own inputs. |
+| Policy contract | `policy.py`, `guest/src/step.rs` | `sage-v1`: Sage's 77-value state message in (a port of `sage.cc`), log2 of the window multiplier out, optional recurrent state, optional true state of the path (`guest/src/truth.rs`, for oracle and patched policies); the graph picks and scales its own inputs. |
 | Step data | `steps.py` | Each step with the labels at its instant, Sage's reward from the exact capacity, and the action taken: net1 and net2 training rows. |
 | Trainer | `train/` (optional `train` extra, PyTorch) | net1 supervised and net2 offline RL from step data, architectures chosen by name, one ONNX policy graph out; imports expliCCit's released models from a local copy. |
 | Link model | `kernel/modules/sch_mmlink.c` | The bottleneck: Mahimahi's `mm-link` + `mm-delay` (+ `mm-loss`), as a qdisc. |
@@ -98,7 +98,10 @@ run; a change that weakens one should say so in its commit message.
    `status = "failed"` and a reason, never metrics or labels.
 6. **Provenance.** Every episode row names the kernel source tree hash,
    kernel config hash, repository commit and seed.
-7. **The mRTT trap is explicit.** Mahak's "mRTT" is a one-way delay (base RTT
+7. **The oracle sees the labels.** The true state a policy can read
+   (`truth`) equals the labels its step is stored with, value for value:
+   `pytest tests/test_truth.py`.
+8. **The mRTT trap is explicit.** Mahak's "mRTT" is a one-way delay (base RTT
    is twice it). A spec says `{"mahak_compat_mrtt_ms": 20}` or
    `{"base_rtt_ms": 40}` (the same path) and cannot say both.
 
@@ -112,8 +115,9 @@ CI runs the same on every push (`.github/workflows/ci.yml`).
 
 | Area | State |
 |---|---|
-| UML build, link model, observations, records, datasets, campaigns, CLI | done, tested (72 tests in all; 70 run, the 2 Sage comparisons UNRUN) |
+| UML build, link model, observations, records, datasets, campaigns, CLI | done, tested (78 tests in all; 76 run, the 2 Sage comparisons UNRUN) |
 | Agent controllers with ONNX policies, closed loop (`sage-v1`) | done, tested |
+| The path's true state as a policy input (oracle and patched policies) | done, tested: equal to the labels at every step |
 | Sage's step and step training data (labels, reward, action per step) | done, tested; the comparison with `sage.cc`'s own code is UNRUN |
 | Trainer: net1, net2, export, expliCCit import | runs end to end; tuned over 214 offline runs and checked over seeds, it trains a controller with expliCCit's structure: on held-out paths TD3+BC reaches +0.64 utility and cloning +0.55, against BBRv1's +0.82 and expliCCit's released policy's +0.29 (`docs/training.md`) |
 | Online training, interval encoder | run end to end; intervals are calibrated and widen where capacity is unobservable; tuned over 48 online runs, online training no longer degrades the cloned policy but does not improve it (+0.03, 95% interval -0.13 to +0.16; `docs/training.md`) |
@@ -182,7 +186,7 @@ later without rerunning), and `agent_action.parquet`.
 
 | Document | Contents |
 |---|---|
-| `docs/architecture.md` | Data flow and trust boundaries, exact link-model semantics, record ABI, time and determinism, decisions D1 to D22, known limits, how to extend |
+| `docs/architecture.md` | Data flow and trust boundaries, exact link-model semantics, record ABI, time and determinism, decisions D1 to D23, known limits, how to extend |
 | `docs/training.md` | From teacher campaigns to a policy: train, run, import expliCCit's models, results so far |
 | `docs/methodology.md` | How to test the LCF idea from first principles: claims, identifiability and probing, experiment arms, online training |
 | `docs/validation.md` | Every check that ran, with commands and results, and what has not run |

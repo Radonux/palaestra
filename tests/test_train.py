@@ -12,12 +12,12 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from expliccit_env.policy import EXPLICCIT_OBS_COLS, OBS_DIM  # noqa: E402
+from expliccit_env.policy import EXPLICCIT_OBS_COLS, OBS_DIM, TRUTH_COLUMNS, TRUTH_DIM  # noqa: E402
 from expliccit_env.train import data, fit  # noqa: E402
 from expliccit_env.train.export import to_onnx  # noqa: E402
 from expliccit_env.train.models import ExpliccitActor, ExpliccitNet1, PolicyGraph, Scaler  # noqa: E402
 from expliccit_env.train.online import OnlineSpec, run_online  # noqa: E402
-from expliccit_env.train.spec import Net1Spec, Net2Spec  # noqa: E402
+from expliccit_env.train.spec import EXPLICCIT_LCFS, LCF_UNITS, Net1Spec, Net2Spec  # noqa: E402
 
 
 def synthetic(n_episodes: int = 40, steps: int = 200, seed: int = 0) -> data.Steps:
@@ -201,6 +201,48 @@ def test_export_is_a_sage_v1_graph() -> None:
     dims = [[d.dim_value for d in v.type.tensor_type.shape.dim] for v in (inp, out)]
     assert (inp.name, out.name, dims) == ("obs", "a", [[1, OBS_DIM], [1, 1]])
     assert not {"IsInf", "IsNaN"} & {n.op_type for n in model.graph.node}  # tract lacks them
+
+
+def _net1(intervals: bool = False) -> fit.Net1:
+    rng = np.random.default_rng(0)
+    scaler = Scaler.fit(EXPLICCIT_OBS_COLS, rng.normal(size=(64, 70)).astype(np.float32), "robust")
+    y = (rng.uniform(size=(64, 7)) * [5e6, 50, 3e7, 100, 1, 2e7, 2e7]).astype(np.float32)
+    units = np.array([LCF_UNITS[n][0] for n in EXPLICCIT_LCFS], np.float32)
+    lcf = Scaler.fit(tuple(range(7)), y * units, "standard")
+    net = ExpliccitNet1(70, 21 if intervals else 7, width=64).eval()
+    return fit.Net1(scaler, net, lcf, EXPLICCIT_LCFS, intervals)
+
+
+def test_truth_columns_are_expliccits_lcfs() -> None:
+    assert TRUTH_COLUMNS == EXPLICCIT_LCFS
+
+
+@pytest.mark.parametrize("intervals", [False, True])
+def test_patched_graph_takes_the_named_lcfs_from_the_truth(intervals: bool) -> None:
+    torch.manual_seed(0)
+    net1 = _net1(intervals)
+    k = 21 if intervals else 7
+    actor = ExpliccitActor(k).eval()
+    obs = torch.randn(5, OBS_DIM)
+    truth = torch.rand(5, TRUTH_DIM) * torch.tensor([5e6, 50, 3e7, 100, 1, 2e7, 2e7])
+    truth[0, 0] = float("nan")  # no departure in the window
+    cap = TRUTH_COLUMNS.index("capacity_bps")
+    patched = fit.policy_graph(net1, actor, 1.0, truth=frozenset({"capacity_bps"}))
+    with torch.no_grad():
+        z = net1.net(net1.scaler(obs))
+        units = torch.tensor([LCF_UNITS[n][0] for n in EXPLICCIT_LCFS])
+        zt = net1.lcf_scaler(truth * units)
+        for block in range(k // 7):  # the centre and, for intervals, both bounds
+            z[:, block * 7 + cap] = zt[:, cap]
+        assert torch.equal(patched(obs, truth), actor(z))
+        oracle = fit.policy_graph(net1, actor, 1.0, truth=frozenset(EXPLICCIT_LCFS))
+        assert torch.equal(oracle(obs, truth), oracle(torch.randn(5, OBS_DIM), truth))
+        assert torch.isfinite(oracle(obs, truth)).all()  # NaN truth is zeroed like a target
+    model = onnx.load_from_string(to_onnx(oracle))
+    assert [i.name for i in model.graph.input] == ["obs", "truth"]
+    assert not {"IsInf", "IsNaN"} & {n.op_type for n in model.graph.node}
+    with pytest.raises(ValueError, match="truth input"):
+        fit.policy_graph(net1, actor, 1.0, truth=frozenset({"queue_delay_ns"}))
 
 
 def test_split_keeps_a_path_together() -> None:

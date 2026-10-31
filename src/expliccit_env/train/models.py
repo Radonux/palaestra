@@ -196,7 +196,18 @@ class PolicyGraph(nn.Module):
     between the networks (beliefs back to physical units, clamped at 0, the
     first six rounded to integers, scaled again) and rounds a to three
     decimals before the guest exponentiates it; otherwise net2 sees net1's
-    output directly, as in training."""
+    output directly, as in training.
+
+    ``take_from_truth`` makes chosen LCFs come from the contract's "truth"
+    input instead of net1: all of them for a policy on the true LCFs (an
+    oracle), one or a few for a patched net1. The truth goes through the
+    same LCF scaler as net1's training targets, so a patched belief is what
+    a perfect net1 would have said; for an interval net1, its centre and
+    both bounds become the truth."""
+
+    truth_cols: torch.Tensor
+    truth_units: torch.Tensor
+    from_truth: torch.Tensor
 
     def __init__(
         self,
@@ -214,9 +225,30 @@ class PolicyGraph(nn.Module):
         self.as_deployed = as_deployed
         # Round a to this many decimals (as_deployed implies 3).
         self.action_decimals: int | None = None
+        self.register_buffer("truth_cols", torch.zeros(0, dtype=torch.long))
+        self.register_buffer("truth_units", torch.zeros(0))
+        self.register_buffer("from_truth", torch.zeros(0, dtype=torch.bool))
 
-    def forward(self, obs: torch.Tensor) -> torch.Tensor:
+    def take_from_truth(
+        self, cols: list[int], units: list[float], mask: list[bool], reps: int
+    ) -> None:
+        """Per LCF in net1's order: its column of the truth input, the factor
+        to net1's target units, and whether to take it from the truth;
+        ``reps`` is 3 for an interval net1 (centres, lower, upper), else 1."""
+        self.truth_cols = torch.tensor(cols, dtype=torch.long)
+        self.truth_units = torch.tensor(units, dtype=torch.float32)
+        self.from_truth = torch.tensor(mask * reps, dtype=torch.bool)
+
+    @property
+    def uses_truth(self) -> bool:
+        return bool(self.from_truth.any())
+
+    def forward(self, obs: torch.Tensor, truth: torch.Tensor | None = None) -> torch.Tensor:
         z = self.net1(self.scaler(obs))
+        if truth is not None and self.uses_truth:
+            zt = self.lcf_scaler(truth.index_select(1, self.truth_cols) * self.truth_units)
+            reps = self.from_truth.shape[0] // zt.shape[1]
+            z = torch.where(self.from_truth, zt.repeat(1, reps), z)
         if self.as_deployed:
             c = torch.relu(self.lcf_scaler.inverse(z))
             c = torch.cat([torch.round(c[:, :6]), c[:, 6:]], dim=1)

@@ -107,7 +107,12 @@ def test_step_record_matches_the_guest() -> None:
 
     assert const("OBS") == policy.OBS_DIM
     assert const("INFO_LEN") == steps.INFO_LEN
-    assert steps.STEP.itemsize == 8 + steps.INFO_LEN + 8 * policy.OBS_DIM + 8 + 4 + 4
+    truth_rs = (Path(__file__).parents[1] / "guest" / "src" / "truth.rs").read_text()
+    m = re.search(r"pub const N: usize = ([0-9]+);", truth_rs)
+    assert m and int(m.group(1)) == policy.TRUTH_DIM
+    fixed = 8 + steps.INFO_LEN + 8 * policy.OBS_DIM + 8 + 4 + 4
+    assert steps.STEP.itemsize == fixed + 8 * policy.TRUTH_DIM
+    assert steps.STEP.fields["truth"][1] == fixed
     assert [steps.STEP.fields[f][1] for f in ("t_us", "info", "obs", "applied_action")] == [
         0,
         8,

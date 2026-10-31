@@ -14,12 +14,13 @@ from pathlib import Path
 import onnx
 import torch
 
-from expliccit_env.policy import OBS_DIM
+from expliccit_env.policy import OBS_DIM, TRUTH_DIM
 from expliccit_env.train.models import PolicyGraph
 
 
 def to_onnx(graph: PolicyGraph) -> bytes:
-    """One input "obs" [1, 78], one output "a" [1, 1].
+    """Input "obs" [1, 78], plus "truth" [1, 7] when the graph takes LCFs from
+    the truth; one output "a" [1, 1].
 
     ponytail: TorchScript exporter (deprecated in torch 2.x, simple ops that
     tract runs); move to dynamo=True with onnxscript when it is removed."""
@@ -27,11 +28,15 @@ def to_onnx(graph: PolicyGraph) -> bytes:
     with tempfile.TemporaryDirectory() as tmp, warnings.catch_warnings():
         warnings.simplefilter("ignore")
         path = Path(tmp) / "policy.onnx"
+        args = (torch.zeros(1, OBS_DIM),)
+        names = ["obs"]
+        if graph.uses_truth:
+            args, names = (*args, torch.zeros(1, TRUTH_DIM)), [*names, "truth"]
         torch.onnx.export(
             graph,
-            (torch.zeros(1, OBS_DIM),),
+            args,
             path,
-            input_names=["obs"],
+            input_names=names,
             output_names=["a"],
             opset_version=17,
             dynamo=False,

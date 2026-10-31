@@ -16,9 +16,11 @@
 //! the kernel's min RTT in ms, which expliCCit's sage.cc adds to the message
 //! (there before the reward; here at the end, so Sage's indices hold).
 //!
-//! Policy contract (mirrors src/expliccit_env/policy.py):
+//! Policy contract (mirrors src/expliccit_env/policy.py), inputs by name:
 //!   input  "obs"   float32 [1, 78], the message above
 //!   input  "state" float32 [1, S], optional; zeros at the first step
+//!   input  "truth" float32 [1, 7], optional; the path's true state at the
+//!                  step (truth.rs), for oracle policies and LCF patches
 //!   output 0       float32 [1, 1], a: the window is multiplied by 2^a
 //!   output 1       float32 [1, S], the next state, when "state" exists
 //! a must be finite with |a| <= 8; anything else fails the episode. The
@@ -30,7 +32,9 @@
 //! kernel may do (its source is not public); move it into tcp_agent if it
 //! matters.
 
+use crate::recorder::Truth;
 use crate::sys::{self, Context, Result, fail};
+use crate::truth;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -46,8 +50,8 @@ use tract_onnx::tract_hir::infer::Factoid;
 pub const OBS: usize = 78;
 /// struct tcp_info up to tcpi_reord_seen, the layout Sage reads.
 pub const INFO_LEN: usize = 224;
-/// t_us, tcp_info, obs, action, cwnd, pad: see src/expliccit_env/steps.py.
-pub const RECORD_LEN: usize = 8 + INFO_LEN + 8 * OBS + 8 + 4 + 4;
+/// t_us, tcp_info, obs, action, cwnd, pad, truth: see src/expliccit_env/steps.py.
+pub const RECORD_LEN: usize = 8 + INFO_LEN + 8 * OBS + 8 + 4 + 4 + 8 * truth::N;
 const AGENT_ABI: u32 = 1;
 const REPORT_PERIOD_US: u64 = 10_000;
 /// Sage busy-polls until the ACK state moves; here the loop sleeps this long
@@ -466,9 +470,17 @@ impl SplitMix64 {
     }
 }
 
+/// The inputs a policy may declare, in the graph's order.
+enum Input {
+    Obs,
+    State,
+    Truth,
+}
+
 /// An ONNX policy under contract sage-v1, with optional exploration noise.
 pub struct Policy {
     plan: TypedRunnableModel<TypedModel>,
+    inputs: Vec<Input>,
     state: Option<Tensor>,
     sigma: f64,
     rng: SplitMix64,
@@ -476,45 +488,68 @@ pub struct Policy {
 
 impl Policy {
     pub fn load(path: &Path, noise: crate::plan::Noise) -> Result<Policy> {
-        let model =
+        let mut model =
             tract_onnx::onnx().model_for_path(path).ctx(format!("loading ONNX policy {}", path.display()))?;
-        let inputs = model.inputs.len();
-        let state = match inputs {
-            1 => None,
-            2 => {
-                let fact = model.input_fact(1).ctx("state input")?;
-                let dims: Option<Vec<usize>> = fact
-                    .shape
-                    .dims()
-                    .map(|d| {
-                        d.concretize().and_then(|d| d.to_i64().ok()).and_then(|d| usize::try_from(d).ok())
-                    })
-                    .collect();
-                match dims.as_deref() {
-                    Some([1, s]) => Some(Tensor::zero::<f32>(&[1, *s]).ctx("state")?),
-                    _ => return fail("policy state input must have a fixed shape [1, S]"),
+        let names: Vec<String> = model.inputs.iter().map(|o| model.node(o.node).name.clone()).collect();
+        let (mut inputs, mut state) = (Vec::with_capacity(names.len()), None);
+        for (i, name) in names.iter().enumerate() {
+            let (input, width) = match name.as_str() {
+                "obs" => (Input::Obs, OBS),
+                "truth" => (Input::Truth, truth::N),
+                "state" => {
+                    let fact = model.input_fact(i).ctx("state input")?;
+                    let dims: Option<Vec<usize>> = fact
+                        .shape
+                        .dims()
+                        .map(|d| {
+                            d.concretize().and_then(|d| d.to_i64().ok()).and_then(|d| usize::try_from(d).ok())
+                        })
+                        .collect();
+                    match dims.as_deref() {
+                        Some([1, s]) => {
+                            state = Some(Tensor::zero::<f32>(&[1, *s]).ctx("state")?);
+                            (Input::State, *s)
+                        }
+                        _ => return fail("policy state input must have a fixed shape [1, S]"),
+                    }
                 }
-            }
-            n => return fail(format!("policy has {n} inputs, expected obs and an optional state")),
-        };
-        let mut model = model.with_input_fact(0, f32::fact([1, OBS]).into()).ctx("obs input")?;
-        if let Some(s) = &state {
-            model = model.with_input_fact(1, f32::fact(s.shape()).into()).ctx("state input")?;
+                other => return fail(format!("policy input {other:?} is not obs, state or truth")),
+            };
+            model = model.with_input_fact(i, f32::fact([1, width]).into()).ctx(format!("{name} input"))?;
+            inputs.push(input);
+        }
+        let count = |want: fn(&Input) -> bool| inputs.iter().filter(|i| want(i)).count();
+        if count(|i| matches!(i, Input::Obs)) != 1
+            || count(|i| matches!(i, Input::State)) > 1
+            || count(|i| matches!(i, Input::Truth)) > 1
+        {
+            return fail(format!("policy inputs {names:?}: need one obs, at most one state and one truth"));
         }
         let plan = model
             .into_optimized()
             .and_then(|m| m.into_runnable())
             .ctx(format!("optimizing ONNX policy {}", path.display()))?;
-        Ok(Policy { plan, state, sigma: noise.sigma, rng: SplitMix64(noise.seed) })
+        Ok(Policy { plan, inputs, state, sigma: noise.sigma, rng: SplitMix64(noise.seed) })
     }
 
     #[allow(clippy::cast_possible_truncation)]
-    fn act(&mut self, obs: &[f64; OBS]) -> Result<f32> {
-        let x: Vec<f32> = obs.iter().map(|&v| v as f32).collect();
-        let input: Tensor = tract_ndarray::Array2::from_shape_vec((1, OBS), x).ctx("policy input")?.into();
-        let mut inputs = tvec!(input.into());
-        if let Some(s) = self.state.take() {
-            inputs.push(s.into());
+    fn act(&mut self, obs: &[f64; OBS], truth: &[f64; truth::N]) -> Result<f32> {
+        let row = |v: &[f64]| -> Result<TValue> {
+            let x: Vec<f32> = v.iter().map(|&v| v as f32).collect();
+            let t: Tensor =
+                tract_ndarray::Array2::from_shape_vec((1, v.len()), x).ctx("policy input")?.into();
+            Ok(t.into())
+        };
+        let mut inputs = TVec::with_capacity(self.inputs.len());
+        for input in &self.inputs {
+            inputs.push(match input {
+                Input::Obs => row(obs)?,
+                Input::Truth => row(truth)?,
+                Input::State => match self.state.take() {
+                    Some(s) => s.into(),
+                    None => return fail("policy state was not returned by the previous step"),
+                },
+            });
         }
         let mut out = self.plan.run(inputs).ctx("running policy")?;
         if out.is_empty() {
@@ -522,10 +557,11 @@ impl Policy {
         }
         let action = out.remove(0);
         let v: Vec<f32> = action.to_array_view::<f32>().ctx("policy output type")?.iter().copied().collect();
-        if let Some(s) = out.first() {
-            self.state = Some(s.clone().into_tensor());
-        } else if self.plan.model().inputs.len() == 2 {
-            return fail("policy has a state input but no state output");
+        let stateful = self.inputs.iter().any(|i| matches!(i, Input::State));
+        match out.first() {
+            Some(s) if stateful => self.state = Some(s.clone().into_tensor()),
+            None if stateful => return fail("policy has a state input but no state output"),
+            _ => {}
         }
         match v.as_slice() {
             [a] if a.is_finite() && a.abs() <= MAX_ACTION => Ok(*a),
@@ -580,9 +616,11 @@ pub struct Steps {
 
 /// Run steps from `start_ns` until `end_ns` (or `stop`), writing every step
 /// to `out` and, with a policy, acting after each one.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn(
     stream: Arc<TcpStream>,
     mut policy: Option<Policy>,
+    truth: Truth,
     out: &Path,
     start_ns: u64,
     base_ns: u64,
@@ -623,9 +661,10 @@ pub fn spawn(
                 if policy.is_none() {
                     pre_cwnd = f64::from(info.snd_cwnd());
                 }
+                let true_state = truth.at(now * 1000, base_ns)?;
                 let (mut a, mut cwnd) = (f64::NAN, 0u32);
                 if let (Some(p), Some(dev)) = (policy.as_mut(), dev.as_mut()) {
-                    let act = f64::from(p.act(&obs)?);
+                    let act = f64::from(p.act(&obs, &true_state)?);
                     // The noise is drawn whatever sigma is, so the stream
                     // does not depend on it. The applied action is recorded.
                     let z = p.rng.normal();
@@ -642,6 +681,7 @@ pub fn spawn(
                 rec.extend_from_slice(&a.to_le_bytes());
                 rec.extend_from_slice(&cwnd.to_le_bytes());
                 rec.extend_from_slice(&0u32.to_le_bytes());
+                true_state.iter().for_each(|v| rec.extend_from_slice(&v.to_le_bytes()));
                 if rec.len() != RECORD_LEN {
                     return fail(format!("step record is {} bytes, expected {RECORD_LEN}", rec.len()));
                 }

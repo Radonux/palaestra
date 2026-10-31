@@ -95,9 +95,9 @@ class Net2Spec(_Frozen):
     # et al., 2021): the critic never sees an action outside the data, and
     # the actor regresses the logged actions weighted by exp(beta * advantage).
     algo: Literal["td3bc", "expliccit-v1", "bc", "iql"] = "td3bc"
-    # "true_lcfs" trains on the labels instead of net1's beliefs: an ablation
-    # that splits the gap to a teacher into the bottleneck's cost and net1's
-    # error. Such a policy needs ground truth to run, so it is not exported.
+    # "true_lcfs" trains on the labels instead of net1's beliefs: the oracle
+    # arm that splits a policy's loss into the LCF set's cost and net1's
+    # error. Its exported policy reads the guest's live truth (policy.py).
     inputs: Literal["net1", "true_lcfs"] = "net1"
     hidden: PositiveInt = 256
     # "sage": Sage's reward. "utility": a ground-truth utility that prices

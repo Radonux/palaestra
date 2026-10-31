@@ -7,8 +7,18 @@ and runs the policy:
 
     input  "obs"   float32 [1, 78], the message, columns as in OBS_COLUMNS
     input  "state" float32 [1, S], optional; zeros at the first step
+    input  "truth" float32 [1, 7], optional; the path's true state at the
+                   step, columns as in TRUTH_COLUMNS
     output 0       float32 [1, 1], a: the window is multiplied by 2**a
     output 1       float32 [1, S], the next state, present iff "state" is
+
+Inputs are matched by name, in any order. "truth" is what an oracle policy
+(net2 on the true LCFs) or a patched one (some of net1's beliefs replaced by
+the truth) reads: the guest computes it live from the bottleneck's records,
+with the same definitions as the labels (labels.labels_at), so it equals the
+labels its step is stored with. Its values can be NaN where a label is
+(mean queueing delay with no departure in the window, free buffer without a
+packet limit, busy fraction at zero capacity); the graph must handle that.
 
 The policy chooses its own columns and does its own scaling inside the graph,
 so any network design fits without changing the guest. The message is Sage's
@@ -71,6 +81,18 @@ SAGE_OBS_COLS: Final = (
 EXPLICCIT_OBS_COLS: Final = (*SAGE_OBS_COLS[:-1], 77, 76)
 PREV_ACTION_COL: Final = 76
 MAX_ACTION: Final = 8.0
+# The "truth" input: these labels (labels.labels_at), in their units.
+TRUTH_COLUMNS: Final = (
+    "queue_delay_mean_ns",
+    "queue_pkts",
+    "capacity_bps",
+    "free_buffer_pkts",
+    "busy_fraction",
+    "one_way_delay_ns",
+    "receive_rate_bps",
+)
+TRUTH_DIM: Final = 7
 
 assert len(OBS_COLUMNS) == OBS_DIM and len(SAGE_OBS_COLS) == 69
 assert len(EXPLICCIT_OBS_COLS) == 70
+assert len(TRUTH_COLUMNS) == TRUTH_DIM

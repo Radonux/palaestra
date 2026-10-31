@@ -3,7 +3,9 @@
 The guest writes one fixed-size record per step (guest/src/step.rs): the
 step's CLOCK_MONOTONIC time in us, the TCP_INFO prefix it was computed from,
 the message (policy.OBS_COLUMNS), the action a policy took after it (NaN
-under a stock controller) and the window that action set (0 if none). ``step_table`` joins
+under a stock controller), the window that action set (0 if none) and the
+path's true state the guest computed live (policy.TRUTH_COLUMNS, equal to
+the labels at the step; tests/test_truth.py). ``step_table`` joins
 each step with the ground-truth labels at its instant, Sage's reward
 computed from the exact capacity, and the action taken from it.
 """
@@ -19,7 +21,7 @@ import pyarrow as pa
 
 from expliccit_env import labels
 from expliccit_env import mahimahi as mm
-from expliccit_env.policy import OBS_DIM, PREV_ACTION_COL
+from expliccit_env.policy import OBS_DIM, PREV_ACTION_COL, TRUTH_DIM
 from expliccit_env.records import Records
 
 INFO_LEN: Final = 224
@@ -31,6 +33,7 @@ STEP: Final = np.dtype(
         ("applied_action", "<f8"),
         ("cwnd_set", "<u4"),
         ("pad", "<u4"),
+        ("truth", "<f8", (TRUTH_DIM,)),
     ]
 )
 type Steps = npt.NDArray[np.void]

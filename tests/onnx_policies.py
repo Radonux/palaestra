@@ -7,7 +7,7 @@ import numpy.typing as npt
 import onnx
 from onnx import TensorProto, helper, numpy_helper
 
-from expliccit_env.policy import OBS_DIM
+from expliccit_env.policy import OBS_DIM, TRUTH_DIM
 
 
 def _model(
@@ -15,13 +15,15 @@ def _model(
     inputs: list[onnx.ValueInfoProto],
     outputs: list[onnx.ValueInfoProto],
     init: dict[str, npt.NDArray[np.float64]],
+    ints: dict[str, npt.NDArray[np.int64]] | None = None,
 ) -> bytes:
     graph = helper.make_graph(
         nodes,
         "policy",
         inputs,
         outputs,
-        initializer=[numpy_helper.from_array(v.astype(np.float32), k) for k, v in init.items()],
+        initializer=[numpy_helper.from_array(v.astype(np.float32), k) for k, v in init.items()]
+        + [numpy_helper.from_array(v.astype(np.int64), k) for k, v in (ints or {}).items()],
     )
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 13)])
     model.ir_version = 8
@@ -64,4 +66,20 @@ def counter(slope: float) -> bytes:
         [_obs(), _tensor("state", 1)],
         [_tensor("a", 1), _tensor("next", 1)],
         {"k": np.array([[slope]]), "one": np.array([[1.0]])},
+    )
+
+
+def on_truth(column: int, slope: float, bias: float) -> bytes:
+    """a = slope * truth[column] + bias. Reads one column only, so NaN in
+    other truth columns cannot reach a; obs is declared but unused."""
+    return _model(
+        [
+            helper.make_node("Gather", ["truth", "col"], ["x"], axis=1),
+            helper.make_node("Mul", ["x", "k"], ["h"]),
+            helper.make_node("Add", ["h", "b"], ["a"]),
+        ],
+        [_obs(), _tensor("truth", TRUTH_DIM)],
+        [_tensor("a", 1)],
+        {"k": np.array([[slope]]), "b": np.array([[bias]])},
+        ints={"col": np.array([column])},
     )

@@ -23,6 +23,7 @@ mod recorder;
 mod step;
 mod sys;
 mod traffic;
+mod truth;
 
 use netlink::{Mmlink, Order, Socket};
 use netns::Netns;
@@ -34,7 +35,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use sys::{Context, Result, fail};
 
-const RESULT_VERSION: u32 = 3;
+const RESULT_VERSION: u32 = 4;
 const SND_ADDR: [u8; 4] = [10, 0, 0, 1];
 const PATH_SND_ADDR: [u8; 4] = [10, 0, 0, 2];
 const RCV_ADDR: [u8; 4] = [10, 0, 1, 1];
@@ -215,7 +216,13 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
     let plan = Plan::load(plan_dir)?;
     load_modules(module_dir, &plan)?;
     std::fs::write("/proc/sys/net/core/netdev_max_backlog", NETDEV_MAX_BACKLOG).ctx("netdev_max_backlog")?;
-    let recorder = recorder::Recorder::start(out)?;
+    // The step loop's true state comes from the downlink's records, so it
+    // exists whenever steps run.
+    let link_truth = plan.steps.then(|| {
+        let d = &plan.downlink;
+        truth::LinkTruth::new(u64::from(plan.duration_ms.get()), d.trace.clone(), d.limit_pkts, d.delay_ns)
+    });
+    let (recorder, truth) = recorder::Recorder::start(out, link_truth)?;
 
     let home = Netns::current()?;
     let snd = Netns::create(&home)?;
@@ -261,7 +268,7 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
     };
     let end_ns = base_ns + u64::from(plan.duration_ms.get()) * 1_000_000;
     let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let steps = if plan.steps {
+    let steps = if let Some(truth) = truth {
         let policy = match &plan.control {
             Control::Stock => None,
             Control::Agent { policy, noise } => Some(step::Policy::load(policy, *noise)?),
@@ -269,6 +276,7 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
         Some(step::spawn(
             std::sync::Arc::clone(&conn),
             policy,
+            truth,
             &out.join("steps.bin"),
             base_ns,
             base_ns,
