@@ -115,7 +115,7 @@ CI runs the same on every push (`.github/workflows/ci.yml`).
 | UML build, link model, observations, records, datasets, campaigns, CLI | done, tested (72 tests in all; 70 run, the 2 Sage comparisons UNRUN) |
 | Agent controllers with ONNX policies, closed loop (`sage-v1`) | done, tested |
 | Sage's step and step training data (labels, reward, action per step) | done, tested; the comparison with `sage.cc`'s own code is UNRUN |
-| Trainer: net1, net2, export, expliCCit import | runs end to end; tuned over 214 offline runs and checked over seeds, it gives an expliCCit-shaped controller: on held-out paths TD3+BC reaches +0.64 utility and cloning +0.55, against BBRv1's +0.82 and expliCCit's released policy's +0.29 (`docs/training.md`) |
+| Trainer: net1, net2, export, expliCCit import | runs end to end; tuned over 214 offline runs and checked over seeds, it trains a controller with expliCCit's structure: on held-out paths TD3+BC reaches +0.64 utility and cloning +0.55, against BBRv1's +0.82 and expliCCit's released policy's +0.29 (`docs/training.md`) |
 | Online training, interval encoder | run end to end; intervals are calibrated and widen where capacity is unobservable; tuned over 48 online runs, online training no longer degrades the cloned policy but does not improve it (+0.03, 95% interval -0.13 to +0.16; `docs/training.md`) |
 | Mahak metrics, trace generation and active-learning driver | done, matched to the originals |
 | Slurm array scripts | generated and checked locally; not yet submitted to a cluster |

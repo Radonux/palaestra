@@ -183,7 +183,7 @@ losses and, every `eval_every` iterations, the noise-free policy on the
 unused capacity against queueing delay (`delay_weight`, per base RTT) and
 the flow's dropped fraction (`loss_weight`).
 
-## Reproduction: an expliCCit-shaped controller (one seed, untuned)
+## First results: a controller with expliCCit's structure (one seed, untuned)
 
 Data: the expliCCit-like campaign above. net1: expliCCit's encoder, robust
 scaling, 4 epochs (early stop), on held-out paths R^2 0.988 (mean queueing
@@ -217,9 +217,12 @@ utilization there is 0.970). Against the first version of this table,
 which used other episode seeds, 16 of the 18 cloning episodes repeat to
 four decimals and two differ, so the means moved by up to 0.011.
 
-Utilization alone reproduces expliCCit's shape: a controller that acts
-only on seven inferred LCFs, learned offline from other controllers'
-logs, runs at 77 to 89% utilization where its teachers reach 95 to 98%.
+A controller that acts only on seven inferred LCFs, learned offline from
+other controllers' logs, runs at 77 to 89% utilization where its
+teachers reach 95 to 98%. This gap is our finding, not a reproduced
+one: expliCCit's draft reports no comparison with its teachers yet (its
+section 5.3 gives a preliminary cost of 5% utilization and 9% queueing
+delay against Sage, and leaves BBR, Cubic and Vegas as a TODO).
 Loss changes the reading. Only behaviour cloning stays near its teachers
 (4.8% of its packets dropped, against at most 0.5% for the teachers).
 expliCCit's own objective reaches 85% utilization by holding a window
@@ -298,7 +301,7 @@ Candidate causes, and what the tuning below found for each:
 
 ## Tuned comparison
 
-The search below ran on the dataset of the reproduction table. Its
+The search below ran on the dataset of the first-results table. Its
 harness (grid files, a parallel trainer, a closed-loop scorer) was fitted
 to this dataset and is not in the repository; what carries over to other
 data is in the trainer: IQL, the teacher filter (`controllers`) and the
@@ -311,7 +314,7 @@ and 40 Mbit/s every 5 s, 40 and 80 every 12 s, constant 16 and constant
 400) and (35 ms, 80); 30 s closed-loop episodes. The score is the
 utility above (delay weight 0.5, loss weight 4). Winners were retrained
 over 4 or 5 seeds, then every one was run once on the 18 test paths of
-the reproduction table (45 s). Intervals are 95% bootstraps over seeds
+the first-results table (45 s). Intervals are 95% bootstraps over seeds
 and paths. All runs use the point net1: offline, point and interval net1
 tied (32 paired runs, mean difference -0.002).
 
@@ -392,15 +395,24 @@ minus expliCCit's released policy +0.27 [+0.10, +0.45].
 
 The first run of this campaign filled the disk and 304 of its 468
 episodes failed; it was discarded, the disk freed and the same campaign
-run again. In the rerun the teachers repeat the reproduction table (BBRv1 +0.817
+run again. In the rerun the teachers repeat the first-results table (BBRv1 +0.817
 against +0.82, Vegas +0.735 against +0.74).
 
 **Reading.**
 
-- The expliCCit shape holds after tuning: every learned net2 acting on
-  seven inferred LCFs stays below BBRv1, by 0.18 or more. TD3+BC is
-  level with Vegas and BBRv3 within the intervals; cloning is below
-  Vegas.
+- Every learned net2 acting on seven inferred LCFs stays below BBRv1,
+  by 0.18 or more. TD3+BC is level with Vegas and BBRv3 within the
+  intervals; cloning is below Vegas. expliCCit's draft makes no
+  comparison with its teachers, so this is our finding, not a
+  reproduction of its result.
+- net1 is least accurate where the learned policies operate. On the
+  validation paths, net1's capacity estimate has R^2 0.78 on the
+  teachers' episodes, 0.45 on the M10 cloned policy's and -0.01 on the
+  online policies' (4 policies, 12 paths each). These policies leave
+  the link idle more often, and an idle link does not reveal its
+  capacity (`docs/methodology.md`, section 2). Whether the decisions
+  would improve with the true LCFs needs net2 run on them in closed
+  loop (arm A1), which the environment cannot do yet.
 - For cloning, tuning moved the operating point more than the score:
   +0.55 against +0.54 untuned, but 0.2% of its packets dropped instead
   of 4.8%, at lower utilization (0.62 against 0.84). TD3+BC, which
