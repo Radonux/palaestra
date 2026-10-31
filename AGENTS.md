@@ -39,6 +39,20 @@ Run what the change touches, and report only what actually ran:
     shellcheck scripts/*.sh tools/m0/*.sh
     uvx --from actionlint-py==1.7.12.25 actionlint && uvx zizmor==1.31.1 --offline .github/workflows
 
+## Research direction
+
+The goal is to prove that separating net1 (an estimator of physical path
+state, supervised by ground truth) from net2 (a decision maker that acts on
+net1's output alone) works. Work in two phases:
+
+- **Reproduction**, a short step: expliCCit's artifacts and setup on this
+  environment, every divergence named, to show that UML reproduces its setup
+  and roughly its results. Here be faithful.
+- **Everything after it**: reason from first principles toward the goal.
+  Algorithms, network sizes, rewards, action spaces, and offline or online
+  training are all free choices. Neither the inherited code nor the draft's
+  choices carry weight of their own; only the separation is the thesis.
+
 ## Engineering rules
 
 - Follow the `pl-theorist` and `ponytail` skills: parse untrusted input once at
