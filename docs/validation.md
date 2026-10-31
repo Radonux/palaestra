@@ -253,6 +253,23 @@ evaluation campaign of the four teachers and ten policies on 18 paths for
 policy, and only cloning among the offline net2 keeps its drops near the
 teachers'.
 
+## Ran: tuning net2 (M12)
+
+`tests/test_train.py`: IQL prefers the better of two logged actions
+where cloning averages them; TD3+BC reports most target actions outside
+the data when the logged actions are tiny; the teacher filter keeps only
+the named controllers' episodes.
+
+Ran at scale, with a harness kept outside the repository (results in
+`docs/training.md`, "Tuned comparison"): 214 offline training runs and
+48 online runs (11,264 rollout episodes); 7,512 validation episodes (614
+policy checkpoints and the teachers); one test campaign of 468 episodes. No
+episode failed in any of them, except a first run of the test campaign
+that filled the disk (304 of 468 failed). It was discarded and run
+again after freeing space. A scorer that averages only the surviving
+episodes gives each controller a mean over different paths, so the
+harness now refuses to score a campaign with any failed episode.
+
 ## Not run to completion: the port of Sage's step against `sage.cc` (M9)
 
 `test_step_matches_sage_cc` (`tests/sage_ref.py`) is written to compile

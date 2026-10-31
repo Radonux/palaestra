@@ -92,7 +92,11 @@ at 90%, so TD3's default noise (0.05 exploration, 0.2 target smoothing
 clipped at 0.5, all in units of `action_max`) is many times the data's
 spread unless `action_max` is small. A bias of 0.001 per step in the
 policy's mean action moves the window by 7% a second, so tune on closed-loop
-results, not on the regression loss.
+results, not on the regression loss. IQL weights each logged action by
+exp(beta x advantage); at the default reward scale (1/25) the advantages
+spread over only 0.01 to 0.04, so beta of 10 or less leaves every weight
+near 1 and IQL clones. Section "Tuned comparison" has the search, its
+ranges and what each knob did.
 
 ## 3. Run a policy
 
@@ -160,9 +164,14 @@ know the capacity. Free buffer stays unidentified either way (R^2 0.02).
     {"paths_from": "examples/campaign-expliccit-teachers.json",
      "eval_from": "eval.json",
      "net1_from": "out/model/net1.pt", "init_from": "out/bc/net2.pt",
-     "net2": {"algo": "td3bc", "reward": "utility", "discount": 0.99},
-     "iterations": 12, "episodes_per_iteration": 16, "duration_ms": 20000,
-     "noise_sigma": 0.05, "updates_per_iteration": 2000, "eval_every": 4}
+     "net2": {"algo": "iql", "beta": 10, "expectile": 0.9, "reward": "utility",
+              "discount": 0.99, "action_max": 0.1, "batch_size": 256},
+     "iterations": 8, "episodes_per_iteration": 16, "duration_ms": 20000,
+     "noise_sigma": 0.005, "updates_per_iteration": 2000, "eval_every": 4}
+
+These are the tuned settings (section "Tuned comparison"); the defaults
+(TD3+BC, noise 0.05) are the first, untuned ones, under which the policy
+collapses. `init_from` must come from a run with the same `action_max`.
 
 Each iteration exports the policy (net1 frozen), runs
 `episodes_per_iteration` episodes on paths drawn from `paths_from` with
@@ -225,12 +234,12 @@ policy's mean action is -0.021 per step against the teachers' +0.0014.
 Sage's reward credits lower delay at once but delivered rate only over a
 1 s window, which a 0.95 discount (about 200 ms) barely sees.
 
-## Offline against online (one seed each, untuned)
+## Offline against online: first configurations (one seed each, untuned)
 
 Each run below used one hand-set configuration; none was tuned (see
 "Tuning" in section 2, and the TD3 noise scales there). They show that
 these configurations fail, not that online or offline training does. The
-tuning is in progress.
+tuned comparison is in the next section.
 
 Four online runs, each from a cloned policy with its net1 frozen, on the
 utility reward (delay weight 0.5, loss weight 4, discount 0.99), TD3+BC
@@ -271,25 +280,142 @@ link, it gains (-0.53 to +0.02 or +0.08), but only by the same retreat.
 The rollouts' own reward, noise included, never passed +0.34 on the
 training paths, against BBRv1's +0.83.
 
-Why the optimizer fails is not established. Candidates, cheapest test
-first:
+Candidate causes, and what the tuning below found for each:
 
 1. Noise as a random walk: 0.05 per 10 ms step on the log window is a
    factor of about 1.4 over a second, so rollouts mostly show what noise
-   does. Test smaller noise, or noise held for an RTT.
+   does. Confirmed: at 0.005 the collapse stops; at 0.02 the policy still
+   backs off. Noise held for an RTT is UNRUN (the guest draws it per step).
 2. Critic error the actor exploits: after the 1/25 reward scale a step is
    worth about 0.04, and TD3+BC normalizes the critic term by its mean
-   size. Test reward scale 1, smaller alpha, more critic updates per actor
-   update.
+   size. Smaller alpha and IQL, which never queries the critic off the
+   data, were searched; reward scale 1 is UNRUN.
 3. Horizon: discount 0.99 per 10 ms step is a 1 s horizon, while a probe
-   on an 80 ms path pays off over several RTTs. Test 0.995 and 0.999.
+   on an 80 ms path pays off over several RTTs. 0.995 and 0.999 are UNRUN.
 4. Estimation: net2 sees only net1's output. Run the same loop with net2
    on the true LCFs (arm A0, `docs/methodology.md`); that needs ground
    truth fed to a running policy, which the environment cannot do yet.
 
-Until tuning closes the gap, cloning is the best learned net2 found so far
-(untuned), and the claim that closed-loop training on intervals learns when
-to probe is untested rather than refuted.
+## Tuned comparison
+
+The search below ran on the dataset of the reproduction table. Its
+harness (grid files, a parallel trainer, a closed-loop scorer) was fitted
+to this dataset and is not in the repository; what carries over to other
+data is in the trainer: IQL, the teacher filter (`controllers`) and the
+diagnostics of section 2.
+
+**Protocol.** Configurations were chosen on 12 validation paths that are
+in neither the training grid nor the test set: capacity alternating 20
+and 40 Mbit/s every 5 s, 40 and 80 every 12 s, constant 16 and constant
+60, each with one-way delay and buffer of (8 ms, 150 packets), (25 ms,
+400) and (35 ms, 80); 30 s closed-loop episodes. The score is the
+utility above (delay weight 0.5, loss weight 4). Winners were retrained
+over 4 or 5 seeds, then every one was run once on the 18 test paths of
+the reproduction table (45 s). Intervals are 95% bootstraps over seeds
+and paths. All runs use the point net1: offline, point and interval net1
+tied (32 paired runs, mean difference -0.002).
+
+**What was searched** (batch 256, learning rate 3e-4 and network sizes
+fixed):
+
+| Round | net2 | Settings |
+|---|---|---|
+| offline 1: 134 runs, 1 seed | cloning | net1 point or interval; `action_max` 0.05, 0.1, 0.25, 1; teachers all, BBRv1 and Vegas, BBRv1, Vegas; 10k and 30k updates |
+| | expliCCit's objective | `action_max` 0.1, 0.25, 1; CQL weight 0.1, 1, 5; discount 0.95, 0.99 |
+| | TD3+BC, utility reward | `action_max` 0.1, 0.25, 1; alpha 0.1, 0.5, 2.5; target noise 0.02, 0.2; discount 0.95, 0.99 |
+| | IQL, utility reward | `action_max` 0.1, 0.25, 1; beta 3, 10, 30, 100; expectile 0.7, 0.9; discount 0.95, 0.99 |
+| offline 2: 80 runs, 4 more seeds | cloning | `action_max` 0.05, 0.1, 0.25, 1; teachers all, BBRv1 and Vegas, Vegas; 30k and 100k updates; a rounded to 3 decimals or not |
+| | TD3+BC, IQL | `action_max` 0.1, discount 0.99; alpha 0.5, 2.5 or beta 10, 100; teachers all, BBRv1 and Vegas; 30k and 60k updates |
+| online 1: 32 runs | from the median of 5 cloned seeds | TD3+BC alpha 0.5, 2.5 or IQL beta 10, 100; noise 0.005, 0.02; 500 or 2000 updates per iteration; replay of own episodes, or with BBRv1 and Vegas logs and 5000 critic warm-up updates; 12 iterations of 16 episodes |
+| online 2: 12 runs | IQL, own episodes, 2000 updates | beta 10, 30; noise 0.0025, 0.005, 0.01; 2 more seeds; 24 iterations |
+| online 3: 4 runs | the online winner | from each of the other 4 cloned seeds; 8 iterations |
+
+**What the diagnostics showed.**
+
+- Noise between runs: two cloning runs that differ only in net1 kind
+  differ by 0.33 (standard deviation over 32 pairs) in validation
+  utility. A single run's rank means little, so every result below is
+  over seeds.
+- The regression loss on held-out steps does not predict closed-loop
+  utility (Spearman 0.02 over 64 cloned checkpoints). The policy's mean
+  action on held-out states does, negatively (-0.53 for cloning, -0.67
+  for TD3+BC): a small positive bias integrates through the window into
+  overdriving.
+- `action_max` sets where the policy sits: at 0.05 to 0.1 cloned
+  policies under-send (utilization 0.25 to 0.58 over seeds, almost no
+  drops), at 1 they overdrive (0.73 to 0.87, 3 to 23% drops), and
+  training longer lowers utilization further. TD3+BC at `action_max` 1
+  and alpha 2.5 drives the mean action to +0.06 to +0.11 per step; with
+  target noise 0.2, 56 to 60% of its target actions fall outside the
+  data. Only `action_max` 0.1 keeps TD3+BC sane.
+- IQL is cloning for beta 3 and 10 (mean weight 0.88 to 1.01). Beta 30
+  and 100 reweight (mean weight up to 1.5 and 4.6) and do worse (round 1
+  means +0.24 and +0.07, against +0.40 at beta 3).
+- expliCCit's objective: its Q grows to 10^2 to 10^3, the critic's pull
+  on the action is 14 to 5900 times the data's, and every setting stays
+  far below cloning (mean -0.58 over 36 checkpoints, best +0.31).
+- Online: with noise of 0.02 the policy's mean action turns negative
+  and utilization falls (a plausible reading: it learns to back off from
+  its own noise); TD3+BC can overdrive at once (one run's first
+  rollouts scored -0.96); the teachers' logs in the replay buffer do not
+  help. IQL at beta 10 and noise 0.005 is the one setting that does not
+  fall below its start: with weights near 1 it is a slow
+  advantage-weighted regression on its own episodes. Its rollouts' reward
+  stays flat over 24 iterations, and more iterations do not help.
+
+**Validation** (mean over seeds): TD3+BC (alpha 0.5, `action_max` 0.1,
+BBRv1 and Vegas logs, 60k updates) +0.60 [+0.46, +0.72], 4 seeds;
+cloning (`action_max` 0.1, BBRv1 and Vegas logs, 30k updates) +0.55
+[+0.40, +0.69], 5 seeds; IQL beta 10 (all teachers) +0.52, 5 seeds; Vegas
++0.79, BBRv1 +0.77. Online IQL from each of the 5 cloned seeds changes
+utility by +0.019 [-0.070, +0.103] against its start.
+
+**Test, once** (18 paths, 45 s, episode seed 7; one campaign):
+
+| controller | seeds | utility [95%] | seeds' range | utilization | mean queueing delay ms | drops |
+|---|---|---|---|---|---|---|
+| BBRv1 | | +0.82 [+0.75, +0.88] | | 0.970 | 10.9 | 0.005 |
+| Vegas | | +0.74 [+0.64, +0.82] | | 0.951 | 18.6 | 0.001 |
+| BBRv3 | | +0.70 [+0.57, +0.82] | | 0.942 | 17.8 | 0.002 |
+| Cubic | | -0.02 [-0.41, +0.35] | | 0.981 | 76.6 | 0.001 |
+| expliCCit's released policy, as deployed | | +0.29 [+0.07, +0.48] | | 0.824 | 21.7 | 0.127 |
+| TD3+BC | 4 | +0.64 [+0.54, +0.73] | +0.57 to +0.71 | 0.725 | 8.2 | 0.004 |
+| online IQL, from each cloned seed | 5 | +0.59 [+0.41, +0.72] | +0.41 to +0.69 | 0.730 | 16.2 | 0.009 |
+| cloning | 5 | +0.55 [+0.44, +0.67] | +0.46 to +0.66 | 0.617 | 7.8 | 0.002 |
+| IQL beta 10 | 5 | +0.50 [+0.39, +0.61] | +0.38 to +0.61 | 0.595 | 9.6 | 0.001 |
+
+Differences, resampling seeds and paths (paths paired): online minus its
+cloned start +0.03 [-0.13, +0.16]; TD3+BC minus cloning +0.09 [-0.02,
++0.20]; TD3+BC minus BBRv1 -0.18 [-0.30, -0.07]; TD3+BC minus Vegas
+-0.09 [-0.24, +0.04]; cloning minus Vegas -0.18 [-0.34, -0.03]; cloning
+minus expliCCit's released policy +0.27 [+0.10, +0.45].
+
+The first run of this campaign filled the disk and 304 of its 468
+episodes failed; it was discarded, the disk freed and the same campaign
+run again. In the rerun the teachers repeat the reproduction table (BBRv1 +0.817
+against +0.82, Vegas +0.735 against +0.74).
+
+**Reading.**
+
+- The expliCCit shape holds after tuning: every learned net2 acting on
+  seven inferred LCFs stays below BBRv1, by 0.18 or more. TD3+BC is
+  level with Vegas and BBRv3 within the intervals; cloning is below
+  Vegas.
+- For cloning, tuning moved the operating point more than the score:
+  +0.55 against +0.54 untuned, but 0.2% of its packets dropped instead
+  of 4.8%, at lower utilization (0.62 against 0.84). TD3+BC, which
+  overdrove untuned, gained most: -0.31 to +0.64.
+- No method is shown to beat cloning: TD3+BC's +0.09 has an interval
+  that includes 0, IQL is cloning, and online training adds +0.03 with
+  an interval from -0.13 to +0.16.
+- Within these settings, online training no longer degrades the cloned
+  policy, and it does not improve it either. The claim that closed-loop
+  training on intervals learns when to probe stays untested. What is
+  left to try is design rather than settings, all UNRUN: noise held for
+  an RTT (independent noise of 0.005 per 10 ms step moves the window by
+  about 1% over 100 ms, so it barely explores at the window's own time
+  scale), one decision per RTT, discount 0.995 or 0.999, reward scale 1 for TD3+BC, and net2
+  on the true LCFs (arm A0).
 
 ## Earlier results (October 2026, one dataset, one seed)
 
