@@ -53,7 +53,7 @@ from expliccit_env.episode import (
 )
 from expliccit_env.spec import EpisodeSpec
 
-DATASET_VERSION: Final = 7
+DATASET_VERSION: Final = 8
 # "steps" exists only for episodes that record them (spec.steps or a policy),
 # "cross_steps" only for episodes with an agent cross flow; "flow_seconds"
 # (each flow's bytes and queueing delay per second) for every episode.
