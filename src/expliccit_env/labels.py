@@ -3,9 +3,9 @@ episode's spec-derived constants and its records.
 
 ``labels_at`` gives every label at any instants: the step rows net1 trains
 on (steps.py) and, through ``labels_table``, one row per TCP_OBS record. A
-new candidate LCF added here applies to new episodes; recomputing it for
-stored shards needs a reader for their link tables, which does not exist
-yet. All work is vectorized: O((n_obs + n_events) log n_events).
+new candidate LCF added here applies to new episodes, and to stored ones
+whose shard kept its link tables (dataset.read_episode gives their
+records). All work is vectorized: O((n_obs + n_events) log n_events).
 
 Definitions (link 1 is the data-direction bottleneck):
   capacity_bps        trace delivery-opportunity bits/s over the trailing

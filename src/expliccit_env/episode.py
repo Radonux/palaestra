@@ -36,7 +36,8 @@ from expliccit_env.steps import StepError, Steps, load_steps, step_table
 from expliccit_env.uml import UmlBuild, run_guest
 
 RESULT_VERSION: Final = 5
-_SKIP_COLUMNS: Final = frozenset({"type", "len", "pad"})
+# Record fields the tables leave out: constant per record type, or padding.
+SKIP_COLUMNS: Final = frozenset({"type", "len", "pad"})
 
 
 class _Strict(BaseModel):
@@ -105,9 +106,38 @@ def _columns(table: Table, episode_id: str) -> pa.Table:
         "episode_id": dict_column(np.zeros(table.size, np.int32), [episode_id])
     }
     for name in table.dtype.names or ():
-        if name not in _SKIP_COLUMNS:
+        if name not in SKIP_COLUMNS:
             cols[name] = pa.array(np.ascontiguousarray(table[name]))
     return pa.Table.from_pydict(cols)
+
+
+LINK_EVENTS: Final = ("arrival", "drop", "depart")
+
+
+def record_tables(rec: Records, episode_id: str) -> dict[str, pa.Table]:
+    """The records a shard stores, whole: sender observations, both links'
+    events and opportunities, and the agent's actions. dataset.read_episode
+    is the inverse."""
+    parts = (rec.link_arrival, rec.link_drop, rec.link_depart)
+    kinds = np.repeat(np.arange(3, dtype=np.int32), [t.size for t in parts])
+    events = pa.concat_tables([_columns(t, episode_id) for t in parts])
+    return {
+        "obs": _columns(rec.tcp_obs, episode_id),
+        "link_events": events.add_column(1, "event", dict_column(kinds, list(LINK_EVENTS))),
+        "link_opp": _columns(rec.link_opp, episode_id),
+        "agent_action": _columns(rec.agent_action, episode_id),
+    }
+
+
+def path_constants(spec: EpisodeSpec, base_ns: int) -> labels.PathConstants:
+    """What the labels need of the spec, with the guest's time of trace ms 0."""
+    return labels.PathConstants(
+        base_ns,
+        spec.path.delay.one_way_ns,
+        spec.path.buffer.packets,
+        spec.path.buffer.bytes,
+        spec.path.loss.downlink,
+    )
 
 
 def _with_id(table: pa.Table, episode_id: str) -> pa.Table:
@@ -300,25 +330,10 @@ def run_episode(
                 pass
         timing |= {"kernel_release": result.kernel_release, "kernel_version": result.kernel_version}
         trace = spec.path.trace.timestamps()
-        consts = labels.PathConstants(
-            g.base_ns,
-            spec.path.delay.one_way_ns,
-            spec.path.buffer.packets,
-            spec.path.buffer.bytes,
-            spec.path.loss.downlink,
-        )
+        consts = path_constants(spec, g.base_ns)
         lab = labels.labels_table(rec, trace, consts, spec.duration_ms)
         lab = _with_id(lab, eid)
-        link_events = pa.concat_tables(
-            [_columns(t, eid) for t in (rec.link_arrival, rec.link_drop, rec.link_depart)]
-        )
-        kinds = np.repeat(
-            np.arange(3, dtype=np.int32),
-            [rec.link_arrival.size, rec.link_drop.size, rec.link_depart.size],
-        )
-        link_events = link_events.add_column(
-            1, "event", dict_column(kinds, ["arrival", "drop", "depart"])
-        )
+        stored = record_tables(rec, eid)
         row = {
             **base_row,
             "status": "ok",
@@ -340,18 +355,15 @@ def run_episode(
             "agent_actions": g.agent_actions,
             "n_steps": g.steps,
             "n_obs": rec.tcp_obs.size,
-            "n_link_events": link_events.num_rows,
+            "n_link_events": stored["link_events"].num_rows,
             **_metrics(spec, rec, g, trace),
         }
         return EpisodeOk(
             eid,
             row,
             {
-                "obs": _columns(rec.tcp_obs, eid),
+                **stored,
                 "labels": lab,
-                "link_events": link_events,
-                "link_opp": _columns(rec.link_opp, eid),
-                "agent_action": _columns(rec.agent_action, eid),
                 "flow_seconds": _with_id(_flow_seconds(spec, rec), eid),
                 **(
                     {}

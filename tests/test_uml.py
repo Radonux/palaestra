@@ -13,12 +13,14 @@ import shutil
 from pathlib import Path
 
 import numpy as np
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 import pytest
 
 from expliccit_env import campaign, labels
 from expliccit_env import mahimahi as mm
 from expliccit_env.cli import main
+from expliccit_env.dataset import read_episode
 from expliccit_env.episode import EpisodeOk, run_episode
 from expliccit_env.guest_plan import GuestPlan, LinkPlan
 from expliccit_env.records import DROP_QUEUE_FULL, DROP_RANDOM, Records, load_records
@@ -322,6 +324,14 @@ def test_campaign_shards_and_tables(build: UmlBuild, tmp_path: Path) -> None:
         obs, lab = pq.read_table(shard / "obs.parquet"), pq.read_table(shard / "labels.parquet")
         assert obs.num_rows == lab.num_rows == sum(eps["n_obs"].to_pylist())
         assert obs["t_ns"].equals(lab["t_ns"])
+        # A stored episode's records give its stored labels again, bit for bit.
+        for eid in eps["episode_id"].to_pylist():
+            ep = read_episode(shard, eid)
+            again = labels.labels_table(ep.rec, ep.trace, ep.consts, ep.spec.duration_ms)
+            stored = lab.filter(pc.equal(lab["episode_id"], eid)).drop_columns(["episode_id"])
+            assert again.column_names == stored.column_names
+            for name in again.column_names:  # bytes: NaN equals NaN
+                assert again[name].to_numpy().tobytes() == stored[name].to_numpy().tobytes(), name
 
 
 def test_cli_episode_and_mahak_query(build: UmlBuild, tmp_path: Path) -> None:

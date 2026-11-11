@@ -18,6 +18,10 @@
                              all episodes
         DONE                 written last; a shard without it is incomplete
 
+``read_episode`` turns one stored episode back into the records its labels
+were computed from, so a label added later can be computed for it, provided
+the shard kept obs, link_events and link_opp.
+
 Tables share ``episode_id``. Files are written as ``*.tmp`` and renamed on
 close, so readers never see a half-written file; rerunning a shard replaces
 it. Compression is zstd; each episode is its own row group.
@@ -27,15 +31,27 @@ from __future__ import annotations
 
 import json
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
 from typing import Final, Self
 
 import numpy as np
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-from expliccit_env.episode import EpisodeOk, EpisodeOutcome
+from expliccit_env import labels
+from expliccit_env import mahimahi as mm
+from expliccit_env import records as r
+from expliccit_env.episode import (
+    LINK_EVENTS,
+    SKIP_COLUMNS,
+    EpisodeOk,
+    EpisodeOutcome,
+    path_constants,
+)
+from expliccit_env.spec import EpisodeSpec
 
 DATASET_VERSION: Final = 7
 # "steps" exists only for episodes that record them (spec.steps or a policy),
@@ -121,3 +137,96 @@ class ShardWriter:
             return
         for w in self.writers.values():
             w.close()
+
+
+@dataclass(frozen=True, slots=True)
+class StoredEpisode:
+    """A stored episode, as labels.labels_at takes it."""
+
+    spec: EpisodeSpec
+    rec: r.Records
+    trace: mm.I64
+    consts: labels.PathConstants
+
+
+def _rows(shard: Path, table: str, episode_id: str) -> pa.Table:
+    path = shard / f"{table}.parquet"
+    if not path.exists():
+        raise r.RecordError(f"{shard.name} did not keep the {table} table")
+    # pyarrow-stubs leave read_table partly untyped.
+    return pq.read_table(path, filters=pc.field("episode_id") == episode_id)  # pyright: ignore[reportUnknownMemberType]
+
+
+def _records(t: pa.Table, rec_type: int, dtype: np.dtype[np.void]) -> r.Table:
+    """Table rows as the guest's records; the fields a shard leaves out are
+    the record type and length (set here) and padding (zero)."""
+    out = np.zeros(t.num_rows, dtype)
+    out["type"], out["len"] = rec_type, dtype.itemsize
+    for name in dtype.names or ():
+        if name in SKIP_COLUMNS:
+            continue
+        if name not in t.column_names:
+            raise r.RecordError(f"stored records lack {name}: written under an older record ABI")
+        out[name] = t[name].to_numpy(zero_copy_only=False)  # pyright: ignore[reportUnknownMemberType]
+    return out
+
+
+def _first_seq(tables: list[r.Table]) -> int:
+    """The earliest of the stored (u32, possibly wrapped) sequence numbers:
+    the one after the widest gap around the circle."""
+    seq = np.sort(np.concatenate([t["seq"] for t in tables]).astype(np.int64))
+    if not seq.size:
+        return 0
+    gaps = np.diff(seq, append=seq[0] + 2**32)
+    return int(seq[(int(gaps.argmax()) + 1) % seq.size])
+
+
+def read_episode(shard: Path, episode_id: str) -> StoredEpisode:
+    """One successful episode's records, trace and path constants, from a
+    shard that kept obs, link_events and link_opp. The records equal the
+    guest's but for two the shard does not store: META (rebuilt, its
+    sequence number the first stored record's) and LINK_STATS (empty)."""
+    eps = pq.read_table(  # pyright: ignore[reportUnknownMemberType]
+        shard / "episodes.parquet",
+        columns=["episode_id", "status", "spec_json", "base_ns", "hz"],
+        filters=pc.field("episode_id") == episode_id,
+    ).to_pylist()
+    if len(eps) != 1 or eps[0]["status"] != "ok":
+        raise r.RecordError(f"{shard.name} holds no successful episode {episode_id}")
+    row = eps[0]
+    spec = EpisodeSpec.model_validate_json(row["spec_json"])
+    dtype = {stem: (rec_type, d) for stem, rec_type, d in r.FILES}
+    events = _rows(shard, "link_events", episode_id)
+    kind = events["event"].to_pylist()
+    links = {
+        e: _records(
+            events.filter(pa.array([k == e for k in kind], pa.bool_())), *dtype[f"link_{e}"]
+        )
+        for e in LINK_EVENTS
+    }
+    opp = _records(_rows(shard, "link_opp", episode_id), *dtype["link_opp"])
+    obs = _records(_rows(shard, "obs", episode_id), *dtype["tcp_obs"])
+    # agent_action is empty, and may be unwritten, when no agent ran.
+    has_actions = (shard / "agent_action.parquet").exists()
+    actions = (
+        _records(_rows(shard, "agent_action", episode_id), *dtype["agent_action"])
+        if has_actions
+        else np.zeros(0, r.AGENT)
+    )
+    meta = np.zeros(1, r.META)
+    meta["type"], meta["len"] = dtype["meta"][0], r.META.itemsize
+    meta["seq"] = _first_seq([*links.values(), opp, obs, actions])
+    meta["magic"], meta["abi"], meta["hz"] = r.MAGIC, r.ABI, row["hz"]
+    rec = r.Records(
+        meta=meta,
+        link_arrival=links["arrival"],
+        link_drop=links["drop"],
+        link_depart=links["depart"],
+        link_opp=opp,
+        link_stats=np.zeros(0, r.STATS),
+        tcp_obs=obs,
+        agent_action=actions,
+    )
+    return StoredEpisode(
+        spec, rec, spec.path.trace.timestamps(), path_constants(spec, int(row["base_ns"]))
+    )

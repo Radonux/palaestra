@@ -269,7 +269,7 @@ Limits marked `ponytail` in the code name their upgrade path there.
 | At most 64 cross flows, all sender to receiver | no reverse traffic on the ACK path |
 | Several step loops each sleep 1 ns before reading their truth | at 64 agents, 1 of 7,909 steps saw a truth that differed from the labels; labels are always exact |
 | `truth` carries the seven LCFs only | arm A0 (the full path state) is unavailable |
-| Labels are computed when an episode is processed | no code recomputes them from stored link tables; a new label means rerunning |
+| Labels are stored when an episode is processed | a label added later is computed from the stored records (`dataset.read_episode`, then `labels.labels_at`); a shard written without `link_events` and `link_opp` (`--tables steps`) must be rerun |
 | Per-ms u8 trace counts | at most 3 Gbit/s and about 65 s per trace |
 | Mahak's metrics describe the whole link | with cross traffic, `utilization` and `mean_delay_ms` include other flows |
 | Virtual time is never checked against a real-time kernel | the effect of CPU cost on TCP is not measured (D19) |
