@@ -22,8 +22,10 @@ In the meaning tables:
   the value exists only in a model the emulator does not run.
 - "Sender" says whether the sender can measure the value: "yes",
   "estimate" (biased, delayed or conditional) or "no".
-- "Label" is palaestra's existing ground-truth label
-  ([architecture.md](architecture.md#ground-truth-labels)).
+- "Label" is the name palaestra gives the value: a stored ground-truth
+  label, or a composite the trainer computes from stored labels
+  ([architecture.md](architecture.md#ground-truth-labels)). A windowed
+  one exists over 100 ms under this name and over 10 ms as `<name>_10ms`.
 
 Notation:
 
@@ -48,8 +50,8 @@ bottleneck can hold. These change only when the path changes.
 | Capacity | the most the bottleneck can deliver per second in the window | exact | estimate | capacity_bps |
 | Base RTT | round-trip time with empty queues | exact | estimate | base_rtt_ns, one_way_delay_ns |
 | Buffer size | how much the bottleneck queue can hold before it drops | exact | estimate, after one overflow | buffer_pkts, buffer_bytes |
-| Bandwidth-delay product (BDP) | data in flight when the link is full and the queue empty | exact | estimate | none |
-| Non-congestive delay | delay that does not come from the bottleneck queue (link-layer jitter, ACK aggregation) | exact: zero on a constant delay line | no | none |
+| Bandwidth-delay product (BDP) | data in flight when the link is full and the queue empty | exact | estimate | bdp_pkts |
+| Non-congestive delay | delay that does not come from the bottleneck queue (link-layer jitter, ACK aggregation) | exact: the ACK link's queueing delay; the delay line adds none | no | ack_queue_delay_mean_ns (ACK-path queueing) |
 | Bandwidth change ratio | the factor by which capacity changes at a step | exact | no | none |
 
 Definitions:
@@ -73,13 +75,13 @@ our names for simple differences.
 
 | Concept | What it means | Truth | Sender | Label |
 |---|---|---|---|---|
-| Arrival rate | bits per second entering the bottleneck queue, all flows | exact | no | none |
-| Usage (departure rate) | bits per second the link actually sent, all flows | exact | estimate, with in-network telemetry | none (capacity times busy fraction) |
+| Arrival rate | bits per second entering the bottleneck queue, all flows | exact | no | arrival_rate_bps |
+| Usage (departure rate) | bits per second the link actually sent, all flows | exact | estimate, with in-network telemetry | departure_rate_bps |
 | Receive rate | the observed flow's share of the usage | exact, per flow | yes | receive_rate_bps |
 | Utilization (busy fraction) | the fraction of the link's capacity that was used; stops at 1 once the queue never empties | exact | estimate | busy_fraction |
-| Available capacity | capacity left unused by all flows (spare capacity); never negative | exact | estimate | none |
-| Excess demand | arrival rate minus capacity: positive means the queue grows | exact | estimate | none |
-| Load factor | arrival rate over a target rate just below capacity; unlike utilization it keeps growing under overload | exact | no | none |
+| Available capacity | capacity left unused by all flows (spare capacity); never negative | exact | estimate | available_capacity_bps |
+| Excess demand | arrival rate minus capacity: positive means the queue grows | exact | estimate | excess_demand_bps |
+| Load factor | arrival rate over a target rate just below capacity; unlike utilization it keeps growing under overload | exact | no | load_factor |
 | Idle time | the fraction of the window in which the link had nothing to send | exact | no | none (1 minus busy fraction) |
 
 Definitions:
@@ -108,13 +110,13 @@ a standing queue or a passing burst, and where it is heading.
 | Free buffer | buffer space left before drops start | exact | estimate | free_buffer_pkts |
 | Buffer fill | the fraction of the buffer in use | exact | estimate | buffer_fill |
 | Sojourn time | how long a packet waited in the queue | exact | estimate (RTT minus base RTT) | queue_delay_ns, queue_delay_mean_ns |
-| Standing queue | the part of the queue that does not drain within a round trip: its minimum over a recent window | exact | estimate | none |
-| Extra data in the network | data the flow keeps queued beyond what the path holds with an empty queue | exact, per flow | estimate | none |
+| Standing queue | the part of the queue that does not drain within a round trip: its minimum over a recent window | exact | estimate | queue_min_pkts |
+| Extra data in the network | data the flow keeps queued beyond what the path holds with an empty queue | exact, per flow | estimate | flow_queue_pkts |
 | Average queue | a smoothed queue | exact | no | none |
-| Queue growth rate | how fast the queue grows or drains, in seconds of delay per second | exact | estimate (RTT gradient) | none |
-| Little's-law delay | the queue divided by the departure rate: how long a packet arriving now will wait | exact | no | none |
-| Normalized inflight | how full the path is: 1 when the link is busy and its queue empty, plus the queue as a fraction of the BDP | exact | estimate, with telemetry | none |
-| Normalized power | (queue plus BDP) over BDP, times arrival rate over capacity: 1 when the link is just full; it rises with the queue, and with the arrival rate before the queue has built | exact | estimate | none |
+| Queue growth rate | how fast the queue grows or drains, in seconds of delay per second | exact | estimate (RTT gradient) | none (load_factor minus 1) |
+| Little's-law delay | the queue divided by the departure rate: how long a packet arriving now will wait | exact | no | littles_delay_ns |
+| Normalized inflight | how full the path is: 1 when the link is busy and its queue empty, plus the queue as a fraction of the BDP | exact | estimate, with telemetry | normalized_inflight |
+| Normalized power | (queue plus BDP) over BDP, times arrival rate over capacity: 1 when the link is just full; it rises with the queue, and with the arrival rate before the queue has built | exact | estimate | normalized_power |
 | Classic power | throughput over delay; highest at the knee, where the link is full and the queue still empty | exact | estimate | none |
 | Virtual queue | the queue a slightly slower link would have; it fills before the real queue does | exact | no | none |
 
@@ -152,9 +154,9 @@ variation, losses and marks.
 | One-way delay | time from sending a packet to its arrival | exact | partly: needs synchronized clocks | one_way_delay_ns (the delay line) |
 | Delay variation | the difference in delay between two packets; jitter is its smoothed size | exact | partly | none |
 | Delay gradient | whether delay is rising or falling, relative to its level | exact | yes | none |
-| Latency ratio | current RTT over base RTT | exact | yes | none |
-| Sending ratio | packets sent over packets delivered: above 1 means a queue or losses build | exact, per flow | yes | none |
-| Loss | whether a packet was dropped, with the cause | exact | yes, late and ambiguous | drop_fraction, random_loss_rate |
+| Latency ratio | current RTT over base RTT | exact | yes | rtt_ratio (on the true delays) |
+| Sending ratio | packets sent over packets delivered: above 1 means a queue or losses build | exact, per flow | yes | sending_ratio (at the link) |
+| Loss | whether a packet was dropped, with the cause | exact | yes, late and ambiguous | drop_fraction, random_drop_fraction, random_loss_rate |
 | Congestion mark | an ECN mark a router sets instead of dropping | exact if the emulated queue marks | yes | none |
 | Marked fraction | the fraction of packets that saw the queue above a threshold | exact | yes, with marking | none |
 | Loss-throughput relation | the rate a TCP flow reaches at a given loss rate and RTT | exact | yes | none |
@@ -185,9 +187,9 @@ Who else is on the link and how the capacity is split.
 
 | Concept | What it means | Truth | Sender | Label |
 |---|---|---|---|---|
-| Cross-traffic rate | arrival rate of all other flows | exact, per flow | estimate | cross_traffic_share (as a share) |
-| Active flows | how many flows have packets at the bottleneck in the window | exact, per flow | no | none |
-| Fair share | capacity divided equally among the active flows | exact, per flow | no | none |
+| Cross-traffic rate | arrival rate of all other flows | exact, per flow | estimate | cross_arrival_rate_bps, cross_traffic_share |
+| Active flows | how many flows have packets at the bottleneck in the window | exact, per flow | no | active_flows |
+| Fair share | capacity divided equally among the active flows | exact, per flow | no | fair_share_bps |
 | Max-min share | the fair share after flows that need less have been served | exact, per flow | no | none |
 | Fairness index | how evenly the link is split: 1 for equal shares, $`k/n`$ when $`k`$ of $`n`$ flows share equally and the rest get nothing | exact, per flow | no | none |
 

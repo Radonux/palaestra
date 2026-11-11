@@ -5,28 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated, Final, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from expliccit_env.policy import EXPLICCIT_OBS_COLS, OBS_DIM
+from expliccit_env.train.lcfs import LCF_UNITS
 
-# Label columns (labels.labels_at) net1 can learn, with the factor to the
-# units its errors are reported in.
-LCF_UNITS: Final = {
-    "queue_delay_mean_ns": (1e-6, "ms"),
-    "queue_delay_ns": (1e-6, "ms"),
-    "queue_pkts": (1.0, "pkts"),
-    "queue_bytes": (1.0, "bytes"),
-    "capacity_bps": (1e-6, "Mbit/s"),
-    "free_buffer_pkts": (1.0, "pkts"),
-    "buffer_pkts": (1.0, "pkts"),
-    "buffer_fill": (1.0, ""),
-    "busy_fraction": (1.0, ""),
-    "base_rtt_ns": (1e-6, "ms"),
-    "one_way_delay_ns": (1e-6, "ms"),
-    "receive_rate_bps": (1e-6, "Mbit/s"),
-    "random_loss_rate": (1.0, ""),
-    "cross_traffic_share": (1.0, ""),
-}
 # expliCCit's seven LCFs, c0 to c6, in its order (its concepts log names them
 # avg_queuing_delay_ms, buffer_occupancy_pkts, channel_capacity_Mbps,
 # free_buffer_pkts, link_busyness_fraction, mRTT_ms, rec_rate_Mbps; its mRTT
@@ -41,22 +24,15 @@ EXPLICCIT_LCFS: Final = (
     "receive_rate_bps",
 )
 
-type Lcf = Literal[
-    "queue_delay_mean_ns",
-    "queue_delay_ns",
-    "queue_pkts",
-    "queue_bytes",
-    "capacity_bps",
-    "free_buffer_pkts",
-    "buffer_pkts",
-    "buffer_fill",
-    "busy_fraction",
-    "base_rtt_ns",
-    "one_way_delay_ns",
-    "receive_rate_bps",
-    "random_loss_rate",
-    "cross_traffic_share",
-]
+
+def _known_lcf(name: str) -> str:
+    if name not in LCF_UNITS:
+        raise ValueError(f"unknown LCF {name}; one of {sorted(LCF_UNITS)}")
+    return name
+
+
+# A label column or a composite of them (lcfs.py).
+type Lcf = Annotated[str, AfterValidator(_known_lcf)]
 
 
 class _Frozen(BaseModel):

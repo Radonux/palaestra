@@ -58,7 +58,7 @@ runner, and `--eval NET1.pt` scores a trained net1 without training, as
 | `step_stride` | 1 | keep every n-th step and the step after it |
 | `net1_from` | none | reuse a trained `net1.pt` |
 | `net1.output` | `{"kind": "point"}` | what net1 states per LCF: one value (`point`), a centre and an interval holding `coverage` (`interval`), or a distribution over `bins` fixed bins, trained with the log score and averaged over `members` net1s (`bins`; net1 v5 and v6: 64 bins, 3 members) |
-| `net1.lcfs`, `net1.obs_cols` | expliCCit's 7 and 70 | what net1 predicts and reads |
+| `net1.lcfs`, `net1.obs_cols` | expliCCit's 7 and 70 | what net1 predicts and reads; an LCF is any [label or composite](architecture.md#ground-truth-labels), in either window |
 | `net1.width`, `dropout`, `lr`, `epochs`, `patience` | 512, 0.3, 1e-3, 50, 5 | the network and its training |
 
 Output: `net1.pt`, `net2.pt`, `policy.onnx`, `report.json` and the spec.

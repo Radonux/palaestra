@@ -27,6 +27,7 @@ from expliccit_env.train import fit, score
 from expliccit_env.train.actors import Rules, front, target, teacher3_u, teacher_u
 from expliccit_env.train.graph import Front
 from expliccit_env.train.handoff import PolicyTeacher
+from expliccit_env.train.lcfs import Labels, columns
 from expliccit_env.train.mixture import active
 from expliccit_env.train.recurrent import OBS_MIN_RTT, decision_steps
 from expliccit_env.train.spec import LCF_UNITS, Gate3, Net2Spec, PPOSpec
@@ -60,7 +61,7 @@ class Trajectory:
 def _read(path: Path, eids: set[str], lcfs: tuple[str, ...]) -> pa.Table | None:
     if not path.exists():
         return None
-    labels = {f"label_{n}" for n in (*UTILITY_LABELS, "drop_fraction", *lcfs)}
+    labels = {f"label_{n}" for n in (*UTILITY_LABELS, "drop_fraction", *columns(lcfs))}
     names = pq.read_schema(path).names
     cols = [c for c in names if c in {"episode_id", "flow", "step", "t_ns", "obs", "cwnd"} | labels]
     t = pq.read_table(path, columns=cols)
@@ -68,12 +69,14 @@ def _read(path: Path, eids: set[str], lcfs: tuple[str, ...]) -> pa.Table | None:
     return t.filter(pa.array(keep))
 
 
-def _labels(t: pa.Table) -> dict[str, npt.NDArray[np.float32]]:
-    return {
-        c.removeprefix("label_"): np.asarray(t[c].to_numpy(zero_copy_only=False), np.float32)
-        for c in t.column_names
-        if c.startswith("label_")
-    }
+def _labels(t: pa.Table) -> Labels:
+    return Labels(
+        {
+            c.removeprefix("label_"): np.asarray(t[c].to_numpy(zero_copy_only=False), np.float32)
+            for c in t.column_names
+            if c.startswith("label_")
+        }
+    )
 
 
 def _by_step(t: pa.Table) -> pa.Table:

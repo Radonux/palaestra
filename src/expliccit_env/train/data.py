@@ -15,6 +15,7 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 from expliccit_env.policy import OBS_DIM
+from expliccit_env.train.lcfs import Labels
 
 type F32 = npt.NDArray[np.float32]
 type Split = Literal["train", "val", "test"]
@@ -32,7 +33,7 @@ class Steps:
     """Rows of every recorded step, by episode id, then step."""
 
     obs: F32  # [n, 78], the step message as recorded (may hold inf and NaN)
-    labels: dict[str, F32]  # label name -> [n], NaN where undefined
+    labels: dict[str, F32]  # label name -> [n], NaN where undefined (lcfs.Labels)
     action: F32  # [n], the action taken from the step; NaN on the last one
     reward: F32  # [n], Sage's reward at the step
     cwnd: F32  # [n], the sender's window (packets) when the step was read
@@ -145,7 +146,7 @@ def load(
         step=cat.pop("step"),
         episode_ids=episode_ids,
         split=split,
-        labels={k.removeprefix("label_"): v for k, v in cat.items()},
+        labels=Labels({k.removeprefix("label_"): v for k, v in cat.items()}),
     )
 
 

@@ -117,10 +117,16 @@ guest writes one file per type, which the host maps as a packed array.
 ## Ground-truth labels
 
 `labels.py` computes labels as pure functions of an episode's records,
-for the data direction; windowed labels cover the trailing 100 trace ms.
-`labels_at` gives
-them at any instants: every sender observation (`labels.parquet`, row for
-row with `obs.parquet`) and every step (`label_*` in `steps.parquet`).
+for the data direction. `labels_at` gives them at any instants: every
+sender observation (`labels.parquet`, row for row with `obs.parquet`) and
+every step (`label_*` in `steps.parquet`).
+
+A windowed label covers the whole trace ms just before the sample. The
+steps store each one twice: over 100 ms under its own name (expliCCit's
+window, and the live truth's), and over 10 ms as `<name>_10ms`.
+`labels.parquet` has a row per ACK and keeps the 100 ms window only.
+
+expliCCit's seven LCFs:
 
 | LCF | Definition |
 |---|---|
@@ -132,10 +138,54 @@ row with `obs.parquet`) and every step (`label_*` in `steps.parquet`).
 | `one_way_delay_ns` | one delay line (Mahak's and expliCCit's "mRTT") |
 | `receive_rate_bps` | the observed flow's bits leaving the bottleneck per second |
 
-Other labels: `queue_bytes`, `queue_delay_ns` (the latest data packet's
-exact delay), `base_rtt_ns`, `buffer_pkts`, `buffer_bytes`, `buffer_fill`,
-`drop_fraction` (the flow's packets dropped by the full queue over those
-that reached it), `random_loss_rate` and `cross_traffic_share`.
+Other labels of the instant: `queue_bytes`, `queue_delay_ns` (the latest
+data packet's exact delay), `base_rtt_ns`, `buffer_pkts`, `buffer_bytes`,
+`buffer_fill`, `random_loss_rate`, and:
+
+| Label | Definition |
+|---|---|
+| `flow_queue_pkts` | the observed flow's packets in `queue_pkts`; over all flows they add up to it |
+
+Other windowed labels: `drop_fraction` (the flow's packets dropped by the
+full queue over those that reached it), `cross_traffic_share`, and:
+
+| Label | Definition |
+|---|---|
+| `arrival_rate_bps` | bits of every flow reaching the bottleneck queue per second, those the full queue then dropped included |
+| `flow_arrival_rate_bps` | the same for the observed flow alone |
+| `queue_min_pkts` | the smallest queue at any instant of the window (the standing queue); NaN for an empty window |
+| `active_flows` | flows with a packet reaching the bottleneck in the window |
+| `random_drop_fraction` | the flow's packets the random loss dropped before the bottleneck, over those it sent toward it; NaN if none |
+| `ack_queue_delay_mean_ns` | `queue_delay_mean_ns` of the ACK direction's link: delay the sender sees that the bottleneck queue did not cause |
+| `capacity_ahead_bps` | `capacity_bps` of the window that starts with the sample's ms; the one label that looks forward |
+
+### Composite LCFs
+
+A composite is a fixed formula over the label columns of one window
+(`train/lcfs.py`). It is not stored: the trainer computes it from the
+stored columns when an LCF set names it, so a new composite needs no new
+data. Each comes in both windows, as the labels do. A set that holds a
+composite beside the columns it is made of is redundant by construction.
+
+With $`C`$ the capacity, $`U`$ the busy fraction, $`y`$ the arrival rate,
+$`q`$ the queue in bytes, $`R`$ the base RTT and $`N`$ the active flows:
+
+| Composite | Formula | Source ([lcf-concepts.md](lcf-concepts.md)) |
+|---|---|---|
+| `departure_rate_bps` | $`C\,U`$ | RFC 5136 (usage), HPCC |
+| `available_capacity_bps` | $`C\,(1 - U)`$ | RFC 5136 |
+| `excess_demand_bps` | $`y - C`$ | XCP |
+| `load_factor` | $`y / C`$; TIMELY's queue growth rate is this less 1 | OSU scheme, with the target at capacity |
+| `bdp_pkts` | $`C R`$, in 1504-byte packets | CCmatic |
+| `littles_delay_ns` | $`q / (C\,U)`$ | PIE |
+| `normalized_inflight` | $`q / (C R) + U`$ | HPCC |
+| `normalized_power` | $`\bigl(1 + q / (C R)\bigr)\, y / C`$ | PowerTCP |
+| `cross_arrival_rate_bps` | $`y`$ less the observed flow's arrival rate | Dovrolis 2001 |
+| `fair_share_bps` | $`C / N`$ | RCP |
+| `sending_ratio` | the flow's arrival rate over its receive rate | Aurora, measured at the link |
+| `rtt_ratio` | $`(R + \text{mean queueing delay}) / R`$ | Aurora, Remy, on the true delays |
+
+A ratio is NaN where its denominator is 0.
 
 ## Sage's step and the policy contract (`sage-v1`)
 
@@ -268,7 +318,7 @@ Limits marked `ponytail` in the code name their upgrade path there.
 | One decision per 10 ms step | pacing refreshed per step, where Sage's kernel may pace per ACK |
 | At most 64 cross flows, all sender to receiver | no reverse traffic on the ACK path |
 | Several step loops each sleep 1 ns before reading their truth | at 64 agents, 1 of 7,909 steps saw a truth that differed from the labels; labels are always exact |
-| `truth` carries the seven LCFs only | arm A0 (the full path state) is unavailable |
+| `truth` carries the seven LCFs only, over 100 ms | arm A0 (the full path state) is unavailable; a policy that reads the truth (the oracle arm, a patched belief) cannot use the newer labels, the 10 ms window or a composite |
 | Labels are stored when an episode is processed | a label added later is computed from the stored records (`dataset.read_episode`, then `labels.labels_at`); a shard written without `link_events` and `link_opp` (`--tables steps`) must be rerun |
 | Per-ms u8 trace counts | at most 3 Gbit/s and about 65 s per trace |
 | Mahak's metrics describe the whole link | with cross traffic, `utilization` and `mean_delay_ms` include other flows |
