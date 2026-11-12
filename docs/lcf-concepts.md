@@ -65,6 +65,7 @@ Definitions:
 | Buffer size | $`\beta`$; loss can occur only once the queue exceeds it | CCAC |
 | BDP | $`C \cdot R_m`$ | CCmatic |
 | Non-congestive delay | $`\mathrm{RTT}(t) = R_m + q_{\mathrm{del}}(t) + \mathrm{jitter}(t)`$, with $`0 \le \mathrm{jitter}(t) \le D`$ | CCmatic |
+| Non-congestive delay, by cause | "jitter due to network elements (perhaps also at the bottleneck) that may temporarily hold packets or ACKs but are not by themselves persistent rate bottlenecks" | Starvation |
 | Jitter bound | $`D`$: tokens that arrived $`D`$ seconds ago and were not wasted must have been used, $`S(t) \ge C\,(t-D) - W(t-D)`$ | CCAC |
 | Bandwidth change ratio | the change ratio of the bandwidth, from 0.1x to 8x in its study | Mahak |
 
@@ -93,6 +94,7 @@ Definitions:
 | Departure rate | $`\mathrm{txRate} = \Delta\mathrm{txBytes} / \Delta t`$ between two telemetry records | HPCC |
 | Utilization | $`U(L,T,I) = \mathrm{Used}(L,T,I) / C(L,T,I)`$ | RFC 5136 |
 | Utilization, time average | $`\bar u(t-\tau, t) = \frac{1}{\tau}\int_{t-\tau}^{t} u(x)\,dx`$, with $`u(x) \in \{0,1\}`$ the instantaneous busy indicator and $`\tau`$ the averaging timescale | Prasad 2003 |
+| Utilization, along a path | for a path of several links, the signal is taken as "maximum queue length or maximum link utilization at any hop" | McClure 2026 |
 | Available capacity | $`A(L,T,I) = C(L,T,I)\,\bigl(1 - U(L,T,I)\bigr)`$; the tight link is the one with the least | RFC 5136 |
 | Available capacity, fluid form | $`A_i(t,T) = \frac{1}{T}\int_t^{t+T} \bigl(C_i - \lambda_i(x)\bigr)\,dx`$, $`\lambda_i`$ the cross-traffic rate | Spruce |
 | Excess demand | $`y - C`$; XCP's spare bandwidth is the same difference with the opposite sign | XCP |
@@ -110,8 +112,11 @@ a standing queue or a passing burst, and where it is heading.
 | Free buffer | buffer space left before drops start | exact | estimate | free_buffer_pkts |
 | Buffer fill | the fraction of the buffer in use | exact | estimate | buffer_fill |
 | Sojourn time | how long a packet waited in the queue | exact | estimate (RTT minus base RTT) | queue_delay_ns, queue_delay_mean_ns |
+| Congestive delay | the wait in the bottleneck queue plus the packet's own transmission time on the bottleneck | exact | estimate | none (queue delay plus one packet time at capacity) |
+| Queue full | whether the buffer is at its limit, so that arrivals are dropped | exact | no, until a loss is seen | none (buffer_fill equal to 1) |
 | Standing queue | the part of the queue that does not drain within a round trip: its minimum over a recent window | exact | estimate | queue_min_pkts |
 | Extra data in the network | data the flow keeps queued beyond what the path holds with an empty queue | exact, per flow | estimate | flow_queue_pkts |
+| Data in the network (FlightSize) | the flow's packets that were sent and have neither arrived nor been lost; the sender's own count lags it by the delay of the ACKs | exact, per flow | estimate | none |
 | Average queue | a smoothed queue | exact | no | none |
 | Queue growth rate | how fast the queue grows or drains, in seconds of delay per second | exact | estimate (RTT gradient) | none (load_factor minus 1) |
 | Little's-law delay | the queue divided by the departure rate: how long a packet arriving now will wait | exact | no | littles_delay_ns |
@@ -128,6 +133,9 @@ Definitions:
 | Free buffer | $`B - q`$ (expliCCit's LCF) | palaestra |
 | Buffer fill | $`q / B`$ | palaestra |
 | Sojourn time | "the time a packet departs the buffer minus the time the packet arrived at the buffer" | CoDel (RFC 8289) |
+| Congestive delay | "the sum of the queueing delay incurred by packets waiting to be sent on the bottleneck link and the transmission time over the bottleneck link" | Starvation |
+| Queue full | "a binary variable $`\mathit{is\_full}`$, indicating whether the queue is full" | Learn-to-Probe |
+| Data in the network (FlightSize) | $`F(t) = S(t) - R(t) - L(t)`$: packets sent, minus packets the receiver has received, minus packets that left the network another way, such as by loss | Zhang 2025 |
 | Standing queue | the minimum queue seen by an arriving packet during the last propagation delay | XCP |
 | Standing queue, by delay | the sojourn time has stayed above TARGET = 5 ms for INTERVAL = 100 ms | CoDel (RFC 8289) |
 | Standing RTT | the smallest RTT over the last $`\mathrm{srtt}/2`$; Copa's queueing delay is $`d_q = \mathrm{RTT}_{\mathrm{standing}} - \mathrm{RTT}_{\min}`$, with $`\mathrm{RTT}_{\min}`$ the smallest RTT over the last 10 s or since the flow started | Copa |
@@ -190,6 +198,8 @@ Who else is on the link and how the capacity is split.
 | Cross-traffic rate | arrival rate of all other flows | exact, per flow | estimate | cross_arrival_rate_bps, cross_traffic_share |
 | Active flows | how many flows have packets at the bottleneck in the window | exact, per flow | no | active_flows |
 | Fair share | capacity divided equally among the active flows | exact, per flow | no | fair_share_bps |
+| Capacity share | the observed flow's throughput as a fraction of capacity | exact, per flow | estimate | none (receive_rate_bps over capacity_bps) |
+| Normalized rates | the observed flow's sending rate, and the other flows' total sending rate, each as a fraction of capacity | exact, per flow | no | none (flow_arrival_rate_bps and cross_arrival_rate_bps over capacity_bps) |
 | Max-min share | the fair share after flows that need less have been served | exact, per flow | no | none |
 | Fairness index | how evenly the link is split: 1 for equal shares, $`k/n`$ when $`k`$ of $`n`$ flows share equally and the rest get nothing | exact, per flow | no | none |
 
@@ -203,6 +213,9 @@ Definitions:
 | Flow-count estimate | $`\hat N(t) = C / R(t - T)`$, $`R`$ the fair rate the router last computed | RCP |
 | Fair share | $`C / N(t)`$, the processor-sharing rate | RCP |
 | Fair share, with a target | target rate over the number of active sources | OSU scheme (ATM survey) |
+| Capacity share | $`\mathrm{ratio}_{bw} = \mathrm{thr}_t / c`$, the flow bandwidth occupancy ratio, for flow throughput $`\mathrm{thr}_t`$ and bottleneck capacity $`c`$ | Jury |
+| Capacity share, modelled | $`\mathrm{thr}_{i} = c\, x_{i} / \sum_j x_{j}`$ when the flows fill the link: each flow gets capacity in proportion to its sending rate | Jury |
+| Normalized rates | $`x / c`$ for the observed flow and $`x_o / c`$ for the competing flows together, $`c`$ the bottleneck capacity | Learn-to-Probe |
 | Max-min share | $`\bigl(C - \sum_{\mathrm{underloading}} x_i\bigr) / (N - N_{\mathrm{underloading}})`$, iterated until the set of underloading flows stops changing | MIT scheme (ATM survey) |
 | Fairness index | $`F = \bigl(\sum_i x_i\bigr)^2 / \bigl(n \sum_i x_i^2\bigr)`$ for $`n`$ flows | Jain-Chiu-Hawe |
 
@@ -289,12 +302,15 @@ definitions were copied from.
 | Jain 1989 | Jain, A delay-based approach for congestion avoidance in interconnected heterogeneous computer networks (1989), https://doi.org/10.1145/74681.74686 | https://arxiv.org/pdf/cs/9809093 (definitions copied from the DEC report version) |
 | Jain-Chiu-Hawe | Jain et al., A Quantitative Measure Of Fairness And Discrimination For Resource Allocation In Shared Computer Systems (1998), https://arxiv.org/abs/cs/9809099 | https://arxiv.org/pdf/cs/9809099 (a scanned DEC technical report) |
 | Jain-Ramakrishnan | Jain and Ramakrishnan, Congestion Avoidance in Computer Networks with a Connectionless Network Layer, Part I: Concepts, Goals and Methodology (1998), https://arxiv.org/abs/cs/9809095 | https://arxiv.org/pdf/cs/9809095v1 |
+| Jury | Tian et al., Achieving Fairness Generalizability for Learning-based Congestion Control with Jury (2025), https://doi.org/10.1145/3689031.3696065 | https://cse.hkust.edu.hk/~kaichen/papers/jury-eurosys25.pdf |
 | Kelly 1998 | Kelly et al., Rate control for communication networks: shadow prices, proportional fairness and stability (1998), https://doi.org/10.1038/sj.jors.2600523 | http://www.statslab.cam.ac.uk/~frank/rate.pdf |
 | Kleinrock | Kleinrock, Internet congestion control using the power metric: Keep the pipe just full, but no fuller (2018), https://doi.org/10.1016/j.adhoc.2018.05.015 | https://www.lk.cs.ucla.edu/data/files/Kleinrock/Internet%20Congestion%20Control%20Using%20the%20Power%20Metric-Keep%20the%20Pipe%20Just%20Full,%20But%20No%20Fuller%20July%202018.pdf (definitions copied from the author's 2018 preprint) |
+| Learn-to-Probe | Tian et al., Learn-to-Probe: Achieving Signal Distinguishability in Learning-based Congestion Control (2026), https://doi.org/10.1145/3767295.3769317 | https://cse.hkust.edu.hk/~kaichen/papers/ltp-eurosys26.pdf |
 | Low-Lapsley | Low and Lapsely, Optimization flow control. I. Basic algorithm and convergence (1999), https://doi.org/10.1109/90.811451 | https://www.ee.columbia.edu/~tbma/files/GameCourse/Low_Optimization.pdf |
 | Mahak | Pazhooheshy et al., Harnessing ML For Network Protocol Assessment: A Congestion Control Use Case (2023), https://doi.org/10.1145/3626111.3628182 | https://conferences.sigcomm.org/hotnets/2023/papers/hotnets23_pazhooheshy.pdf |
 | Mahimahi | Netravali et al., Mahimahi: Accurate Record-and-Replay for HTTP (USENIX ATC 2015) | https://www.cs.princeton.edu/~ravian/publications/mahimahi_atc.pdf |
 | Mathis | Mathis et al., The macroscopic behavior of the TCP congestion avoidance algorithm (1997), https://doi.org/10.1145/263932.264023 | https://courses.cs.duke.edu/fall24/compsci514/readings/mathis-tcpmodel-ccr97.pdf |
+| McClure 2026 | McClure et al., No Signal to Rule Them All: A Systematic Analysis of In-Network Congestion Signals (2026), https://doi.org/10.4230/oasics.nines.2026.12 | https://drops.dagstuhl.de/storage/01oasics/oasics-vol139-nines2026/OASIcs.NINeS.2026.12/OASIcs.NINeS.2026.12.pdf |
 | Nimbus | Goyal et al., Elasticity detection: A building block for internet congestion control (2022), https://doi.org/10.1145/3544216.3544221 | https://arxiv.org/pdf/1802.08730v4 (definitions copied from arXiv v4 (2020) of the same work) |
 | palaestra | this repository's ground-truth labels, which implement expliCCit's LCFs | [architecture.md](architecture.md#ground-truth-labels) |
 | Patel 2024 | Patel et al., Toward Trustworthy Learning-Enabled Systems with Concept-Based Explanations (2024), https://doi.org/10.1145/3696348.3696894 | https://conferences.sigcomm.org/hotnets/2024/papers/hotnets24-366.pdf |
@@ -316,8 +332,10 @@ definitions were copied from.
 | Rubenstein 2002 | Rubenstein et al., Detecting shared congestion of flows via end-to-end measurement (2002), https://doi.org/10.1109/tnet.2002.1012369 | https://www.eecis.udel.edu/~mills/fractal/01012369.pdf |
 | Sprout | Winstein et al., Stochastic Forecasts Achieve High Throughput and Low Delay over Cellular Networks (NSDI 2013) | https://www.usenix.org/system/files/conference/nsdi13/nsdi13-final113.pdf |
 | Spruce | Strauss et al., A measurement study of available bandwidth estimation tools (2003), https://doi.org/10.1145/948205.948211 | https://pdos.csail.mit.edu/~jastr/papers/imc03-spruce.pdf |
+| Starvation | Arun et al., Starvation in end-to-end congestion control (2022), https://doi.org/10.1145/3544216.3544223 | https://people.csail.mit.edu/venkatar/cc-starvation.pdf |
 | TFRC (RFC 5348) | Floyd et al., TCP Friendly Rate Control (TFRC): Protocol Specification (2008), https://doi.org/10.17487/rfc5348 | https://www.rfc-editor.org/rfc/rfc5348.txt |
 | TIMELY | Mittal et al., TIMELY: RTT-based Congestion Control for the Datacenter (2015), https://doi.org/10.1145/2785956.2787510 | https://conferences.sigcomm.org/sigcomm/2015/pdf/papers/p537.pdf |
 | Vegas | Brakmo and Peterson, TCP Vegas: end to end congestion avoidance on a global Internet (1995), https://doi.org/10.1109/49.464716 | http://www.cs.princeton.edu/courses/archive/fall06/cos561/papers/vegas.pdf |
 | XCP | Katabi et al., Congestion control for high bandwidth-delay product networks (2002), https://doi.org/10.1145/964725.633035 | http://conferences.sigcomm.org/sigcomm/2002/papers/xcp.pdf |
+| Zhang 2025 | Zhang et al., Accuracy Evaluation of TCP FlightSize Estimation: Analytical and Experimental Study (2025), https://doi.org/10.1109/icnc64010.2025.10993663 | https://mingruiz.pages.dev/papers/icnc25-p677-zhang.pdf |
 | Zhang-Shenker-Clark | Zhang et al., Observations on the dynamics of a congestion control algorithm: The effects of two-way traffic (1991), https://doi.org/10.1145/115992.116006 | https://groups.csail.mit.edu/ana/Publications/PubPDFs/Observations%20on%20the%20Dynamics%20of%20a%20Congestion%20Control%20Algorithm.pdf |
