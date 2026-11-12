@@ -58,14 +58,15 @@ The new releases repeat the old ones, up to run-to-run variation. All
 that ran in both, the campaign means of goodput, delay, drop fraction,
 utilization and step count agree to within 1 percent, and the median
 episode differs from its old run by under 1 percent in each (the 90th
-percentile difference is 4 to 50 percent, largest for delay on the wide
+percentile difference reaches 51 percent, largest for delay on the wide
 held-out links: an episode is not reproduced bit for bit). In the
 held-out release the 16 old label columns have the same distribution as
 in `-ood-75` (10th, 50th and 90th percentiles within about 2 percent).
 For the other three, one shard of each campaign was compared: the 30 s
 and 60 s shards agree to within 5 percent on all 16 columns; the wide
-release's shards hold as few as 30 episodes and differ more (up to 35
-percent on a percentile of the queue and drop labels), so the label
+release's shards hold as few as 30 episodes and differ far more (a
+percentile of the drop fraction by up to 91 percent, of the queue labels
+by up to 28 percent), so the label
 comparison over that whole release is UNRUN. Every shard checked holds
 the 37 columns with no nulls.
 
