@@ -49,12 +49,27 @@ the 16 they held before. The paths, controllers and seeds are the same.
 | Wide links (net1 v6) | `exp-data-net1-v6-146` | [`exp-data-net1-v6-214`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-v6-214) |
 
 Every planned episode ran: 14,400, 7,200 and 3,600 with none failed, and
-12,600 in the wide release with one failed (a cross flow that did not
-start, so the episode was rejected and its row holds no metrics). In the
-held-out release the 16 old columns have the same distribution as in
-`-ood-75` (10th, 50th and 90th percentiles within about 2 percent). That
-comparison is UNRUN for the other three, where one shard was checked for
-the 37 columns and no nulls. No net1 has been trained on the new
+12,600 in the wide release with one failed. That one (a cross flow that
+did not start, so the episode was rejected and its row holds no metrics)
+failed the same way in `-146`.
+
+The new releases repeat the old ones, up to run-to-run variation. All
+37,800 episodes have the same id and spec in both. Over every episode
+that ran in both, the campaign means of goodput, delay, drop fraction,
+utilization and step count agree to within 1 percent, and the median
+episode differs from its old run by under 1 percent in each (the 90th
+percentile difference is 4 to 50 percent, largest for delay on the wide
+held-out links: an episode is not reproduced bit for bit). In the
+held-out release the 16 old label columns have the same distribution as
+in `-ood-75` (10th, 50th and 90th percentiles within about 2 percent).
+For the other three, one shard of each campaign was compared: the 30 s
+and 60 s shards agree to within 5 percent on all 16 columns; the wide
+release's shards hold as few as 30 episodes and differ more (up to 35
+percent on a percentile of the queue and drop labels), so the label
+comparison over that whole release is UNRUN. Every shard checked holds
+the 37 columns with no nulls.
+
+No net1 has been trained on the new
 releases; use them for any LCF outside the old 16, since a composite
 (`train/lcfs.py`) then costs no rerun.
 
