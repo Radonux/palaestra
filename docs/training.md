@@ -37,6 +37,27 @@ more from many links with a few controllers than the reverse. Any of the
 | 180 links with every controller, 1,050 with three each | `examples/net1_varied.py` | net1 v3; the evaluation links |
 | 3,600 broad links under 64 conditions, and four held-out families | `examples/net1_broad.py`; releases `exp-data-net1-broad-30s-73`, `-60s-74`, `-ood-75` | net1 v4 and v5; net2's training paths |
 
+net1's four datasets were regenerated on 2026-11-12 so that their steps
+hold all 37 label columns (both windows, dataset version 8) in place of
+the 16 they held before. The paths, controllers and seeds are the same.
+
+| Data | Old release, what net1 v4 to v6 were trained on | New release, 37 labels |
+|---|---|---|
+| Broad links, 30 s | `exp-data-net1-broad-30s-73` | [`exp-data-net1-broad-30s-212`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-30s-212) |
+| Broad links, 60 s | `exp-data-net1-broad-60s-74` | [`exp-data-net1-broad-60s-213`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-60s-213) |
+| Held-out families | `exp-data-net1-broad-ood-75` | [`exp-data-net1-broad-ood-215`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-ood-215) |
+| Wide links (net1 v6) | `exp-data-net1-v6-146` | [`exp-data-net1-v6-214`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-v6-214) |
+
+Every planned episode ran: 14,400, 7,200 and 3,600 with none failed, and
+12,600 in the wide release with one failed (a cross flow that did not
+start, so the episode was rejected and its row holds no metrics). In the
+held-out release the 16 old columns have the same distribution as in
+`-ood-75` (10th, 50th and 90th percentiles within about 2 percent). That
+comparison is UNRUN for the other three, where one shard was checked for
+the 37 columns and no nulls. No net1 has been trained on the new
+releases; use them for any LCF outside the old 16, since a composite
+(`train/lcfs.py`) then costs no rerun.
+
 ## net1: `train run`
 
     uv run expliccit train run train.json out/model
