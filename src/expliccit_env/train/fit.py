@@ -289,8 +289,9 @@ def _report_distributions(
     bounds = kind.bounds.numpy()
     p = net1.distributions(steps.obs[rows])  # float32; one LCF at a time in float64
     y = targets(steps, net1.lcfs)
-    with torch.no_grad():
-        idx = kind.bin_of(torch.from_numpy(np.nan_to_num(y))).numpy()
+    assert isinstance(net1.net, BinNet1)
+    with torch.no_grad():  # the network's bin_of, whose memory does not grow with the bins
+        idx = net1.net.bin_of(torch.from_numpy(np.nan_to_num(y))).numpy()
     train = steps.rows("train") if steps.rows("train").any() else np.ones_like(rows)
     qs = sorted({q for lv in _LEVELS for q in ((1 - lv) / 2, (1 + lv) / 2)})
     qv = quantiles(p, bounds, tuple(qs))
