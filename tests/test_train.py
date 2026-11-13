@@ -292,7 +292,30 @@ def _net1(intervals: bool = False) -> fit.Net1:
 
 
 def test_truth_columns_are_expliccits_lcfs() -> None:
-    assert TRUTH_COLUMNS == EXPLICCIT_LCFS
+    # First, so a policy exported with a seven-wide truth input still reads them.
+    assert TRUTH_COLUMNS[:7] == EXPLICCIT_LCFS
+    assert len(set(TRUTH_COLUMNS)) == TRUTH_DIM
+
+
+def test_truth_gives_every_lcf_but_the_one_in_hindsight() -> None:
+    # A composite of the truth is the composite of the labels: one formula.
+    from expliccit_env.train import lcfs  # noqa: PLC0415
+    from expliccit_env.train.graph import TruthColumns  # noqa: PLC0415
+
+    rng = np.random.default_rng(0)
+    truth = rng.uniform(0.5, 2.0, size=(64, TRUTH_DIM)).astype(np.float32)
+    truth[:8, TRUTH_COLUMNS.index("busy_fraction")] = np.nan
+    truth[8:16, TRUTH_COLUMNS.index("active_flows")] = 0
+    truth[16:24, TRUTH_COLUMNS.index("queue_delay_mean_ns_10ms")] = np.nan
+    names = [n for n in LCF_UNITS if n != "queue_delay_ns"]
+    assert len(names) == len(LCF_UNITS) - 1
+    labels = lcfs.Labels({n: truth[:, k] for k, n in enumerate(TRUTH_COLUMNS)})
+    want = np.stack([labels[n] * np.float32(LCF_UNITS[n][0]) for n in names], axis=1)
+    got = TruthColumns(names)(torch.from_numpy(truth)).numpy()
+    assert np.array_equal(got, want, equal_nan=True)
+    assert not TruthColumns.known("queue_delay_ns")
+    late = TruthColumns(["queue_delay_ns", "queue_pkts"])(torch.from_numpy(truth))
+    assert late[:, 0].isnan().all() and late[:, 1].isfinite().all()
 
 
 @pytest.mark.parametrize("intervals", [False, True])
@@ -302,14 +325,15 @@ def test_patched_graph_takes_the_named_lcfs_from_the_truth(intervals: bool) -> N
     k = 21 if intervals else 7
     actor = ExpliccitActor(k).eval()
     obs = torch.randn(5, OBS_DIM)
-    truth = torch.rand(5, TRUTH_DIM) * torch.tensor([5e6, 50, 3e7, 100, 1, 2e7, 2e7])
+    truth = torch.rand(5, TRUTH_DIM)
+    truth[:, :7] *= torch.tensor([5e6, 50, 3e7, 100, 1, 2e7, 2e7])
     truth[0, 0] = float("nan")  # no departure in the window
     cap = TRUTH_COLUMNS.index("capacity_bps")
     patched = fit.policy_graph(net1, actor, 1.0, truth=frozenset({"capacity_bps"}))
     with torch.no_grad():
         z = net1.net(net1.scaler(obs))
         units = torch.tensor([LCF_UNITS[n][0] for n in EXPLICCIT_LCFS])
-        zt = (truth * units - net1.lcf_scaler.center) / net1.lcf_scaler.spread
+        zt = (truth[:, :7] * units - net1.lcf_scaler.center) / net1.lcf_scaler.spread
         for block in range(k // 7):  # the centre and, for intervals, both bounds
             z[:, block * 7 + cap] = zt[:, cap]
         assert torch.equal(patched(obs, truth), actor(z))

@@ -34,8 +34,8 @@ class _ByName(torch.nn.Module):
 
 def to_onnx(graph: PolicyGraph) -> bytes:
     """Input "obs" [1, 78], plus "state" [1, S] when net2 has memory, "truth"
-    [1, 7] when the graph takes LCFs from the truth and "cwnd" [1, 1] when it
-    sets a window target; output "a" [1, 1], then the next state [1, S]
+    [1, TRUTH_DIM] when the graph takes LCFs from the truth and "cwnd"
+    [1, 1] when it sets a window target; output "a" [1, 1], then the next state [1, S]
     when net2 has memory.
 
     ponytail: TorchScript exporter (deprecated in torch 2.x, simple ops that

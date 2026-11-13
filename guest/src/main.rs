@@ -35,7 +35,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use sys::{Context, Result, fail};
 
-const RESULT_VERSION: u32 = 6;
+const RESULT_VERSION: u32 = 7;
 const SND_ADDR: [u8; 4] = [10, 0, 0, 1];
 const PATH_SND_ADDR: [u8; 4] = [10, 0, 0, 2];
 const RCV_ADDR: [u8; 4] = [10, 0, 1, 1];
@@ -283,7 +283,7 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
     for name in ["rmem_max", "wmem_max"] {
         std::fs::write(format!("/proc/sys/net/core/{name}"), "134217728").ctx(name)?;
     }
-    // The step loops' true state comes from the downlink's records, so it
+    // The step loops' true state comes from the links' records, so it
     // exists whenever steps run, for the observed flow or a cross agent.
     let n_cross_agents = plan.cross.iter().filter(|c| c.agent().is_some()).count();
     let cross_agents = n_cross_agents > 0;
@@ -292,8 +292,15 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
     let delays = extra_delays(&plan)?;
     let link_truth = (plan.steps || cross_agents).then(|| {
         let d = &plan.downlink;
-        let end_ms = u64::from(plan.duration_ms.get());
-        truth::LinkTruth::new(end_ms, d.trace.clone(), d.limit_pkts, d.delay_ns, delays.clone())
+        truth::LinkTruth::new(truth::Path {
+            end_ms: u64::from(plan.duration_ms.get()),
+            trace: d.trace.clone(),
+            buffer_pkts: d.limit_pkts,
+            buffer_bytes: d.limit_bytes,
+            one_way_ns: d.delay_ns,
+            loss: d.loss,
+            extra_rtt_ns: delays.clone(),
+        })
     });
     let (recorder, truth) = recorder::Recorder::start(out, link_truth)?;
 

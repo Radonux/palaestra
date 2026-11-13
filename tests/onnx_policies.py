@@ -69,7 +69,7 @@ def counter(slope: float) -> bytes:
     )
 
 
-def on_truth(column: int, slope: float, bias: float) -> bytes:
+def on_truth(column: int, slope: float, bias: float, width: int = TRUTH_DIM) -> bytes:
     """a = slope * truth[column] + bias. Reads one column only, so NaN in
     other truth columns cannot reach a; obs is declared but unused."""
     return _model(
@@ -78,7 +78,7 @@ def on_truth(column: int, slope: float, bias: float) -> bytes:
             helper.make_node("Mul", ["x", "k"], ["h"]),
             helper.make_node("Add", ["h", "b"], ["a"]),
         ],
-        [_obs(), _tensor("truth", TRUTH_DIM)],
+        [_obs(), _tensor("truth", width)],
         [_tensor("a", 1)],
         {"k": np.array([[slope]]), "b": np.array([[bias]])},
         ints={"col": np.array([column])},

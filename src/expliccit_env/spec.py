@@ -379,7 +379,7 @@ class EpisodeSpec(_Frozen):
 
         def link(ts: mm.I64, loss: float) -> LinkPlan:
             return LinkPlan(
-                delay, mm.dense_counts(ts), buf.packets, buf.bytes, _u32_probability(loss)
+                delay, mm.dense_counts(ts), buf.packets, buf.bytes, u32_probability(loss)
             )
 
         # Each agent's noise stream: the observed flow's from the episode
@@ -419,7 +419,7 @@ class EpisodeSpec(_Frozen):
         )
 
 
-def _u32_probability(p: float) -> int:
+def u32_probability(p: float) -> int:
     """sch_mmlink's loss encoding: probability times 2^32, below 2^32."""
     return min(round(p * 2**32), 2**32 - 1)
 

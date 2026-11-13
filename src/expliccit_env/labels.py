@@ -21,7 +21,8 @@ Definitions (link 1 is the data-direction bottleneck):
   base_rtt_ns         two-way propagation delay (both delay lines)
   one_way_delay_ns    one delay line: what Mahak and expliCCit call mRTT
   buffer_pkts/bytes   droptail limits (0 = unlimited)
-  random_loss_rate    the data direction's configured i.i.d. loss probability
+  random_loss_rate    the data direction's configured i.i.d. loss probability,
+                      as the qdisc applies it (rounded to a multiple of 2^-32)
   cross_traffic_share bytes that cross traffic (every flow but the observed
                       one) took from the bottleneck over the trailing
                       ``window_ms``, as a fraction of the trace's capacity
@@ -80,7 +81,8 @@ DOWNLINK: Final = 1
 UPLINK: Final = 2
 NS_PER_MS: Final = 1_000_000
 # Windows of the windowed labels, in trace ms. The first is expliCCit's and
-# the guest's live truth (guest/src/truth.rs); its labels keep plain names.
+# its labels keep plain names. The guest computes every window live
+# (guest/src/truth.rs).
 WINDOWS_MS: Final = (100, 10)
 WINDOWED: Final = (
     "capacity_bps",

@@ -7,8 +7,9 @@ and runs the policy:
 
     input  "obs"   float32 [1, 78], the message, columns as in OBS_COLUMNS
     input  "state" float32 [1, S], optional; zeros at the first step
-    input  "truth" float32 [1, 7], optional; the path's true state at the
-                   step, columns as in TRUTH_COLUMNS
+    input  "truth" float32 [1, W], optional, W at most TRUTH_DIM; the path's
+                   true state at the step, the first W of TRUTH_COLUMNS (7
+                   for a policy exported when the truth held seven)
     input  "cwnd"  float32 [1, 1], optional; the sender's window in packets
                    (TCP_INFO's snd_cwnd, the steps table's cwnd column)
     input  "cc_info" optional, from TCP_CC_INFO, the controller's statistics
@@ -51,6 +52,8 @@ its policy at a longer period than Sage's 10 ms (AgentCC.period_ms).
 from __future__ import annotations
 
 from typing import Final
+
+from expliccit_env.labels import WINDOWED, WINDOWS_MS, label_name
 
 _W = tuple(f"{w}_{s}" for w in ("short", "mid", "long") for s in ("avg", "min", "max"))
 
@@ -98,8 +101,14 @@ SAGE_OBS_COLS: Final = (
 EXPLICCIT_OBS_COLS: Final = (*SAGE_OBS_COLS[:-1], 77, 76)
 PREV_ACTION_COL: Final = 76
 MAX_ACTION: Final = 8.0
-# The "truth" input: these labels (labels.labels_at), in their units.
-TRUTH_COLUMNS: Final = (
+# The "truth" input: these labels (labels.labels_at), in their units, which
+# the guest computes live (guest/src/truth.rs). It is every stored label
+# known at the step, so all but queue_delay_ns, the delay of a packet that
+# may not have left yet. expliCCit's seven come first: a policy whose truth
+# input is narrower reads a prefix. Then the other instant labels, the other
+# windowed labels over the first window, and every windowed label over the
+# other windows.
+_SEVEN: Final = (
     "queue_delay_mean_ns",
     "queue_pkts",
     "capacity_bps",
@@ -108,7 +117,19 @@ TRUTH_COLUMNS: Final = (
     "one_way_delay_ns",
     "receive_rate_bps",
 )
-TRUTH_DIM: Final = 7
+TRUTH_COLUMNS: Final = (
+    *_SEVEN,
+    "queue_bytes",
+    "flow_queue_pkts",
+    "buffer_fill",
+    "base_rtt_ns",
+    "buffer_pkts",
+    "buffer_bytes",
+    "random_loss_rate",
+    *(name for name in WINDOWED if name not in _SEVEN),
+    *(label_name(name, w) for w in WINDOWS_MS[1:] for name in WINDOWED),
+)
+TRUTH_DIM: Final = 36
 
 assert len(OBS_COLUMNS) == OBS_DIM and len(SAGE_OBS_COLS) == 69
 assert len(EXPLICCIT_OBS_COLS) == 70

@@ -21,7 +21,7 @@ import numpy.typing as npt
 import torch
 from torch import nn
 
-from expliccit_env.policy import EXPLICCIT_OBS_COLS, OBS_DIM, TRUTH_COLUMNS
+from expliccit_env.policy import EXPLICCIT_OBS_COLS, OBS_DIM
 from expliccit_env.train import beliefs
 from expliccit_env.train.beliefs import Beliefs, Bins, Interval, MeansView, PoolBins
 from expliccit_env.train.data import Split, Steps
@@ -753,6 +753,9 @@ def front(
     missing = sorted(truth - set(net1.lcfs))
     if missing:
         raise ValueError(f"cannot take {missing} from the truth: net1 reports {list(net1.lcfs)}")
+    unknown = sorted(n for n in truth if not TruthColumns.known(n))
+    if unknown:
+        raise ValueError(f"cannot take {unknown} from the truth: not known at the step")
     fault = None
     if faults:
         fault = net1.kind.fault(
@@ -776,13 +779,7 @@ def front(
 
 def truth_columns(net1: Net1) -> TruthColumns:
     """The contract's truth input -> net1's LCFs in report units."""
-    if not set(net1.lcfs) <= set(TRUTH_COLUMNS):
-        raise ValueError(
-            f"the truth input holds {list(TRUTH_COLUMNS)}; net1 reports {list(net1.lcfs)}"
-        )
-    return TruthColumns(
-        [TRUTH_COLUMNS.index(n) for n in net1.lcfs], [LCF_UNITS[n][0] for n in net1.lcfs]
-    )
+    return TruthColumns(net1.lcfs)
 
 
 def raw_width(net1: Net1) -> int:

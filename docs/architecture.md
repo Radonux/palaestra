@@ -138,7 +138,7 @@ every step (`label_*` in `steps.parquet`).
 
 A windowed label covers the whole trace ms just before the sample. The
 steps store each one twice: over 100 ms under its own name (expliCCit's
-window, and the live truth's), and over 10 ms as `<name>_10ms`.
+window), and over 10 ms as `<name>_10ms`.
 `labels.parquet` has a row per ACK and keeps the 100 ms window only.
 
 expliCCit's seven LCFs:
@@ -215,7 +215,7 @@ last step, and column 77, expliCCit's addition, is the min RTT.
 
 A policy is an ONNX graph (`policy.py`) with inputs matched by name: `obs`
 [1, 78], and optionally `state` (a recurrent state fed back from its second
-output), `truth` [1, 7] (the true LCFs) and `cwnd` (the current window, so
+output), `truth` [1, W] (the path's true state, below) and `cwnd` (the current window, so
 a graph can answer a = log2(target) - log2(cwnd)). It returns a, the log2
 window multiplier, and selects and scales its own columns. The window is
 Sage's accumulator from 10 packets, times 2^a, rounded up, in [4, 20000];
@@ -223,9 +223,19 @@ pacing is cwnd mss / srtt, refreshed each step. A non-finite a, or |a| > 8,
 fails the episode. `noise_sigma` adds seeded Gaussian noise to a, each draw
 held for `noise_hold_steps` steps.
 
-`guest/src/truth.rs` computes the truth live from the downlink's records
-with the labels' definitions, draining the ring at the step's instant, so
-it equals the labels stored with the step bit for bit (D23).
+`guest/src/truth.rs` computes the truth live from the links' records with
+the labels' definitions, draining the ring at the step's instant, so it
+equals the labels stored with the step bit for bit (D23). The truth is
+`policy.TRUTH_COLUMNS`, 36 values: every stored label, over both windows,
+except `queue_delay_ns`, the delay of the latest packet to reach the
+bottleneck, which is known only once that packet leaves.
+`capacity_ahead_bps` looks forward but is in the truth, because it reads
+the trace, which the guest holds. A composite is not a column of the
+truth: an exported policy computes it from the columns with the formula
+the labels use (`lcfs.value`, `graph.TruthColumns`), so the oracle arm and
+a patched belief work for any LCF net1 can report but `queue_delay_ns`.
+expliCCit's seven come first and a policy declares the width it reads, so
+a policy exported with `truth` [1, 7] still runs and reads the same values.
 
 `steps.bin` holds per step the time, the raw `TCP_INFO`, the message, the
 action applied, the window set and the truth; an agent cross flow `i`
@@ -333,7 +343,7 @@ Limits marked `ponytail` in the code name their upgrade path there.
 | One decision per 10 ms step | pacing refreshed per step, where Sage's kernel may pace per ACK |
 | At most 64 cross flows, all sender to receiver | no reverse traffic on the ACK path |
 | Several step loops each sleep 1 ns before reading their truth | at 64 agents, 1 of 7,909 steps saw a truth that differed from the labels; labels are always exact |
-| `truth` carries the seven LCFs only, over 100 ms | arm A0 (the full path state) is unavailable; a policy that reads the truth (the oracle arm, a patched belief) cannot use the newer labels, the 10 ms window or a composite |
+| `truth` leaves out `queue_delay_ns` | a policy that reads the truth (the oracle arm, a patched belief) cannot use that one LCF; the mean queueing delay of the window is there |
 | Labels are stored when an episode is processed | a label added later is computed from the stored records (`dataset.read_episode`, then `labels.labels_at`); a shard written without `link_events` and `link_opp` (`--tables steps`) must be rerun |
 | Per-ms u8 trace counts | at most 3 Gbit/s and about 65 s per trace |
 | Mahak's metrics describe the whole link | with cross traffic, `utilization` and `mean_delay_ms` include other flows |
@@ -375,10 +385,14 @@ one. D1 to D5 came from the project brief, the rest from the build.
 ## Extending
 
 - A label: add it to `labels_at` in `labels.py` (it feeds `labels.parquet`
-  and the step columns) and rerun the episodes. For a policy to read it,
-  add it to `guest/src/truth.rs` and `policy.TRUTH_COLUMNS`;
+  and the step columns) and rerun the episodes. If it is known at the
+  step, add it to `guest/src/truth.rs` and at the end of
+  `policy.TRUTH_COLUMNS` (released policies read a prefix);
   `tests/test_records_abi.py` and `tests/test_truth.py` then check the
-  step record and that guest and host agree.
+  step record, that the truth holds every stored label but
+  `queue_delay_ns`, and that guest and host agree.
+- A composite: a formula in `lcfs.COMPOSITES` over label columns. It needs
+  no new data and no guest change, and a policy can read it from the truth.
 - A trace shape: a variant next to `MahakStep` and `PeriodicLevels` in
   `spec.py` with `timestamps()`; `TraceFile` takes any Mahimahi trace.
 - A kind of belief for net1 (beside a value, an interval and a

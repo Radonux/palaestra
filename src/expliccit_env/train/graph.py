@@ -36,7 +36,8 @@ from typing import Final, Literal, Protocol, cast
 import torch
 from torch import nn
 
-from expliccit_env.policy import OBS_COLUMNS
+from expliccit_env.policy import OBS_COLUMNS, TRUTH_COLUMNS
+from expliccit_env.train import lcfs
 from expliccit_env.train.beliefs import Beliefs, Bins, Point
 from expliccit_env.train.models import Scaler
 
@@ -131,18 +132,33 @@ class Deployed(nn.Module):
 
 class TruthColumns(nn.Module):
     """The contract's "truth" input (policy.TRUTH_COLUMNS, label units) ->
-    net1's LCFs in report units."""
+    net1's LCFs in report units: a label is its column, a composite its
+    formula over the columns (lcfs.value), as the labels compute it. An LCF
+    the guest cannot know at the step (``known``) is NaN, which a patch
+    reads as no truth."""
 
-    cols: torch.Tensor
     units: torch.Tensor
 
-    def __init__(self, cols: Sequence[int], units: Sequence[float]) -> None:
+    def __init__(self, names: Sequence[str]) -> None:
         super().__init__()
-        self.register_buffer("cols", torch.tensor(cols, dtype=torch.long))
+        self.names = tuple(names)
+        units = [lcfs.LCF_UNITS[n][0] for n in names]
         self.register_buffer("units", torch.tensor(units, dtype=torch.float32))
 
+    @staticmethod
+    def known(name: str) -> bool:
+        return lcfs.columns([name]) <= set(TRUTH_COLUMNS)
+
     def forward(self, truth: torch.Tensor) -> torch.Tensor:
-        return truth.index_select(1, self.cols) * self.units
+        def column(name: str) -> lcfs.F32:
+            return cast("lcfs.F32", truth[:, TRUTH_COLUMNS.index(name)])
+
+        nan = torch.full_like(truth[:, 0], float("nan"))
+        ys = [
+            cast("torch.Tensor", lcfs.value(n, column)) if self.known(n) else nan
+            for n in self.names
+        ]
+        return torch.stack(ys, dim=1) * self.units
 
 
 @dataclass(frozen=True, slots=True)

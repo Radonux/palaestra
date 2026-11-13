@@ -56,7 +56,7 @@ impl Truth {
         let mut d = lock(&self.0)?;
         d.read_all()?;
         match d.truth.as_mut() {
-            Some(t) => Ok(t.at(t_ns, base_ns, sport)),
+            Some(t) => t.at(t_ns, base_ns, sport),
             None => fail("the recorder keeps no link truth"),
         }
     }
@@ -80,7 +80,7 @@ fn lock(m: &Mutex<Drain>) -> Result<MutexGuard<'_, Drain>> {
 
 impl Recorder {
     /// Open the device now (the ring starts empty at open) and drain it on a
-    /// thread until `finish`. With `truth`, every downlink record also feeds
+    /// thread until `finish`. With `truth`, every link record also feeds
     /// it, and the returned handle serves the step loop.
     pub fn start(out: &Path, truth: Option<LinkTruth>) -> Result<(Recorder, Option<Truth>)> {
         let fd = sys::open_path(Path::new("/dev/expl_rec"), libc::O_RDONLY).ctx("opening /dev/expl_rec")?;

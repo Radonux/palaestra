@@ -49,7 +49,7 @@ PATCHES = {  # name -> LCFs taken from the truth
         "queue_delay_mean_ns",
         "free_buffer_pkts",
     ),
-    "all seven": TRUTH_COLUMNS,
+    "all seven": TRUTH_COLUMNS[:7],
 }
 # The deployed controller rounds net1's first six LCFs to integers, busy
 # fraction among them (a share, so 0 or 1): the policy with no LCF rounded,

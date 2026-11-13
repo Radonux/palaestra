@@ -7,13 +7,18 @@ set that holds a composite beside the columns it is made of is redundant by
 construction: choose the set with that in mind. A windowed name follows
 labels.label_name: plain for the first window, ``<name>_<w>ms`` otherwise.
 
+A formula is written once and runs on both kinds of column: NumPy arrays
+(the stored labels) and torch tensors (the guest's live truth inside an
+exported policy, graph.TruthColumns), so a composite of the truth is the
+composite of the labels.
+
 Where a composite comes from is in docs/lcf-concepts.md.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import Final
+from typing import TYPE_CHECKING, Final, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -21,8 +26,13 @@ import numpy.typing as npt
 from expliccit_env.labels import WINDOWED, WINDOWS_MS, label_name
 from expliccit_env.mahimahi import PACKET_SIZE
 
+if TYPE_CHECKING:
+    import torch
+
 type F32 = npt.NDArray[np.float32]
-type Get = Callable[[str], F32]  # a label column of the composite's window
+# A label column of the composite's window. Typed as the array it is in
+# training; in a policy graph the same formulas get torch tensors.
+type Get = Callable[[str], F32]
 
 # Label columns, with the factor to the units net1's errors are reported in.
 _COLUMNS: Final = {
@@ -51,15 +61,30 @@ _COLUMNS: Final = {
 }
 
 
+def _where(keep: npt.NDArray[np.bool_], x: F32 | torch.Tensor, other: float) -> F32:
+    """x where ``keep`` holds, else ``other``."""
+    if isinstance(x, np.ndarray):
+        return np.where(keep, x, np.float32(other)).astype(np.float32)
+    import torch  # noqa: PLC0415  (only a policy graph passes tensors)
+
+    return cast("F32", torch.where(cast("torch.Tensor", keep), x, torch.full_like(x, other)))
+
+
 def _ratio(a: F32, b: F32) -> F32:
     """a / b, NaN where b is 0."""
     with np.errstate(divide="ignore", invalid="ignore"):
-        return np.where(b > 0, a / b, np.float32(np.nan)).astype(np.float32)
+        return _where(b > 0, a / b, float("nan"))
+
+
+def _no_nan(x: F32) -> F32:
+    """x, 0 where it is NaN. Not nan_to_num: its IsInf is an op the guest's
+    tract cannot run."""
+    return _where(x == x, x, 0.0)  # noqa: PLR0124  (NaN alone differs from itself)
 
 
 def _used(g: Get) -> F32:
     """The busy fraction, 0 where the link offered nothing (there it is NaN)."""
-    return np.nan_to_num(g("busy_fraction"))
+    return _no_nan(g("busy_fraction"))
 
 
 def _queue_in_bdps(g: Get) -> F32:
@@ -126,7 +151,7 @@ COMPOSITES: Final[dict[str, tuple[Callable[[Get], F32], float, str]]] = {
     # (R + queueing delay) / R (Aurora's latency ratio, Remy's RTT ratio, on
     # the true delays).
     "rtt_ratio": (
-        lambda g: 1 + _ratio(np.nan_to_num(g("queue_delay_mean_ns")), g("base_rtt_ns")),
+        lambda g: 1 + _ratio(_no_nan(g("queue_delay_mean_ns")), g("base_rtt_ns")),
         1.0,
         "",
     ),
@@ -172,12 +197,20 @@ def columns(lcfs: Iterable[str]) -> set[str]:
     return out
 
 
+def value(name: str, get: Get) -> F32:
+    """An LCF from label columns: its own column, or a composite's formula
+    over the columns of its window."""
+    if name not in _COMPOSITE_OF:
+        return get(name)
+    formula, w = _COMPOSITE_OF[name]
+    return formula(_getter(get, w))
+
+
 class Labels(dict[str, F32]):
     """Label columns by name; a composite is computed on first use and kept."""
 
     def __missing__(self, name: str) -> F32:
         if name not in _COMPOSITE_OF:
             raise KeyError(f"no label {name}: not in the data, and not a composite")
-        formula, w = _COMPOSITE_OF[name]
-        self[name] = value = formula(_getter(self.__getitem__, w)).astype(np.float32)
-        return value
+        self[name] = out = value(name, self.__getitem__).astype(np.float32)
+        return out

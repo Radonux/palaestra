@@ -31,11 +31,12 @@ from expliccit_env.spec import (
     StockCC,
     TcpCross,
     UdpCross,
+    u32_probability,
 )
 from expliccit_env.steps import StepError, Steps, load_steps, step_table
 from expliccit_env.uml import UmlBuild, run_guest
 
-RESULT_VERSION: Final = 6
+RESULT_VERSION: Final = 7
 # Record fields the tables leave out: constant per record type, or padding.
 SKIP_COLUMNS: Final = frozenset({"type", "len", "pad"})
 
@@ -74,7 +75,7 @@ class GuestEpisode(_Strict):
 class GuestResult(_Strict):
     """result.json written by the guest runner (trust boundary)."""
 
-    result_version: Literal[6]
+    result_version: Literal[7]
     status: Literal["ok", "failed"]
     error: str | None
     kernel_release: str
@@ -139,7 +140,8 @@ def path_constants(spec: EpisodeSpec, base_ns: int) -> labels.PathConstants:
         spec.path.delay.one_way_ns,
         spec.path.buffer.packets,
         spec.path.buffer.bytes,
-        spec.path.loss.downlink,
+        # As the qdisc applies it: a 32-bit fraction (the guest's truth).
+        u32_probability(spec.path.loss.downlink) / 2**32,
     )
 
 

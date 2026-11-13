@@ -358,7 +358,8 @@ def test_loss_and_cross_traffic(build: UmlBuild, tmp_path: Path) -> None:
     lab = out.tables["labels"]
     t_ms = (np.asarray(lab["t_ns"]).astype(np.int64) - out.row["base_ns"]) // 1_000_000  # type: ignore[operator]
     share = np.asarray(lab["cross_traffic_share"])
-    assert np.all(np.asarray(lab["random_loss_rate"]) == 0.01)
+    # As the qdisc applies it: the nearest multiple of 2^-32.
+    assert np.all(np.asarray(lab["random_loss_rate"]) == round(0.01 * 2**32) / 2**32)
     assert np.all((share >= 0) & (share <= 1))
     assert np.all(share[t_ms < 2000] == 0)
     # UDP alone: 5 Mbit/s of 1504-byte units on 20 Mbit/s, less 1% loss.

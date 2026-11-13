@@ -14,7 +14,6 @@ from pydantic import ValidationError
 from expliccit_env import campaign, mahak
 from expliccit_env.dataset import TABLES, ShardWriter
 from expliccit_env.episode import EpisodeOk, run_episode
-from expliccit_env.policy import TRUTH_COLUMNS
 from expliccit_env.spec import STOCK_NAMES, CampaignSpec, EpisodeSpec
 from expliccit_env.uml import UmlBuild
 
@@ -338,8 +337,7 @@ def main(argv: list[str] | None = None) -> int:
         "--truth",
         nargs="*",
         default=[],
-        choices=TRUTH_COLUMNS,
-        help="LCFs to take from the guest's live truth instead of net1 (a patch)",
+        help="LCFs of net1 to take from the guest's live truth instead (a patch)",
     )
     ti.add_argument(
         "--fault",

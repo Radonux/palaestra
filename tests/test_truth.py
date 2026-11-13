@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from expliccit_env.episode import EpisodeOk, run_episode
-from expliccit_env.policy import TRUTH_COLUMNS
+from expliccit_env.policy import TRUTH_COLUMNS, TRUTH_DIM
 from expliccit_env.spec import EpisodeSpec
 from expliccit_env.steps import load_steps
 from expliccit_env.uml import UmlBuild
@@ -51,6 +51,9 @@ def test_live_truth_equals_the_labels(build: UmlBuild, tmp_path: Path) -> None:
     live = load_steps(tmp_path / spec.episode_id() / "raw" / "steps.bin")["truth"]
     table = out.tables["steps"]
     assert table.num_rows == live.shape[0] > 1300
+    # Every stored label but the one known only in hindsight.
+    stored = {c.removeprefix("label_") for c in table.column_names if c.startswith("label_")}
+    assert stored - set(TRUTH_COLUMNS) == {"queue_delay_ns"} and set(TRUTH_COLUMNS) <= stored
     for k, name in enumerate(TRUTH_COLUMNS):
         want = table[f"label_{name}"].to_numpy().astype(np.float64)
         got = live[:, k]
@@ -63,13 +66,27 @@ def test_live_truth_equals_the_labels(build: UmlBuild, tmp_path: Path) -> None:
     assert q.max() >= 55 and np.isfinite(live[:, 0]).mean() > 0.9
     assert cap.max() > 15e6 and cap.min() < 5e6
 
+    def col(name: str) -> np.ndarray:
+        return live[:, TRUTH_COLUMNS.index(name)]
 
-def test_policy_reads_the_truth(build: UmlBuild, tmp_path: Path) -> None:
+    assert col("active_flows").max() == 3 and col("flow_queue_pkts").max() > 20
+    assert np.nanmax(col("drop_fraction")) > 0 and np.nanmax(col("random_drop_fraction")) > 0
+    assert (
+        np.nanmax(col("ack_queue_delay_mean_ns")) > 0
+        and col("cross_traffic_share_10ms").max() > 0.1
+    )
+    assert col("queue_min_pkts").max() > 20 and (col("capacity_ahead_bps") != cap).any()
+
+
+@pytest.mark.parametrize("width", [7, TRUTH_DIM])
+def test_policy_reads_the_truth(build: UmlBuild, tmp_path: Path, width: int) -> None:
     # a = 0.05 - 0.002 * (true queue): grow while the queue is short, back
     # off as it builds. Every action must be that function of the truth the
-    # step recorded, computed in float32 as the graph computes it.
+    # step recorded, computed in float32 as the graph computes it. Width 7 is
+    # a policy exported when the truth held expliCCit's seven: it reads the
+    # same columns, the truth's first.
     col = TRUTH_COLUMNS.index("queue_pkts")
-    spec = agent_spec(tmp_path, onnx_policies.on_truth(col, -0.002, 0.05), "hold")
+    spec = agent_spec(tmp_path, onnx_policies.on_truth(col, -0.002, 0.05, width), "hold")
     outcome, _ = run_raw(build, tmp_path, spec)
     live = load_steps(tmp_path / "work" / outcome.episode_id / "raw" / "steps.bin")["truth"]
     q = live[:, col].astype(np.float32)
@@ -89,7 +106,7 @@ def test_exported_oracle_runs_in_the_guest(build: UmlBuild, tmp_path: Path) -> N
 
     torch.manual_seed(0)
     net1 = _net1()
-    graph = fit.policy_graph(net1, ExpliccitActor(7).eval(), 0.05, truth=frozenset(TRUTH_COLUMNS))
+    graph = fit.policy_graph(net1, ExpliccitActor(7).eval(), 0.05, truth=frozenset(net1.lcfs))
     outcome, _ = run_raw(build, tmp_path, agent_spec(tmp_path, to_onnx(graph), "hold"))
     steps = load_steps(tmp_path / "work" / outcome.episode_id / "raw" / "steps.bin")
     obs = torch.from_numpy(steps["obs"].astype(np.float32))
@@ -101,9 +118,18 @@ def test_exported_oracle_runs_in_the_guest(build: UmlBuild, tmp_path: Path) -> N
     assert np.allclose(applied, want, rtol=0, atol=1e-6)
 
 
-def test_exported_distribution_policy_runs_in_the_guest(build: UmlBuild, tmp_path: Path) -> None:
-    # A distribution net1 whose busy-fraction belief is patched from the
-    # truth: the guest must act as torch computes from the recorded steps.
+# The newer labels, a 10 ms window, and composites the graph computes from
+# the truth's columns with the labels' formulas.
+_NEWER = ("active_flows", "queue_min_pkts_10ms", "fair_share_bps", "normalized_inflight")
+
+
+@pytest.mark.parametrize("extra", [(), _NEWER])
+def test_exported_distribution_policy_runs_in_the_guest(
+    build: UmlBuild, tmp_path: Path, extra: tuple[str, ...]
+) -> None:
+    # A distribution net1 whose busy-fraction belief (and ``extra``) is
+    # patched from the truth: the guest must act as torch computes from the
+    # recorded steps.
     torch = pytest.importorskip("torch")
     from expliccit_env.train import fit  # noqa: PLC0415
     from expliccit_env.train.export import to_onnx  # noqa: PLC0415
@@ -114,13 +140,12 @@ def test_exported_distribution_policy_runs_in_the_guest(build: UmlBuild, tmp_pat
     torch.manual_seed(0)
     steps = synthetic(n_episodes=10)
     rng = np.random.default_rng(0)
-    steps.labels.update(
-        {n: rng.uniform(0, 1, steps.obs.shape[0]).astype(np.float32) for n in EXPLICCIT_LCFS}
-    )
-    spec = Net1Spec(width=64, epochs=1, batch_size=256, output=Bins(bins=16))
+    lcfs = (*EXPLICCIT_LCFS, *extra)
+    steps.labels.update({n: rng.uniform(0, 1, steps.obs.shape[0]).astype(np.float32) for n in lcfs})
+    spec = Net1Spec(width=64, epochs=1, batch_size=256, output=Bins(bins=16), lcfs=lcfs)
     net1, _ = fit.fit_net1(spec, steps, seed=0)
     graph = fit.policy_graph(
-        net1, ExpliccitActor(net1.width).eval(), 0.05, truth=frozenset({"busy_fraction"})
+        net1, ExpliccitActor(net1.width).eval(), 0.05, truth=frozenset({"busy_fraction", *extra})
     )
     outcome, _ = run_raw(build, tmp_path, agent_spec(tmp_path, to_onnx(graph), "hold"))
     steps_bin = load_steps(tmp_path / "work" / outcome.episode_id / "raw" / "steps.bin")

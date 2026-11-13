@@ -21,8 +21,9 @@
 //! Policy contract (mirrors src/expliccit_env/policy.py), inputs by name:
 //!   input  "obs"   float32 [1, 78], the message above
 //!   input  "state" float32 [1, S], optional; zeros at the first step
-//!   input  "truth" float32 [1, 7], optional; the path's true state at the
-//!                  step (truth.rs), for oracle policies and LCF patches
+//!   input  "truth" float32 [1, W], optional, W at most truth::N; the first
+//!                  W values of the path's true state at the step (truth.rs),
+//!                  for oracle policies and LCF patches
 //!   input  "cwnd"  float32 [1, 1], optional; the sender's window in packets
 //!                  (TCP_INFO's snd_cwnd, the steps table's cwnd column), so
 //!                  a policy can set an absolute window as a multiplier
@@ -537,7 +538,8 @@ impl SplitMix64 {
 enum Input {
     Obs,
     State,
-    Truth,
+    /// The first so many values of the true state.
+    Truth(usize),
     Cwnd,
     CcInfo,
 }
@@ -564,6 +566,20 @@ pub struct Policy {
     held: f64,
 }
 
+/// S of input `i` declared with the fixed shape [1, S].
+fn fixed_width(model: &InferenceModel, i: usize) -> Result<Option<usize>> {
+    let fact = model.input_fact(i).ctx("policy input")?;
+    let dims: Option<Vec<usize>> = fact
+        .shape
+        .dims()
+        .map(|d| d.concretize().and_then(|d| d.to_i64().ok()).and_then(|d| usize::try_from(d).ok()))
+        .collect();
+    Ok(match dims.as_deref() {
+        Some([1, s]) => Some(*s),
+        _ => None,
+    })
+}
+
 impl Policy {
     pub fn load(path: &Path, noise: crate::plan::Noise, mode: Mode, period_ms: u32) -> Result<Policy> {
         let mut model =
@@ -573,7 +589,15 @@ impl Policy {
         for (i, name) in names.iter().enumerate() {
             let (input, width) = match name.as_str() {
                 "obs" => (Input::Obs, OBS),
-                "truth" => (Input::Truth, truth::N),
+                "truth" => match fixed_width(&model, i)? {
+                    Some(w) if (1..=truth::N).contains(&w) => (Input::Truth(w), w),
+                    _ => {
+                        return fail(format!(
+                            "policy truth input must have a fixed shape [1, 1 to {}]",
+                            truth::N
+                        ));
+                    }
+                },
                 "cwnd" => (Input::Cwnd, 1),
                 "cc_info" => match mode {
                     Mode::Cubic => (Input::CcInfo, 5),
@@ -582,23 +606,13 @@ impl Policy {
                         return fail("policy input cc_info needs cc agent_cubic or agent_rate");
                     }
                 },
-                "state" => {
-                    let fact = model.input_fact(i).ctx("state input")?;
-                    let dims: Option<Vec<usize>> = fact
-                        .shape
-                        .dims()
-                        .map(|d| {
-                            d.concretize().and_then(|d| d.to_i64().ok()).and_then(|d| usize::try_from(d).ok())
-                        })
-                        .collect();
-                    match dims.as_deref() {
-                        Some([1, s]) => {
-                            state = Some(Tensor::zero::<f32>(&[1, *s]).ctx("state")?);
-                            (Input::State, *s)
-                        }
-                        _ => return fail("policy state input must have a fixed shape [1, S]"),
+                "state" => match fixed_width(&model, i)? {
+                    Some(s) => {
+                        state = Some(Tensor::zero::<f32>(&[1, s]).ctx("state")?);
+                        (Input::State, s)
                     }
-                }
+                    None => return fail("policy state input must have a fixed shape [1, S]"),
+                },
                 other => {
                     return fail(format!("policy input {other:?} is not obs, state, truth, cwnd or cc_info"));
                 }
@@ -609,7 +623,7 @@ impl Policy {
         let count = |want: fn(&Input) -> bool| inputs.iter().filter(|i| want(i)).count();
         if count(|i| matches!(i, Input::Obs)) != 1
             || count(|i| matches!(i, Input::State)) > 1
-            || count(|i| matches!(i, Input::Truth)) > 1
+            || count(|i| matches!(i, Input::Truth(_))) > 1
             || count(|i| matches!(i, Input::Cwnd)) > 1
             || count(|i| matches!(i, Input::CcInfo)) > 1
         {
@@ -658,7 +672,7 @@ impl Policy {
         for input in &self.inputs {
             inputs.push(match input {
                 Input::Obs => row(obs)?,
-                Input::Truth => row(truth)?,
+                Input::Truth(w) => row(truth.get(..*w).unwrap_or(truth))?,
                 Input::Cwnd => row(&[f64::from(cwnd)])?,
                 Input::CcInfo => row(if matches!(self.mode, Mode::Cubic) { &cc[..5] } else { cc })?,
                 Input::State => match self.state.take() {
