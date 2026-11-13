@@ -66,7 +66,9 @@ def main(out: Path, runs: list[Path]) -> None:
         for model, name in NAMES.items():
             if model in first["views"][view]:
                 # Every run scores the same comparison net1 on the same rows.
-                cells = [cell(r2([first], view, model, k)) for k in lcfs]
+                # A comparison net1 with fewer heads leaves the others blank.
+                has = first["views"][view][model]
+                cells = [cell(r2([first], view, model, k)) if k in has else "" for k in lcfs]
                 lines.append(f"| {view} | {name} | " + " | ".join(cells) + " |")
     out.mkdir(parents=True, exist_ok=True)
     (out / "summary.md").write_text("\n".join(lines) + "\n")
