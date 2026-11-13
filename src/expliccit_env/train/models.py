@@ -43,19 +43,25 @@ class Scaler(nn.Module):
         are ignored, and a column without any finite value maps to itself."""
         # An all-NaN column is expected (a label undefined on these rows):
         # it gets centre 0 and spread 1 below, so numpy's warnings are noise.
+        # One column at a time: float64 copies of the whole table (several
+        # at once, for the quantiles and the clipped values) took 9 GB on
+        # net1 v6's 4.4 million training rows and ran a 16 GB runner out.
+        n = x.shape[1]
+        lo, hi = np.full(n, -_BIG), np.full(n, _BIG)
+        center, spread = np.zeros(n), np.ones(n)
         with np.errstate(all="ignore"), warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
-            x64 = np.where(np.isfinite(x), x, np.nan).astype(np.float64)
-            n = x64.shape[1]
-            lo, hi = np.full(n, -_BIG), np.full(n, _BIG)
-            if kind == "minmax":  # sklearn's MinMaxScaler, feature_range (0, 1)
-                center = np.nanmin(x64, axis=0)
-                spread = np.nanmax(x64, axis=0) - center
-            else:
+            for j in range(n):
+                c = x[:, j].astype(np.float64)
+                c[~np.isfinite(c)] = np.nan
+                if kind == "minmax":  # sklearn's MinMaxScaler, feature_range (0, 1)
+                    center[j] = np.nanmin(c)
+                    spread[j] = np.nanmax(c) - center[j]
+                    continue
                 if kind == "robust":
-                    lo, hi = np.nanquantile(x64, 0.001, axis=0), np.nanquantile(x64, 0.999, axis=0)
-                clipped = np.clip(x64, lo, hi)
-                center, spread = np.nanmean(clipped, axis=0), np.nanstd(clipped, axis=0)
+                    lo[j], hi[j] = np.nanquantile(c, 0.001), np.nanquantile(c, 0.999)
+                np.clip(c, lo[j], hi[j], out=c)
+                center[j], spread[j] = np.nanmean(c), np.nanstd(c)
         center = np.where(np.isfinite(center), center, 0.0)
         spread = np.where(np.isfinite(spread) & (spread > 0), spread, 1.0)
         lo, hi = np.where(np.isfinite(lo), lo, -_BIG), np.where(np.isfinite(hi), hi, _BIG)
