@@ -28,7 +28,7 @@ from expliccit_env.train.actors import Rules, front, target, teacher3_u, teacher
 from expliccit_env.train.graph import Front
 from expliccit_env.train.handoff import PolicyTeacher
 from expliccit_env.train.lcfs import Labels, columns
-from expliccit_env.train.mixture import active
+from expliccit_env.train.mixture import active, realized
 from expliccit_env.train.recurrent import OBS_MIN_RTT, decision_steps
 from expliccit_env.train.spec import LCF_UNITS, Gate3, Net2Spec, PPOSpec
 
@@ -190,13 +190,14 @@ def from_rollouts(
     fe, tgt, rules = front(net1, spec), target(net1, spec), Rules(net1, spec).eval()
     out: list[Trajectory] = []
     flows_of: dict[str, list[tuple[int, pa.Table]]] = {}
+    connected: dict[str, list[float | None]] = {}
     for shard in sorted(rollouts.glob("shards/*")):
-        eps = pq.read_table(shard / "episodes.parquet", columns=["episode_id", "status"])
-        ok = {
-            str(e)
-            for e, s in zip(eps["episode_id"].to_pylist(), eps["status"].to_pylist(), strict=True)
-            if s == "ok"
-        }
+        # A shard whose episodes all failed has no column of results.
+        eps = [
+            r for r in pq.read_table(shard / "episodes.parquet").to_pylist() if r["status"] == "ok"
+        ]
+        ok = {str(r["episode_id"]) for r in eps}
+        connected |= {str(r["episode_id"]): r["cross_connected_ms"] for r in eps}
         for name, flow in (("steps.parquet", False), ("cross_steps.parquet", True)):
             t = _read(shard / name, ok, net1.lcfs)
             if t is None or t.num_rows == 0:
@@ -224,7 +225,7 @@ def from_rollouts(
                 rules=rules,
                 spec=spec,
                 group=(groups[e], f),
-                rivals=rivals[e],
+                rivals=realized(rivals[e], connected[e]),
                 teacher=teacher,
             )
             if tr is not None:

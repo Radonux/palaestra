@@ -798,6 +798,16 @@ def test_dynamic_competition_spreads_arrivals_and_departures_over_the_episode() 
     assert all(a + 5000 <= b <= 120_000 for a, b in stops)
 
 
+def test_rivals_start_when_they_connected_and_never_if_they_did_not() -> None:
+    # copy 0 to 10 s, stock TCP 2 to 8 s, UDP 1 to 3 s, as planned.
+    planned = np.array([[0, 0.0, 10.0], [1, 2.0, 8.0], [2, 1.0, 3.0]])
+    ran = mixture.realized(planned, [250.0, None, None])
+    assert ran.tolist() == [[0, 0.25, 10.0], [2, 1.0, 3.0]]  # UDP has no handshake
+    assert planned[0, 1] == 0.0  # the plan is left as it was
+    with pytest.raises(ValueError, match="connect times"):
+        mixture.realized(planned, [None])
+
+
 def test_alone_links_have_no_cross_flows_and_shares_add_up(tmp_path: Path) -> None:
     pol = tmp_path / "p.onnx"
     pol.write_bytes(b"x")

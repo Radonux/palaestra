@@ -35,7 +35,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use sys::{Context, Result, fail};
 
-const RESULT_VERSION: u32 = 5;
+const RESULT_VERSION: u32 = 6;
 const SND_ADDR: [u8; 4] = [10, 0, 0, 1];
 const PATH_SND_ADDR: [u8; 4] = [10, 0, 0, 2];
 const RCV_ADDR: [u8; 4] = [10, 0, 1, 1];
@@ -86,10 +86,14 @@ struct Report {
     netdev_max_backlog: &'static str,
     agent_actions: u64,
     /// Per cross flow, in plan order: bytes its sender wrote, the congestion
-    /// control its socket ran ("" for UDP), and the steps written to
-    /// steps-cross<i>.bin and actions taken (0 unless a policy drove it).
+    /// control its socket ran ("" for UDP), when its sender accepted the
+    /// connection (CLOCK_MONOTONIC ns as base_ns; null for UDP, or a TCP
+    /// flow whose handshake did not complete before its stop), and the
+    /// steps written to steps-cross<i>.bin and actions taken (0 unless a
+    /// policy drove it).
     cross_bytes_sent: Vec<u64>,
     cross_cc: Vec<String>,
+    cross_connected_ns: Vec<Option<u64>>,
     cross_steps: Vec<u64>,
     cross_actions: Vec<u64>,
     /// Steps written to steps.bin (0 when the step loop did not run).
@@ -428,6 +432,7 @@ fn episode(plan_dir: &Path, out: &Path, module_dir: &Path) -> Result<Report> {
         agent_actions,
         cross_bytes_sent: flows.iter().map(|f| f.sent).collect(),
         cross_cc: flows.iter().map(|f| f.cc.clone()).collect(),
+        cross_connected_ns: flows.iter().map(|f| f.connected_ns).collect(),
         cross_steps: flows.iter().map(|f| f.steps).collect(),
         cross_actions: flows.iter().map(|f| f.actions).collect(),
         steps,

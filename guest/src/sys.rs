@@ -150,6 +150,20 @@ pub fn shutdown(fd: BorrowedFd<'_>) {
     unsafe { libc::shutdown(fd.as_raw_fd(), libc::SHUT_RDWR) };
 }
 
+/// End a TCP socket at once, in any state: disconnecting it (connect to
+/// AF_UNSPEC) discards its unsent data, sends a reset if it was connected
+/// and wakes every thread blocked on it, where a shutdown would still send
+/// the backlog. The shutdown after it covers a socket not yet connected.
+pub fn abort(fd: BorrowedFd<'_>) {
+    // SAFETY: an all-zero sockaddr is a valid value; only sa_family is read.
+    let mut sa: libc::sockaddr = unsafe { std::mem::zeroed() };
+    sa.sa_family = libc::AF_UNSPEC as libc::sa_family_t;
+    // SAFETY: sa is a valid sockaddr of the given length. Errors (not
+    // connected, already closed) are irrelevant.
+    unsafe { libc::connect(fd.as_raw_fd(), &raw const sa, size_of::<libc::sockaddr>() as libc::socklen_t) };
+    shutdown(fd);
+}
+
 /// Flush filesystems and power the UML guest off. Only valid as PID 1.
 pub fn power_off() -> ! {
     // SAFETY: no pointer arguments.

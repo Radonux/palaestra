@@ -55,6 +55,21 @@ with its own policy, step loop and noise; a UDP cross flow sends one
 observed per ACK. A TCP cross flow with `extra_rtt_ms` has its ACKs held
 that much longer by `sch_flowdelay` on the receiver's device.
 
+A TCP cross flow sends only inside its planned window, but it does not
+start exactly at `start_ms`: its receiver connects then, and the flow
+begins when the handshake completes. Behind a standing queue that can
+take seconds, or fail if the SYN-ACKs are dropped. The episodes table
+records when each flow connected (`cross_connected_ms`, null for UDP and
+for a flow that never connected, which then sent nothing), and the
+privileged critic's rival counts read that time, not the plan. At
+`stop_ms` both ends are aborted: the sender's unsent data is discarded
+(a graceful shutdown would still send it, for seconds on a deep buffer)
+and a handshake that completes later is refused. After the stop, data
+already in flight reaches the link for one more one-way delay, a few
+resets answer ACKs in flight for about one RTT, and the flow's packets
+already queued at the bottleneck still drain; the receiver answers
+those with resets on the ACK path.
+
 ## The link model (`sch_mmlink`)
 
 A port of `third_party/mahimahi/src/frontend/link_queue.cc` as a qdisc,

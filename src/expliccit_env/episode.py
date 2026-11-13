@@ -35,7 +35,7 @@ from expliccit_env.spec import (
 from expliccit_env.steps import StepError, Steps, load_steps, step_table
 from expliccit_env.uml import UmlBuild, run_guest
 
-RESULT_VERSION: Final = 5
+RESULT_VERSION: Final = 6
 # Record fields the tables leave out: constant per record type, or padding.
 SKIP_COLUMNS: Final = frozenset({"type", "len", "pad"})
 
@@ -59,10 +59,13 @@ class GuestEpisode(_Strict):
     netdev_max_backlog: str
     agent_actions: int
     # Per cross flow, in spec order: bytes its sender wrote, the congestion
-    # control its socket ran ("" for UDP), steps and actions (0 unless an
-    # agent).
+    # control its socket ran ("" for UDP), when its sender accepted the
+    # connection (ns on base_ns's clock; None for UDP, or a TCP flow whose
+    # handshake did not complete before its stop, which then sent nothing),
+    # steps and actions (0 unless an agent).
     cross_bytes_sent: list[int]
     cross_cc: list[str]
+    cross_connected_ns: list[int | None]
     cross_steps: list[int]
     cross_actions: list[int]
     steps: int
@@ -71,7 +74,7 @@ class GuestEpisode(_Strict):
 class GuestResult(_Strict):
     """result.json written by the guest runner (trust boundary)."""
 
-    result_version: Literal[5]
+    result_version: Literal[6]
     status: Literal["ok", "failed"]
     error: str | None
     kernel_release: str
@@ -207,6 +210,7 @@ def validity_problems(result: GuestEpisode, rec: Records, spec: EpisodeSpec) -> 
     n = len(spec.cross)
     if (
         not len(result.cross_bytes_sent)
+        == len(result.cross_connected_ns)
         == len(result.cross_steps)
         == len(result.cross_actions)
         == n
@@ -347,6 +351,13 @@ def run_episode(
             "cross_bytes_sent": g.cross_bytes_sent,
             "cross_controllers": [
                 c.label if isinstance(c, TcpCross) else "udp_cbr" for c in spec.cross
+            ],
+            # When each cross flow's sender really accepted its connection,
+            # in ms of the episode: later than its planned start when the
+            # handshake waits behind a queue, None for UDP or a TCP flow
+            # that never connected (it then sent nothing).
+            "cross_connected_ms": [
+                None if t is None else (t - g.base_ns) / 1e6 for t in g.cross_connected_ns
             ],
             "cross_steps": g.cross_steps,
             "cross_actions": g.cross_actions,

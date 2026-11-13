@@ -243,6 +243,40 @@ def _check_newer_labels(out: EpisodeOk, rec: Records, spec: EpisodeSpec, trace: 
     assert np.array_equal(per_flow[0], col("flow_queue_pkts")) and per_flow[1].max() > 0
 
 
+def test_a_cross_flow_sends_nothing_after_its_stop(build: UmlBuild, tmp_path: Path) -> None:
+    # A slow link with a deep buffer: at its stop the Cubic flow has a full
+    # send buffer, which a graceful shutdown would still send for seconds.
+    stop_ms, one_way_ms = 4000, 30
+    spec = EpisodeSpec.parse(
+        json.dumps(
+            {
+                "path": {
+                    "trace": {"kind": "mahak_step", "bw_mbps": 2, "step": 1.0},
+                    "delay": {"base_rtt_ms": 2 * one_way_ms},
+                    "buffer": {"packets": 2000},
+                },
+                "cc": {"kind": "stock", "name": "bbr"},
+                "duration_ms": 8000,
+                "seed": 3,
+                "cross": [{"kind": "tcp", "cc": "cubic", "start_ms": 1000, "stop_ms": stop_ms}],
+            }
+        )
+    )
+    out = run_episode(spec, build, tmp_path, timeout_s=300, keep_raw=True)
+    assert isinstance(out, EpisodeOk), out.row
+    rec = load_records(tmp_path / spec.episode_id() / "raw")
+    arr = rec.link(rec.link_arrival, 1)
+    mine = arr[arr["sport"] == 6000]
+    ms = (mine["t_ns"].astype(np.int64) - int(out.row["base_ns"])) / 1e6  # type: ignore[call-overload]
+    data = ms[mine["bytes"] > 200]
+    # Data in flight at the stop still reaches the link; nothing newer does.
+    assert data.size > 100 and data.max() <= stop_ms + one_way_ms + 1, data.max()
+    # What follows is a few resets answering ACKs in flight, within an RTT.
+    assert ms.max() <= stop_ms + 3 * one_way_ms, ms.max()
+    (connected,) = out.row["cross_connected_ms"]  # type: ignore[misc]
+    assert 1000 <= connected < 1000 + 50 * one_way_ms
+
+
 def test_loss_and_cross_traffic(build: UmlBuild, tmp_path: Path) -> None:
     # 20 Mbit/s; 5 Mbit/s of CBR UDP over [2 s, 8 s); Cubic cross traffic from
     # 6 s; 1% random loss on data, 0.5% on ACKs.

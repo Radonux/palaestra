@@ -219,6 +219,27 @@ def rivals_of(e: EpisodeSpec) -> npt.NDArray[np.float64]:
     return np.array(rows, np.float64).reshape(-1, 3)
 
 
+def realized(
+    rivals: npt.NDArray[np.float64], connected_ms: list[float | None]
+) -> npt.NDArray[np.float64]:
+    """An episode's cross flows as they ran (the episodes table's
+    cross_connected_ms): a TCP flow starts when its handshake completed,
+    not at its planned start, and one that never connected is no rival.
+    Stops are exact, since the guest aborts a flow at its stop."""
+    if len(connected_ms) != len(rivals):
+        raise ValueError(f"{len(connected_ms)} connect times for {len(rivals)} cross flows")
+    out = rivals.copy()
+    keep = np.ones(len(rivals), bool)
+    for i, t in enumerate(connected_ms):
+        if rivals[i, 0] == RIVALS.index("udp"):
+            continue
+        if t is None:
+            keep[i] = False
+        else:
+            out[i, 1] = t / 1000
+    return out[keep]
+
+
 def batch(
     arms: list[tuple[PathSpec, Condition]], policy: Path, spec: PPOSpec, rng: np.random.Generator
 ) -> tuple[list[EpisodeSpec], dict[str, int], dict[str, npt.NDArray[np.float64]]]:
