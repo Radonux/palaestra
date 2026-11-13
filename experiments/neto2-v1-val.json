@@ -1,0 +1,16 @@
+{
+  "title": "neto2 v1 in closed loop on the validation links: ten offline arms beside the rule, BBRv3 and expliCCit's released policy",
+  "description": "exp-net2-offline-point-230 trained expliCCit's memoryless actor offline on neto1 v1 (release exp-net1-point-228, the run in chosen.txt) from the step data of exp-data-net2-steps-222, ten arms: behaviour cloning, IQL, TD3+BC and expliCCit's own loss, with the window set from the believed BDP (bdp) or as a multiplier (mult). Its release holds training diagnostics only. Here every arm runs in closed loop (net2-off-ARM) beside the fixed rule on neto1 v1 (rule-pt) and on net1 v7 (rule-v7, release exp-net1v6-229), both at u = 0.25 until rule-net1point-val.json has chosen u for each, expliCCit's released policy as deployed (third_party/expliccit-models, trained by its authors on their own data) and BBRv3, on the five validation families and as 2 and 4 copies, campaign seed 21. summary.md scores each controller against BBRv3 and names the best arm (chosen.json); versus-rule-pt.md pairs each controller with the rule on neto1 v1 by link. This is the first look in closed loop at arms that were not tuned: it says which arms deserve a search, and supports no claim about neto2. Validation links only.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1-point-228",
+    "m": "release:exp-net1v6-229",
+    "p": "release:exp-net2-offline-point-230"
+  },
+  "prepare": "uv run python experiments/rule_export.py \"$OUT/pt\" \"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\" --u 0.25; uv run python experiments/rule_export.py \"$OUT/v7\" \"$IN/m/$(cat \"$IN/m/chosen.txt\")/net1.pt\" --u 0.25; uv run expliccit train import-expliccit third_party/expliccit-models \"$OUT/expliccit\" --as-deployed; P=(--policy \"rule-pt=$OUT/pt/rule-u0.25.onnx\" --policy \"rule-v7=$OUT/v7/rule-u0.25.onnx\" --policy \"expliccit=$OUT/expliccit/policy.onnx\"); for a in \"$IN\"/p/net2-off-*; do P+=(--policy \"$(basename \"$a\")=$a/policy.onnx\"); done; experiments/rule_eval.sh \"$OUT\" val 21 21 bbr3 \"${P[@]}\"; uv run python experiments/copies.py \"$OUT/copies\" --split val --duration-ms 30000 --seed 21 --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"; jq -s add \"$OUT/aliases.json\" \"$OUT/copies/aliases.json\" > \"$OUT/a.json\"; mv \"$OUT/a.json\" \"$OUT/aliases.json\"",
+  "shards": 100,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+  "collect": "uv run python experiments/rule_report.py \"$OUT\" --apart copies-30s --best net2-off && uv run python experiments/versus_rule.py \"$OUT\" rule-pt",
+  "timeout_minutes": 300
+}
