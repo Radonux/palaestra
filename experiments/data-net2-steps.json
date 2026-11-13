@@ -1,0 +1,13 @@
+{
+  "title": "Step data for an offline net2: net2's 600 training links, every step kept",
+  "description": "Data for training expliCCit's memoryless actor offline (expliccit train run) on a net1 with one value per LCF: the 600 links of examples/net1_broad.py's set net2-train (links no net1 was trained on), two conditions each from the broad set of 64, three controllers per link (the 17 stock ones, the four delay-threshold policies and release model-net1v3's fixed rule, alone and with exploration), 30 s episodes, with every step kept, since net2 learns from consecutive steps.",
+  "uml": true,
+  "inputs": {
+    "models": "release:model-net1v3"
+  },
+  "prepare": "for s in net2-train; do uv run python examples/net1_broad.py \"$OUT/spec-$s\" --set $s --models \"$IN/models\"; uv run expliccit campaign plan \"$OUT/spec-$s/campaign.json\" \"$OUT/campaign-$s\"; done",
+  "shards": 20,
+  "run": "for s in net2-train; do uv run expliccit campaign run \"$OUT/campaign-$s\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done",
+  "collect": "echo '| set | status |' > \"$OUT/summary.md\"; echo '|---|---|' >> \"$OUT/summary.md\"; for s in net2-train; do uv run expliccit campaign status \"$OUT/campaign-$s\" > \"$OUT/status-$s.json\"; echo \"| $s | $(jq -c . \"$OUT/status-$s.json\") |\" >> \"$OUT/summary.md\"; done",
+  "timeout_minutes": 180
+}

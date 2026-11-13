@@ -5,7 +5,8 @@ Usage: python experiments/rule_export.py OUT NET1.pt --u -0.25 0 0.25 [--oracle]
            [--spread K ... [--s0 S0]] [--idle K ... [--i0 I0]]
 
 For each u, writes OUT/rule-u{u}.onnx, where net2 reads net1's distributions
-pooled to 32 bins, and OUT/rule-u{u}-actor.pt, the same net2 as an actor (a
+pooled to 32 bins (or, for a net1 with one value or an interval per LCF, all
+of its output), and OUT/rule-u{u}-actor.pt, the same net2 as an actor (a
 starting point for online training). --oracle writes OUT/rule-u{u}-oracle.onnx
 instead: the same rule on the true LCFs, read from the guest's live truth.
 The actor's last layer is zero and its bias atanh(u / 3), 3 being action_max.
@@ -29,6 +30,7 @@ from pathlib import Path
 import torch
 
 from expliccit_env.train import fit
+from expliccit_env.train.beliefs import Bins
 from expliccit_env.train.export import to_onnx
 from expliccit_env.train.graph import IdleTarget, SpreadTarget, WindowTarget
 from expliccit_env.train.models import ExpliccitActor
@@ -55,10 +57,12 @@ def main() -> None:
     net1, _ = fit.load_net1(a.net1)
     faults = fit.parse_faults(a.fault, net1.lcfs) if a.fault else None
     truth = frozenset(net1.lcfs) if a.oracle else frozenset[str]()
+    bins = BINS if isinstance(net1.kind, Bins) else None
+    width = fit.input_width(fit.front(net1, input_bins=bins))
     a.out.mkdir(parents=True, exist_ok=True)
     for u in a.u:
         torch.manual_seed(0)  # the hidden layers do not reach the output; same bytes each run
-        actor = ExpliccitActor(len(net1.lcfs) * BINS, HIDDEN)
+        actor = ExpliccitActor(width, HIDDEN)
         last = actor.net[4]
         assert isinstance(last, torch.nn.Linear)
         with torch.no_grad():
@@ -70,7 +74,7 @@ def main() -> None:
             ACTION_MAX,
             action="bdp",
             truth=truth,
-            input_bins=BINS,
+            input_bins=bins,
             faults=faults,
         )
         name = f"rule-u{u:g}" + ("-oracle" if a.oracle else "")
@@ -86,7 +90,7 @@ def main() -> None:
             print(f"{name}-idle{k:g}")
         if a.traffic is not None:
             head = load_head(a.traffic)
-            graph.front = fit.front(net1, input_bins=BINS, truth=truth, traffic=head)
+            graph.front = fit.front(net1, input_bins=bins, truth=truth, traffic=head)
         for k in a.spread:
             graph.target = SpreadTarget(base, k, a.s0, copies_gated=a.traffic is not None)
             spread = f"{name}-spread{k:g}" + ("" if a.traffic is None else "-head")

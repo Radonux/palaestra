@@ -1,0 +1,15 @@
+{
+  "title": "The fixed rule on the single-value net1, validation links: the u grid over three campaign seeds",
+  "description": "expliCCit's encoder states one value per LCF. exp-net1-point-216 trains it on net1 v6's data, with v6's training settings or expliCCit's, three seeds each, and names the run with the highest mean R^2 on the validation rows (chosen.txt). Here the fixed rule's u is chosen on that net1 exactly as on v6 (rule-net1v6-val.json): u in -0.25, 0, 0.125, 0.25, 0.375, 0.5, with BBRv3 and v6's rule at u = 0.25 (release model-v6-inputs, seed 0) beside it, on the 21 validation links and five families, for campaign seeds 11, 21 and 31; the winner is the u with the highest mean over the five families on every seed, or, where seeds disagree or the gap is inside the noise, the one ahead on the mean over seeds. Validation links only.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1-point-216",
+    "m": "release:model-v6-inputs"
+  },
+  "prepare": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; U=\"-0.25 0 0.125 0.25 0.375 0.5\"; uv run python experiments/rule_export.py \"$OUT/pt\" \"$N\" --u $U; uv run python experiments/rule_export.py \"$OUT/v6\" \"$IN/m/net1-v6-s0.pt\" --u 0.25; P=(--policy \"v6-u0.25=$OUT/v6/rule-u0.25.onnx\"); for u in $U; do P+=(--policy \"pt-u$u=$OUT/pt/rule-u$u.onnx\"); done; for s in 11 21 31; do mkdir -p \"$OUT/s$s\"; experiments/rule_eval.sh \"$OUT/s$s\" val $s $s bbr3 \"${P[@]}\"; done",
+  "shards": 30,
+  "run": "for c in \"$OUT\"/s*/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done",
+  "collect": "for s in 11 21 31; do uv run python experiments/rule_report.py \"$OUT/s$s\" --select pt; done; { for s in 11 21 31; do echo \"# Campaign seed $s\"; cat \"$OUT/s$s/summary.md\"; echo; done; } > \"$OUT/summary.md\"",
+  "timeout_minutes": 240
+}
