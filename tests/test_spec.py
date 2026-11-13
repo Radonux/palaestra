@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from expliccit_env.guest_plan import TcpCrossPlan, UdpCrossPlan
 from expliccit_env.spec import BaseRtt, CampaignSpec, EpisodeSpec, MahakMrtt
-from expliccit_env.train.spec import Net1Spec
+from expliccit_env.train.spec import Net1Spec, Net2Spec
 
 EXAMPLES = Path(__file__).parents[1] / "examples"
 SPECS = Path(__file__).parents[1] / "experiments" / "specs"
@@ -297,3 +297,11 @@ def test_checked_in_net1_specs_parse(path: Path) -> None:
     """Experiments read these as net1 specs; a field renamed in Net1Spec
     must be renamed here too, or every experiment using them fails."""
     Net1Spec.model_validate(json.loads(path.read_text()))
+
+
+def test_checked_in_net2_arms_parse() -> None:
+    """experiments/net2-offline-point.json reads each arm as a net2 spec."""
+    arms = json.loads((SPECS / "net2" / "offline.json").read_text())
+    assert arms
+    for arm in arms.values():
+        Net2Spec.model_validate(arm)
