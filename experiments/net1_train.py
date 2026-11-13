@@ -22,6 +22,7 @@ import argparse
 import dataclasses
 import hashlib
 import json
+import resource
 import time
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,13 @@ from expliccit_env.train.spec import Net1Spec
 
 ROOT = Path(__file__).resolve().parents[1]
 STRIDE = 12
+
+
+def note(stage: str) -> None:
+    """One line per stage with the peak memory so far: a runner that runs
+    out of memory is killed without a message, and this says where."""
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2**20
+    print(f"{time.strftime('%H:%M:%S')} {stage}: peak {peak:.1f} GB", flush=True)
 
 
 def held() -> dict[str, str]:
@@ -92,6 +100,7 @@ def train(
     views = {"val": (~is_held, "val"), "test": (~is_held, "test"), "test_held": (is_held, "test")}
     views |= {f"test_{name}": (ctl == c, "test") for c, name in hold.items()}
     load_s = time.time() - t0
+    note(f"loaded {steps.obs.shape[0]} rows")
     if a.eval:
         net1, log = fit.load_net1(a.eval)[0], {}
     else:
@@ -99,11 +108,14 @@ def train(
     rows = {k: int((base == k).sum()) for k in ("train", "val", "test", "hold")}
     rep: dict[str, Any] = {"log": log, "rows": rows, "load_s": load_s, "views": {}}
     rep["train_s"] = time.time() - t0 - load_s
+    note(f"trained, {rows}")
     for name, (mask, split) in views.items():
         v = view(mask, split)
         rep["views"][name] = {"net1": summary(fit.report_net1(net1, v, "test"))}
         for who, other in others.items():
             rep["views"][name][who] = summary(fit.report_net1(other, v, "test"))
+            note(f"reported {name}, {who}")
+        note(f"reported {name}")
     return net1, rep
 
 
@@ -162,6 +174,7 @@ def main() -> None:
         rep["views"][f"ood_{name}"] = {"net1": summary(fit.report_net1(net1, o, "test"))}
         for who, other in others.items():
             rep["views"][f"ood_{name}"][who] = summary(fit.report_net1(other, o, "test"))
+        note(f"reported ood_{name}, {o.obs.shape[0]} rows")
     (a.out / "report.json").write_text(json.dumps(rep, indent=1, default=float) + "\n")
     title = (
         f"net1, dropout {raw.get('dropout')}, width {raw.get('width')}, seed {a.seed}: 90% coverage"
