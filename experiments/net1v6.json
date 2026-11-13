@@ -1,13 +1,13 @@
 {
   "title": "net1 v6: net1 v5's data plus wider ranges and 120 s episodes, against net1 v5",
-  "description": "net1 v5 is honest only inside its training ranges (90% coverage 0.91 to 0.97 on test links, not outside them). This trains net1 with net1 v5's settings (experiments/specs/net1v4.json: three members, dropout 0.05, width 512) on net1 v5's data (exp-data-net1-broad-30s-218, -60s-74) plus the wider data of exp-data-net1-v6-221 (one-way delay 5 to 150 ms, buffers 0.25 to 32 BDP, base capacity 1 to 200 Mbit/s, 30 s and 120 s episodes), seeds 0, 1 and 2, and reports it next to net1 v5 (--compare) on the same views: validation and test links of all four sets, net1 v5's four held-out sets (competitors, loss, rtt, buffer) and the two new ones beyond the wide ranges (rtt-wide: 151 to 250 ms; buffer-wide: 32 to 64 BDP). Bins come from the training values' quantiles, so they widen with the data. Choice rule, written before the results: net1 v6 replaces v5 if, on validation rows inside v5's ranges, its log score and 90% coverage are no worse than v5's beyond seed spread, and its coverage on the held-out sets is closer to 0.9. Rows are every 24th step, not every 12th: run 148 loaded every 12th (12.6 million rows) and its runners ran out of memory; every 24th keeps about 6.3 million rows, under net1 v5's 7.2 million, on all the links.",
+  "description": "net1 v5 is honest only inside its training ranges (90% coverage 0.91 to 0.97 on test links, not outside them). This trains net1 with net1 v5's settings (experiments/specs/net1v4.json: three members, dropout 0.05, width 512) on net1 v5's data (exp-data-net1-broad-30s-218, -60s-74) plus the wider data of exp-data-net1-v6-221 (one-way delay 5 to 150 ms, buffers 0.25 to 32 BDP, base capacity 1 to 200 Mbit/s, 30 s and 120 s episodes), seeds 0, 1 and 2, and reports it next to net1 v5 (--compare) on the same views: validation and test links of all four sets, net1 v5's four held-out sets (competitors, loss, rtt, buffer) and the two new ones beyond the wide ranges (rtt-wide: 151 to 250 ms; buffer-wide: 32 to 64 BDP). Bins come from the training values' quantiles, so they widen with the data. Choice rule, written before the results: net1 v6 replaces v5 if, on validation rows inside v5's ranges, its log score and 90% coverage are no worse than v5's beyond seed spread, and its coverage on the held-out sets is closer to 0.9. Rows are every 24th step, not every 12th: run 148 loaded every 12th (12.6 million rows) and its runners ran out of memory; every 24th keeps about 6.3 million rows, under net1 v5's 7.2 million, on all the links. Rerun of 11-13: the data is regenerated with the guest that keeps a cross flow inside its planned window (commit 312d15a), and the compare model is the earlier net1 v6 (release model-v6-inputs, trained on data from before that fix), since net1 v5's file is in a format no longer read.",
   "train": true,
   "inputs": {
     "d30": "release:exp-data-net1-broad-30s-218",
     "d60": "release:exp-data-net1-broad-60s-219",
     "ood": "release:exp-data-net1-broad-ood-220",
     "w": "release:exp-data-net1-v6-221",
-    "v5": "release:exp-net1v4-recheck-79"
+    "m": "release:model-v6-inputs"
   },
   "matrix": {
     "seed": [
@@ -16,7 +16,7 @@
       2
     ]
   },
-  "run": "uv run python experiments/net1_train.py \"$OUT/net1-v6-s$SEED\" --spec experiments/specs/net1v4.json --set dropout=0.05 --set width=512 --seed $SEED --stride 24 --data \"$IN/d30/campaign-train30\" \"$IN/d60/campaign-train60\" \"$IN/w/campaign-wide30\" \"$IN/w/campaign-wide120\" --ood competitors=\"$IN/ood/campaign-ood-competitors\" --ood loss=\"$IN/ood/campaign-ood-loss\" --ood rtt=\"$IN/ood/campaign-ood-rtt\" --ood buffer=\"$IN/ood/campaign-ood-buffer\" --ood rtt-wide=\"$IN/w/campaign-ood-rtt-wide\" --ood buffer-wide=\"$IN/w/campaign-ood-buffer-wide\" --compare \"$IN/v5/net1-d0.05-w512-s0/net1.pt\"",
+  "run": "uv run python experiments/net1_train.py \"$OUT/net1-v6-s$SEED\" --spec experiments/specs/net1v4.json --set dropout=0.05 --set width=512 --seed $SEED --stride 24 --data \"$IN/d30/campaign-train30\" \"$IN/d60/campaign-train60\" \"$IN/w/campaign-wide30\" \"$IN/w/campaign-wide120\" --ood competitors=\"$IN/ood/campaign-ood-competitors\" --ood loss=\"$IN/ood/campaign-ood-loss\" --ood rtt=\"$IN/ood/campaign-ood-rtt\" --ood buffer=\"$IN/ood/campaign-ood-buffer\" --ood rtt-wide=\"$IN/w/campaign-ood-rtt-wide\" --ood buffer-wide=\"$IN/w/campaign-ood-buffer-wide\" --compare \"$IN/m/net1-v6-s0.pt\"",
   "collect": "uv run python experiments/net1_grid.py \"$OUT\" \"$OUT\"/net1-*",
   "collect_inputs": false,
   "timeout_minutes": 360
