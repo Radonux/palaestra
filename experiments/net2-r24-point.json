@@ -1,10 +1,10 @@
 {
   "title": "Round 24: round 18's DAgger students on the single-value net1",
-  "description": "The learned net2 that passed its gate (r18e05: round 18's DAgger students of beliefs p and q on net1 v6, one policy on three seeds' mean beliefs with q vetoing the push) trained unchanged on expliCCit's kind of net1, one value per LCF, trained on net1 v6's data (exp-net1-point-216, the run named in its chosen.txt): teacher gain 0.5, seeds 1 to 3, the rule at u = 0.25. The actor reads net1's seven values, as round 22's read v6's seven means. Its three seeds' ensemble is then evaluated beside r18e05 and both rules on every validation family. Validation links only.",
+  "description": "The learned net2 that passed its gate (r18e05: round 18's DAgger students of beliefs p and q on net1 v6, one policy on three seeds' mean beliefs with q vetoing the push) trained unchanged on expliCCit's kind of net1, one value per LCF, trained on net1 v6's data (exp-net1-point-228, the run named in its chosen.txt): teacher gain 0.5, seeds 1 to 3, the rule at u = 0.25. The actor reads net1's seven values, as round 22's read v6's seven means. Its three seeds' ensemble is then evaluated beside r18e05 and both rules on every validation family. Validation links only.",
   "uml": true,
   "train": true,
   "inputs": {
-    "n": "release:exp-net1-point-216",
+    "n": "release:exp-net1-point-228",
     "models": "release:model-net1v3"
   },
   "matrix": {
