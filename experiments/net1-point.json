@@ -1,0 +1,27 @@
+{
+  "title": "net1 with one value per LCF (expliCCit's encoder), trained on net1 v6's data",
+  "description": "Does the kind of output explain the gap between our net1 and expliCCit's? net1 v6 states a distribution per LCF (64 bins, three members, the log score). This trains expliCCit's encoder as it is, one value per LCF by squared error, on exactly net1 v6's rows (exp-data-net1-broad-30s-73, -60s-74 and exp-data-net1-v6-146, every 24th step, split by link, the same held-out controllers), in two arms and seeds 0 to 2. Arm ours: net1 v6's settings (robust scaling, dropout 0.05, at most 12 epochs, patience 3). Arm expliccit: expliCCit's settings (min-max scaling, dropout 0.3, at most 50 epochs, patience 5). Each run scores, on the same rows, net1 v6 (seed 0, model-v6-inputs) by the mean of its belief and expliCCit's released net1 (third_party/expliccit-models), which was trained on expliCCit's own data and whose ground-truth definitions may differ from ours. The arm is chosen on the validation rows by mean R^2 over the LCFs; its seed 0 is the net1 that net2 is then trained on. Only these two settings were tried, since net1 v4's grid found settings to matter little (exp-net1v4-grid-10).",
+  "train": true,
+  "inputs": {
+    "d30": "release:exp-data-net1-broad-30s-73",
+    "d60": "release:exp-data-net1-broad-60s-74",
+    "ood": "release:exp-data-net1-broad-ood-75",
+    "w": "release:exp-data-net1-v6-146",
+    "m": "release:model-v6-inputs"
+  },
+  "matrix": {
+    "arm": [
+      "ours",
+      "expliccit"
+    ],
+    "seed": [
+      0,
+      1,
+      2
+    ]
+  },
+  "run": "P=(--set 'output={\"kind\":\"point\"}'); if [[ \"$ARM\" == expliccit ]]; then P+=(--set 'scaling=\"minmax\"' --set dropout=0.3 --set epochs=50 --set patience=5); else P+=(--set dropout=0.05); fi; uv run python experiments/net1_train.py \"$OUT/net1-point-$ARM-s$SEED\" --spec experiments/specs/net1v4.json \"${P[@]}\" --seed $SEED --stride 24 --data \"$IN/d30/campaign-train30\" \"$IN/d60/campaign-train60\" \"$IN/w/campaign-wide30\" \"$IN/w/campaign-wide120\" --ood competitors=\"$IN/ood/campaign-ood-competitors\" --ood loss=\"$IN/ood/campaign-ood-loss\" --ood rtt=\"$IN/ood/campaign-ood-rtt\" --ood buffer=\"$IN/ood/campaign-ood-buffer\" --ood rtt-wide=\"$IN/w/campaign-ood-rtt-wide\" --ood buffer-wide=\"$IN/w/campaign-ood-buffer-wide\" --compare \"$IN/m/net1-v6-s0.pt\" --compare-expliccit third_party/expliccit-models",
+  "collect": "uv run python experiments/net1_point_report.py \"$OUT\" \"$OUT\"/net1-point-*",
+  "collect_inputs": false,
+  "timeout_minutes": 360
+}
