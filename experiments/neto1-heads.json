@@ -1,0 +1,23 @@
+{
+  "title": "neto1 with a head for every candidate LCF: which can the sender's measurements estimate?",
+  "description": "A screening run for the LCF concepts of docs/lcf-concepts.md. neto1 (the original architecture: expliCCit's encoder, one value per LCF) is trained with 34 heads, one for each stored label and each composite over the 100 ms window, on the data neto1 v1 was trained on (exp-net1-point-228) with the same settings (robust scaling, dropout 0.05), three seeds. The comparison row is neto1 v1 (our settings, seed 0) with its seven heads on the same rows, so the table shows whether 27 more heads cost the first seven any accuracy. R^2 per head says which LCFs the measurements identify; a composite's head is redundant unless it beats the formula applied to its parts' heads, which this run does not test. Nothing is tuned and the test rows select nothing.",
+  "train": true,
+  "inputs": {
+    "d30": "release:exp-data-net1-broad-30s-218",
+    "d60": "release:exp-data-net1-broad-60s-219",
+    "ood": "release:exp-data-net1-broad-ood-220",
+    "w": "release:exp-data-net1-v6-221",
+    "n": "release:exp-net1-point-228"
+  },
+  "matrix": {
+    "seed": [
+      0,
+      1,
+      2
+    ]
+  },
+  "run": "uv run python experiments/net1_train.py \"$OUT/net1-point-all34-s$SEED\" --spec experiments/specs/net1v4.json --set 'output={\"kind\":\"point\"}' --set dropout=0.05 --set 'lcfs=[\"queue_delay_mean_ns\", \"queue_delay_ns\", \"ack_queue_delay_mean_ns\", \"queue_pkts\", \"queue_bytes\", \"queue_min_pkts\", \"flow_queue_pkts\", \"capacity_bps\", \"capacity_ahead_bps\", \"free_buffer_pkts\", \"buffer_pkts\", \"buffer_fill\", \"busy_fraction\", \"base_rtt_ns\", \"one_way_delay_ns\", \"receive_rate_bps\", \"arrival_rate_bps\", \"flow_arrival_rate_bps\", \"active_flows\", \"random_loss_rate\", \"random_drop_fraction\", \"cross_traffic_share\", \"departure_rate_bps\", \"available_capacity_bps\", \"excess_demand_bps\", \"load_factor\", \"bdp_pkts\", \"littles_delay_ns\", \"normalized_inflight\", \"normalized_power\", \"cross_arrival_rate_bps\", \"fair_share_bps\", \"sending_ratio\", \"rtt_ratio\"]' --seed $SEED --stride 24 --data \"$IN/d30/campaign-train30\" \"$IN/d60/campaign-train60\" \"$IN/w/campaign-wide30\" \"$IN/w/campaign-wide120\" --ood competitors=\"$IN/ood/campaign-ood-competitors\" --ood loss=\"$IN/ood/campaign-ood-loss\" --ood rtt=\"$IN/ood/campaign-ood-rtt\" --ood buffer=\"$IN/ood/campaign-ood-buffer\" --ood rtt-wide=\"$IN/w/campaign-ood-rtt-wide\" --ood buffer-wide=\"$IN/w/campaign-ood-buffer-wide\" --compare \"$IN/n/net1-point-ours-s0/net1.pt\"",
+  "collect": "uv run python experiments/net1_point_report.py --compare-name \"neto1 v1 (7 heads)\" \"$OUT\" \"$OUT\"/net1-point-*",
+  "collect_inputs": false,
+  "timeout_minutes": 360
+}

@@ -1,11 +1,12 @@
 """Compare single-value net1 runs (experiments/net1_train.py outputs) by arm.
 
-Usage: python experiments/net1_point_report.py OUT_DIR RUN_DIR...
+Usage: python experiments/net1_point_report.py [--compare-name NAME] OUT_DIR RUN_DIR...
 
 A run directory is named net1-point-ARM-sSEED. Per arm, view and LCF this
 gives the R^2 of the belief's mean, as the mean over the arm's seeds with
 its range, beside the comparison net1s each run scored on the same rows
-(net1_train.py's --compare and --compare-expliccit). The arm with the
+(net1_train.py's --compare, called NAME in the table, and
+--compare-expliccit). The arm with the
 highest mean R^2 over the LCFs on the validation rows is chosen, the only
 rows a choice may use. Writes OUT_DIR/summary.md and OUT_DIR/chosen.txt
 (the chosen arm's seed-0 run).
@@ -73,4 +74,7 @@ def main(out: Path, runs: list[Path]) -> None:
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]), [Path(p) for p in sys.argv[2:]])
+    argv = sys.argv[1:]
+    if argv[0] == "--compare-name":
+        NAMES["compare"], argv = argv[1], argv[2:]
+    main(Path(argv[0]), [Path(p) for p in argv[1:]])
