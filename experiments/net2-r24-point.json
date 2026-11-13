@@ -15,7 +15,7 @@
     ]
   },
   "prepare": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; uv run python experiments/net2_ppo_setup.py \"$OUT/setup\" --net1 \"$N\" --models \"$IN/models\" --u 0.25",
-  "run": "S=\"$OUT/spec-r24-s$SEED.json\"; jq --argjson seed \"$SEED\" '.algo = \"dagger\" | .student = \"gate3\" | .base = \"fixed\" | .view = \"means\" | .share_k = 0.5 | .gate_threshold = 0.5 | .critic_warmup = 0 | .lr = 0.001 | .updates_per_iteration = 50 | .replay_iterations = 16 | .tau_s = 1 | .noise_sigma = 0.05 | .group = 1 | .links_per_iteration = 32 | .compete = 0.8 | .copies = [2, 4] | .seed = $seed | .iterations = 60 | .eval_every = 20' \"$OUT/setup/ppo-base.json\" > \"$S\"; uv run expliccit train ppo \"$S\" \"$OUT/ppo-r24-s$SEED\" --build \"$UML\" --workers \"$WORKERS\"",
+  "run": "S=\"$OUT/spec-r24-s$SEED.json\"; jq --argjson seed \"$SEED\" '.algo = \"dagger\" | .student = {\"kind\": \"gate3\", \"threshold\": 0.5} | .view = \"means\" | .share_k = 0.5 | .critic_warmup = 0 | .lr = 0.001 | .updates_per_iteration = 50 | .replay_iterations = 16 | .tau_s = 1 | .noise_sigma = 0.05 | .group = 1 | .links_per_iteration = 32 | .compete = 0.8 | .copies = [2, 4] | .seed = $seed | .iterations = 60 | .eval_every = 20' \"$OUT/setup/ppo-base.json\" > \"$S\"; uv run expliccit train ppo \"$S\" \"$OUT/ppo-r24-s$SEED\" --build \"$UML\" --workers \"$WORKERS\"",
   "collect": "uv run python experiments/net2_ppo_report.py \"$OUT\" \"$OUT\"/ppo-*",
   "timeout_minutes": 360
 }

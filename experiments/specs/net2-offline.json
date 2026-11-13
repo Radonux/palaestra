@@ -1,0 +1,77 @@
+{
+  "x-c0.1": {
+    "algo": "expliccit-v1",
+    "action": "multiplier",
+    "reward": "sage",
+    "reward_alignment": "same",
+    "action_max": 1.0,
+    "action_decimals": 3,
+    "cql_alpha": 0.1
+  },
+  "x-c1": {
+    "algo": "expliccit-v1",
+    "action": "multiplier",
+    "reward": "sage",
+    "reward_alignment": "same",
+    "action_max": 1.0,
+    "action_decimals": 3,
+    "cql_alpha": 1.0
+  },
+  "x-c10": {
+    "algo": "expliccit-v1",
+    "action": "multiplier",
+    "reward": "sage",
+    "reward_alignment": "same",
+    "action_max": 1.0,
+    "action_decimals": 3,
+    "cql_alpha": 10.0
+  },
+  "bc-mult": {
+    "algo": "bc",
+    "action": "multiplier",
+    "action_max": 1.0
+  },
+  "bc-bdp": {
+    "algo": "bc",
+    "action": "bdp",
+    "action_max": 3.0
+  },
+  "iql-mult-sage": {
+    "algo": "iql",
+    "action": "multiplier",
+    "action_max": 1.0,
+    "reward": "sage"
+  },
+  "iql-bdp-sage": {
+    "algo": "iql",
+    "action": "bdp",
+    "action_max": 3.0,
+    "reward": "sage"
+  },
+  "iql-bdp-logu": {
+    "algo": "iql",
+    "action": "bdp",
+    "action_max": 3.0,
+    "reward": "log_utility",
+    "reward_scale": 1.0,
+    "n_step": 10
+  },
+  "td3bc-bdp-a0.5": {
+    "algo": "td3bc",
+    "action": "bdp",
+    "action_max": 3.0,
+    "reward": "log_utility",
+    "reward_scale": 1.0,
+    "n_step": 10,
+    "alpha": 0.5
+  },
+  "td3bc-bdp-a2.5": {
+    "algo": "td3bc",
+    "action": "bdp",
+    "action_max": 3.0,
+    "reward": "log_utility",
+    "reward_scale": 1.0,
+    "n_step": 10,
+    "alpha": 2.5
+  }
+}
