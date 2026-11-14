@@ -1,0 +1,16 @@
+{
+  "title": "neto2 trained longer, in closed loop on validation links: 30 policies (5 arms, 3 seeds, 2 neto1s) beside the rule",
+  "description": "exp-neto2-search2-245 trained expliCCit's memoryless actor offline from the step data of exp-data-net2-steps-222 on neto1 v1 (7 heads, release exp-net1-point-228) and neto1 v2 (27 heads, release exp-neto1-v2-239), the arms of experiments/specs/net2/offline-search2.json: TD3+BC at alpha 5 for 60000, 200000 and 600000 steps, TD3+BC at alpha 10 and IQL at expectile 0.7 and beta 3 for 200000 steps, each over training seeds 0, 1 and 2. Its release holds training diagnostics only. Here every policy runs in closed loop (neto2-NET1-ARM-sSEED) beside the fixed rule on neto1 v1 at u = 0.125 (rule-pt, chosen in exp-rule-net1point-val-234), the rule on neto1 v2 at u = 0.125, 0.25 and 0.375 (rule-v2-uU; 0.375 was chosen in exp-rule-27heads-val-241) and BBRv3, on the five validation families and as 2 and 4 copies, campaign seed 21. summary.md scores each controller against BBRv3 and names the best policy on each net1 (chosen.json); versus-rule-pt.md pairs each controller with the rule on neto1 v1 by link. It answers whether longer training closes the gap to the rule that exp-neto2-search-val-244 left, and how far training seeds spread. This is a search on validation links and supports no claim about neto2 on the held-out test links.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "v1": "release:exp-net1-point-228",
+    "v2": "release:exp-neto1-v2-239",
+    "p": "release:exp-neto2-search2-245"
+  },
+  "prepare": "N1=\"$IN/v1/$(cat \"$IN/v1/chosen.txt\")/net1.pt\"; N2=\"$IN/v2/$(cat \"$IN/v2/chosen.txt\")/net1.pt\"; uv run python experiments/rule_export.py \"$OUT/pt\" \"$N1\" --u 0.125; uv run python experiments/rule_export.py \"$OUT/v2\" \"$N2\" --u 0.125 0.25 0.375; P=(--policy \"rule-pt=$OUT/pt/rule-u0.125.onnx\" --policy \"rule-v2-u0.125=$OUT/v2/rule-u0.125.onnx\" --policy \"rule-v2-u0.25=$OUT/v2/rule-u0.25.onnx\" --policy \"rule-v2-u0.375=$OUT/v2/rule-u0.375.onnx\"); for a in \"$IN\"/p/neto2-*; do P+=(--policy \"$(basename \"$a\")=$a/policy.onnx\"); done; experiments/rule_eval.sh \"$OUT\" val 21 21 bbr3 \"${P[@]}\"; uv run python experiments/copies.py \"$OUT/copies\" --split val --duration-ms 30000 --seed 21 --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"; jq -s add \"$OUT/aliases.json\" \"$OUT/copies/aliases.json\" > \"$OUT/a.json\"; mv \"$OUT/a.json\" \"$OUT/aliases.json\"",
+  "shards": 140,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+  "collect": "uv run python experiments/rule_report.py \"$OUT\" --apart copies-30s --best neto2-v1 neto2-v2 && uv run python experiments/versus_rule.py \"$OUT\" rule-pt",
+  "timeout_minutes": 350
+}
