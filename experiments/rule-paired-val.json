@@ -1,0 +1,17 @@
+{
+  "title": "The fixed rule on four net1s in one run: net1 v7, net1 v9, neto1 v1, neto1 v2, three campaign seeds",
+  "description": "The rule was scored on these net1s in two releases (exp-rule-net1point-val-234 and exp-rule-27heads-val-241), so their rows were never paired, and net1 v9 (release exp-net1v9-243: net1 v8 with bins fitted to random_loss_rate, the only LCF whose bins changed) has no rule score yet. This run puts the rule on all four in one release: net1 v7 (7 LCFs, exp-net1v6-229) and net1 v9 (27 LCFs), which give a distribution per LCF, and neto1 v1 (7 LCFs, exp-net1-point-228) and neto1 v2 (27 LCFs, exp-neto1-v2-239), which give one value per LCF; each release's chosen.txt names the run. The rule reads only the believed bandwidth-delay product. u is 0.125, 0.25 and 0.375, the values the two earlier runs chose or came within noise of (arms v7-u*, v9-u*, o1-u*, o2-u*), with BBRv3 beside them, on the 21 validation links and five families, for campaign seeds 11, 21 and 31. It answers whether the architecture or the number of heads moves the rule beyond the spread across seeds, and which u to use on net1 v9. Validation links only.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "a": "release:exp-net1v6-229",
+    "b": "release:exp-net1v9-243",
+    "c": "release:exp-net1-point-228",
+    "d": "release:exp-neto1-v2-239"
+  },
+  "prepare": "U=\"0.125 0.25 0.375\"; P=(); for a in v7:a v9:b o1:c o2:d; do k=${a%:*} i=${a#*:}; uv run python experiments/rule_export.py \"$OUT/$k\" \"$IN/$i/$(cat \"$IN/$i/chosen.txt\")/net1.pt\" --u $U; for u in $U; do P+=(--policy \"$k-u$u=$OUT/$k/rule-u$u.onnx\"); done; done; for s in 11 21 31; do mkdir -p \"$OUT/s$s\"; experiments/rule_eval.sh \"$OUT/s$s\" val $s $s bbr3 \"${P[@]}\"; done",
+  "shards": 40,
+  "run": "for c in \"$OUT\"/s*/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done",
+  "collect": "for s in 11 21 31; do uv run python experiments/rule_report.py \"$OUT/s$s\" --select v7 v9 o1 o2; done; { for s in 11 21 31; do echo \"# Campaign seed $s\"; cat \"$OUT/s$s/summary.md\"; echo; done; } > \"$OUT/summary.md\"",
+  "timeout_minutes": 300
+}

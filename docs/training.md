@@ -111,6 +111,7 @@ Experiment files and release tags keep the names they were run under.
 |---|---|---|---|
 | net1 v7 | net1 v6's recipe on the fixed-guest data, 7 LCFs | [`exp-net1v6-229`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v6-229) | `net1-v6-s2` |
 | net1 v8 | 27 LCFs | [`exp-net1v8-238`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v8-238) | `net1-v8-s2` |
+| net1 v9 | net1 v8 with bins fitted to `random_loss_rate` | [`exp-net1v9-243`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v9-243) | `net1-v9-s2` |
 | neto1 v1 | 7 LCFs | [`exp-net1-point-228`](https://github.com/Radonux/palaestra/releases/tag/exp-net1-point-228) | `net1-point-ours-s0` |
 | neto1 v2 | 27 LCFs | [`exp-neto1-v2-239`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-v2-239) | `net1-point-v2-s0` |
 
@@ -119,7 +120,14 @@ validation R^2 of 0.3 in [`exp-neto1-heads-233`](https://github.com/Radonux/pala
 that its formula on other heads predicts within 0.02 of its own head
 ([`exp-neto1-composites-236`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-composites-236)). On validation rows neto1 v2 keeps the
 seven shared heads within 0.03 R^2 of neto1 v1, and net1 v8 keeps them
-within 0.01 of net1 v7 in both R^2 and 90% coverage. These are validation rows,
+within 0.01 of net1 v7 in both R^2 and 90% coverage. net1 v8 failed on one LCF: `random_loss_rate` had a validation R^2 of -6.97,
+because a quantity within [0, 1] got 64 equal bins over [0, 1] and a loss
+rate of a few percent fell in the first two. net1 v9 gives such a quantity
+bins up to its 99.9% training quantile instead. Its `random_loss_rate` R^2
+is 0.43 (neto1 v2: 0.48) at 90% coverage 0.91, every other LCF stays within
+0.03 R^2 of net1 v8, and `random_loss_rate` is the only LCF whose bins
+changed (read from the two checkpoints). Its top bin ends at a loss rate of
+0.02, so a higher loss rate is outside what it can state. These are validation rows,
 so they choose a model and support no claim about it.
 
 ## net1: `train run`
