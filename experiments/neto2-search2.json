@@ -1,0 +1,31 @@
+{
+ "title": "Offline neto2, longer training over three seeds: TD3+BC and IQL on neto1 v1 (7 heads) and neto1 v2 (27 heads)",
+ "description": "exp-neto2-search-val-244 ranked 21 single-seed offline arms in closed loop on validation links. The one setting that clearly helped was training length: TD3+BC at alpha 5 for 60,000 steps in place of 20,000 was the best arm on both estimators (+0.015 on neto1 v1 and +0.029 on neto1 v2, mean log utility minus BBRv3, against +0.121 for the fixed rule on neto1 v1). Alpha between 5 and 20 changed little, the widened action range hurt, and IQL was level with TD3+BC on neto1 v2 only. This run follows the length: TD3+BC alpha 5 at 60,000, 200,000 and 600,000 steps, alpha 10 and IQL (expectile 0.7, beta 3) at 200,000 (experiments/specs/net2/offline-search2.json), each over training seeds 0 to 2 so that the spread between seeds can be told from the effect of a setting, on neto1 v1 (exp-net1-point-228) and neto1 v2 (exp-neto1-v2-239). Training only: the arms are compared in closed loop on validation links by a later experiment, and the test links select nothing.",
+ "train": true,
+ "inputs": {
+  "v1": "release:exp-net1-point-228",
+  "v2": "release:exp-neto1-v2-239",
+  "d": "release:exp-data-net2-steps-222"
+ },
+ "matrix": {
+  "net1": [
+   "v1",
+   "v2"
+  ],
+  "arm": [
+   "td3bc-a5-60k",
+   "td3bc-a5-200k",
+   "td3bc-a5-600k",
+   "td3bc-a10-200k",
+   "iql-e0.7-b3-200k"
+  ],
+  "seed": [
+   0,
+   1,
+   2
+  ]
+ },
+ "run": "N=\"$IN/$NET1/$(cat \"$IN/$NET1/chosen.txt\")/net1.pt\"; O=\"$OUT/neto2-$NET1-$ARM-s$SEED\"; mkdir -p \"$O\"; jq -n --arg d \"$IN/d\" --arg n \"$N\" --arg arm \"$ARM\" --argjson seed \"$SEED\" --slurpfile a experiments/specs/net2/offline-search2.json '{data: [$d], split_by: \"link\", seed: $seed, net1_from: $n, net2: $a[0][$arm]}' > \"$O/train.json\"; uv run expliccit train run \"$O/train.json\" \"$O\"; rm -f \"$O/net1.pt\"",
+ "collect": "{ echo \"| arm | transitions | actions clipped | validation BC error | final diagnostics |\"; echo \"|---|---|---|---|---|\"; for r in \"$OUT\"/neto2-*/report.json; do echo \"| $(basename \"$(dirname \"$r\")\") | $(jq -r '[.net2.transitions, .net2.actions_clipped, .net2.val_bc_mse, (.net2.final | to_entries | map(\"\\(.key) \\(.value | tostring | .[0:7])\") | join(\", \"))] | join(\" | \")' \"$r\") |\"; done; } > \"$OUT/summary.md\"",
+ "timeout_minutes": 300
+}

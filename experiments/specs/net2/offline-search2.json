@@ -1,0 +1,51 @@
+{
+  "td3bc-a5-60k": {
+    "algo": "td3bc",
+    "action": "bdp",
+    "action_max": 3.0,
+    "reward": "log_utility",
+    "reward_scale": 1.0,
+    "n_step": 10,
+    "alpha": 5.0,
+    "steps": 60000
+  },
+  "td3bc-a5-200k": {
+    "algo": "td3bc",
+    "action": "bdp",
+    "action_max": 3.0,
+    "reward": "log_utility",
+    "reward_scale": 1.0,
+    "n_step": 10,
+    "alpha": 5.0,
+    "steps": 200000
+  },
+  "td3bc-a5-600k": {
+    "algo": "td3bc",
+    "action": "bdp",
+    "action_max": 3.0,
+    "reward": "log_utility",
+    "reward_scale": 1.0,
+    "n_step": 10,
+    "alpha": 5.0,
+    "steps": 600000
+  },
+  "td3bc-a10-200k": {
+    "algo": "td3bc",
+    "action": "bdp",
+    "action_max": 3.0,
+    "reward": "log_utility",
+    "reward_scale": 1.0,
+    "n_step": 10,
+    "alpha": 10.0,
+    "steps": 200000
+  },
+  "iql-e0.7-b3-200k": {
+    "algo": "iql",
+    "action": "bdp",
+    "action_max": 3.0,
+    "reward": "log_utility",
+    "reward_scale": 1.0,
+    "n_step": 10,
+    "steps": 200000
+  }
+}
