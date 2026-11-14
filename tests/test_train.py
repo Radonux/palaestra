@@ -148,7 +148,10 @@ def test_n_step_transitions_sum_the_rewards_of_consecutive_steps() -> None:
     steps.step[3:6] += 1  # episode 0's steps: 0, 1, 2, 4, 5, 6 (a gap after row 2)
     states = np.arange(12, dtype=np.float32).reshape(-1, 1)
     spec = Net2Spec(n_step=2, discount=0.5, reward_scale=1.0)
-    t, _ = fit.transitions(steps, states, np.zeros(12, np.float32), spec, "test")
+    replay, _ = fit.transitions(
+        steps, torch.from_numpy(states), np.zeros(12, np.float32), spec, "test"
+    )
+    t = replay.batch()
     # Starts 1 and 2 would span the gap, 4 and 5 the episode's end.
     assert t.s[:, 0].tolist() == [0.0, 3.0] and t.s2[:, 0].tolist() == [2.0, 5.0]
     r = steps.reward

@@ -550,6 +550,26 @@ class Transitions:
         return self.s, self.a, self.r, self.s2
 
 
+@dataclass(frozen=True, slots=True)
+class Replay:
+    """A split's transitions as indexes into every row's state, so a state
+    is held once however many transitions read it: a wide net2 input (a
+    distribution net1's bins) over millions of steps fits in memory."""
+
+    states: torch.Tensor  # [rows, width], shared between splits
+    i: torch.Tensor  # [m] the row of s_t; s_t+n is row i + n
+    n: int
+    a: torch.Tensor
+    r: torch.Tensor
+
+    def __len__(self) -> int:
+        return self.i.shape[0]
+
+    def batch(self, b: torch.Tensor | slice = slice(None)) -> Transitions:
+        i = self.i[b]
+        return Transitions(self.states[i], self.a[b], self.r[b], self.states[i + self.n])
+
+
 def _consecutive(steps: Steps) -> npt.NDArray[np.bool_]:
     """[n - 1]: whether row t + 1 is the step right after row t, in its
     episode (not when a step stride dropped the steps between)."""
@@ -557,8 +577,8 @@ def _consecutive(steps: Steps) -> npt.NDArray[np.bool_]:
 
 
 def transitions(
-    steps: Steps, states: F32, actions: F32, spec: Net2Spec, split: Split
-) -> tuple[Transitions, float]:
+    steps: Steps, states: torch.Tensor, actions: F32, spec: Net2Spec, split: Split
+) -> tuple[Replay, float]:
     """(s_t, a_t, r, s_t+n) over n = spec.n_step consecutive steps, r the
     discounted sum of their n rewards; a (logged_actions) scaled to [-1, 1]
     and clipped. Returns the fraction of actions that needed clipping."""
@@ -577,11 +597,12 @@ def transitions(
     i, r = i[keep], r[keep]
     a = actions[i] / spec.action_max
     clipped = float(np.mean(np.abs(a) > 1)) if a.size else 0.0
-    t = Transitions(
-        torch.from_numpy(states[i]),
+    t = Replay(
+        states,
+        torch.from_numpy(i),
+        n,
         torch.from_numpy(np.clip(a, -1, 1).reshape(-1, 1)),
         torch.from_numpy((r * spec.reward_scale).astype(np.float32)),
-        torch.from_numpy(states[i + n]),
     )
     return t, clipped
 
@@ -853,17 +874,17 @@ def net2_view(net1: Net1, spec: Net2Spec, steps: Steps) -> tuple[F32, F32]:
     f = net2_front(net1, spec)
     target = _target(net1, spec.inputs) if spec.action == "bdp" else None
     y = targets(steps, net1.lcfs) if f.uses_truth else None
-    states, log2_bdp = [], []
-    for i in range(0, steps.obs.shape[0], _EVAL_BATCH):
+    n = steps.obs.shape[0]
+    states = np.zeros((n, input_width(f)), np.float32)  # filled in place: no second copy
+    log2_bdp = np.full(n, np.nan, np.float32)
+    for i in range(0, n, _EVAL_BATCH):
         obs = torch.from_numpy(steps.obs[i : i + _EVAL_BATCH])
         yb = None if y is None else torch.from_numpy(y[i : i + _EVAL_BATCH])
         z, x, traffic = f(obs, yb)
-        nan = torch.full((x.shape[0],), float("nan"))
-        log2_bdp.append(nan if target is None else target(obs, z, traffic))
-        states.append(x)
-    if not states:
-        return np.zeros((0, input_width(f)), np.float32), np.zeros(0, np.float32)
-    return torch.cat(states).numpy(), torch.cat(log2_bdp).numpy()
+        states[i : i + _EVAL_BATCH] = x.numpy()
+        if target is not None:
+            log2_bdp[i : i + _EVAL_BATCH] = target(obs, z, traffic).numpy()
+    return states, log2_bdp
 
 
 def _target(net1: Net1, inputs: Inputs) -> nn.Module:
@@ -884,6 +905,17 @@ def logged_actions(steps: Steps, spec: Net2Spec, log2_bdp: F32) -> F32:
     return (nxt - log2_bdp).astype(np.float32)
 
 
+def _bc_mse(actor: nn.Module, t: Replay) -> float:
+    """The actor's squared error on a split's logged actions, in batches."""
+    if len(t) == 0:
+        return float("nan")
+    total = 0.0
+    for j in range(0, len(t), _EVAL_BATCH):
+        b = slice(j, j + _EVAL_BATCH)
+        total += float(((actor(t.states[t.i[b]]) - t.a[b]) ** 2).sum())
+    return total / len(t)
+
+
 def fit_net2(
     spec: Net2Spec, steps: Steps, net1: Net1, seed: int
 ) -> tuple[nn.Module, dict[str, Any]]:
@@ -891,25 +923,24 @@ def fit_net2(
     rng = np.random.default_rng(seed)
     states, log2_bdp = net2_view(net1, spec, steps)
     actions = logged_actions(steps, spec, log2_bdp)
-    data, clipped = transitions(steps, states, actions, spec, "train")
-    val, _ = transitions(steps, states, actions, spec, "val")
+    rows = torch.from_numpy(states)
+    data, clipped = transitions(steps, rows, actions, spec, "train")
+    val, _ = transitions(steps, rows, actions, spec, "val")
     width = states.shape[1]
-    del states  # every row's input; the transitions hold what training needs
-    if data.s.shape[0] == 0:
+    if len(data) == 0:
         raise ValueError("no training transitions")
     learner = Learner(spec, width)
     log: dict[str, list[float]] = {}
     for step in range(spec.steps):
-        b = torch.from_numpy(rng.integers(0, data.s.shape[0], spec.batch_size))
-        batch = Transitions(data.s[b], data.a[b], data.r[b], data.s2[b])
-        for name, v in learner.update(batch, step).items():
+        b = torch.from_numpy(rng.integers(0, len(data), spec.batch_size))
+        for name, v in learner.update(data.batch(b), step).items():
             log.setdefault(name, []).append(v)
     actor = learner.actor.eval()
     with torch.no_grad():
-        val_bc = float(((actor(val.s) - val.a) ** 2).mean()) if val.s.shape[0] else float("nan")
+        val_bc = _bc_mse(actor, val)
     tail = max(1, spec.steps // 10)
     return actor, {
-        "transitions": int(data.s.shape[0]),
+        "transitions": len(data),
         "actions_clipped": clipped,
         "final": {
             name: float(np.mean(v[-tail:])) if v else float("nan") for name, v in log.items()
