@@ -1,0 +1,16 @@
+{
+  "title": "neto2 search in closed loop on validation links: 22 offline arms on neto1 v1 and v2 beside the rule and BBRv3",
+  "description": "exp-neto2-search-240 trained expliCCit's memoryless actor offline from the step data of exp-data-net2-steps-222, eleven arms on each of two net1s of the original architecture: neto1 v1 (7 heads, release exp-net1-point-228) and neto1 v2 (27 heads, release exp-neto1-v2-239). The arms are those of experiments/specs/net2/offline-search.json: TD3+BC at alpha 2.5, 5, 10 and 20, a 60000-step run, an action range of 5, IQL at expectile 0.7 and 0.9 with beta 3 and 10, and one arm that reads the true LCFs instead of net1 (oracle). All set the window from the believed BDP and are rewarded by log utility over 10 steps. Its release holds training diagnostics only. Here every arm runs in closed loop (neto2-NET1-ARM) beside the fixed rule on neto1 v1 at u = 0.125 (rule-pt, the u chosen in exp-rule-net1point-val-234), the rule on neto1 v2 at u = 0.125 and 0.25 (rule-v2-u0.125, rule-v2-u0.25; u is not yet chosen for it) and BBRv3, on the five validation families and as 2 and 4 copies, campaign seed 21. summary.md scores each controller against BBRv3 and names the best arm on each net1 (chosen.json); versus-rule-pt.md pairs each controller with the rule on neto1 v1 by link. This is the hyperparameter search on validation links: its winners still need several seeds before the one report on the held-out test links, and it supports no claim about neto2.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "v1": "release:exp-net1-point-228",
+    "v2": "release:exp-neto1-v2-239",
+    "p": "release:exp-neto2-search-240"
+  },
+  "prepare": "N1=\"$IN/v1/$(cat \"$IN/v1/chosen.txt\")/net1.pt\"; N2=\"$IN/v2/$(cat \"$IN/v2/chosen.txt\")/net1.pt\"; uv run python experiments/rule_export.py \"$OUT/pt\" \"$N1\" --u 0.125; uv run python experiments/rule_export.py \"$OUT/v2\" \"$N2\" --u 0.125 0.25; P=(--policy \"rule-pt=$OUT/pt/rule-u0.125.onnx\" --policy \"rule-v2-u0.125=$OUT/v2/rule-u0.125.onnx\" --policy \"rule-v2-u0.25=$OUT/v2/rule-u0.25.onnx\"); for a in \"$IN\"/p/neto2-*; do P+=(--policy \"$(basename \"$a\")=$a/policy.onnx\"); done; experiments/rule_eval.sh \"$OUT\" val 21 21 bbr3 \"${P[@]}\"; uv run python experiments/copies.py \"$OUT/copies\" --split val --duration-ms 30000 --seed 21 --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"; jq -s add \"$OUT/aliases.json\" \"$OUT/copies/aliases.json\" > \"$OUT/a.json\"; mv \"$OUT/a.json\" \"$OUT/aliases.json\"",
+  "shards": 100,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+  "collect": "uv run python experiments/rule_report.py \"$OUT\" --apart copies-30s --best neto2-v1 neto2-v2 && uv run python experiments/versus_rule.py \"$OUT\" rule-pt",
+  "timeout_minutes": 350
+}
