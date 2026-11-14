@@ -70,9 +70,56 @@ by up to 28 percent), so the label
 comparison over that whole release is UNRUN. Every shard checked holds
 the 37 columns with no nulls.
 
-No net1 has been trained on the new
-releases; use them for any LCF outside the old 16, since a composite
-(`train/lcfs.py`) then costs no rerun.
+No net1 has been trained on the 212 to 215 releases, and none should be:
+the cross-flow fix below replaced them.
+
+### Regenerated after the cross-flow fix
+
+Commit 312d15a fixed the guest's TCP cross flows. Before it, a cross flow
+kept sending after its planned stop (59% of stopped flows for more than
+1 s, at most 22.4 s), and one whose handshake met a standing queue started
+later than planned (median 0.45 s, at most 11.1 s). The labels assumed the
+planned window, so they described traffic that was not there and missed
+traffic that was. Every release made before 312d15a used the old guest.
+The datasets were generated again with the fixed guest:
+
+| Data | Release on the fixed guest |
+|---|---|
+| Broad links, 30 s | [`exp-data-net1-broad-30s-218`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-30s-218) |
+| Broad links, 60 s | [`exp-data-net1-broad-60s-219`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-60s-219) |
+| Held-out families | [`exp-data-net1-broad-ood-220`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-ood-220) |
+| Wide links | [`exp-data-net1-v6-221`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-v6-221) |
+| net2 step data, 600 links no net1 was trained on, every step kept | [`exp-data-net2-steps-222`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net2-steps-222) |
+
+Which earlier published results used episodes with an affected cross flow
+has not been worked out (UNRUN).
+
+### Model names
+
+Two series of models are trained on the fixed-guest data. A new set of
+heads is a new version in the same series; it does not change the
+architecture.
+
+- **net1 vX, net2 vX**: this project's architecture, where net1 states a
+  distribution per LCF.
+- **neto1 vX, neto2 vX**: expliCCit's original architecture, where net1
+  gives one number per LCF.
+
+Experiment files and release tags keep the names they were run under.
+
+| Model | What it is | Release | Chosen run |
+|---|---|---|---|
+| net1 v7 | net1 v6's recipe on the fixed-guest data, 7 LCFs | [`exp-net1v6-229`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v6-229) | `net1-v6-s2` |
+| net1 v8 | 27 LCFs | UNRUN: trained in run 238, not yet published | |
+| neto1 v1 | 7 LCFs | [`exp-net1-point-228`](https://github.com/Radonux/palaestra/releases/tag/exp-net1-point-228) | `net1-point-ours-s0` |
+| neto1 v2 | 27 LCFs | [`exp-neto1-v2-239`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-v2-239) | `net1-point-v2-s0` |
+
+The 27 LCFs are net1's seven plus every candidate whose head reached a
+validation R^2 of 0.3 in [`exp-neto1-heads-233`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-heads-233), except a composite
+that its formula on other heads predicts within 0.02 of its own head
+([`exp-neto1-composites-236`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-composites-236)). On validation rows neto1 v2 keeps the
+seven shared heads within 0.03 R^2 of neto1 v1. These are validation rows,
+so they choose a model and support no claim about it.
 
 ## net1: `train run`
 
