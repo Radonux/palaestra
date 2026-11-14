@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from pathlib import Path
@@ -13,7 +14,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from expliccit_env.policy import EXPLICCIT_OBS_COLS, OBS_DIM, TRUTH_COLUMNS, TRUTH_DIM  # noqa: E402
-from expliccit_env.train import data, fit  # noqa: E402
+from expliccit_env.train import data, fit, lcfs  # noqa: E402
 from expliccit_env.train.export import to_onnx  # noqa: E402
 from expliccit_env.train.models import (  # noqa: E402
     ExpliccitActor,
@@ -58,6 +59,22 @@ def synthetic(n_episodes: int = 40, steps: int = 200, seed: int = 0) -> data.Ste
         episode_ids=tuple(str(i) for i in range(n_episodes)),
         split=split,
     )
+
+
+def test_report_scores_a_composite_from_its_parts_estimates() -> None:
+    steps = synthetic()
+    busy = np.clip(0.5 + 0.1 * steps.obs[:, 74], 0, 1).astype(np.float32)
+    labels = lcfs.Labels(dict(steps.labels) | {"busy_fraction": busy})
+    steps = dataclasses.replace(steps, labels=labels)
+    names = ("capacity_bps", "busy_fraction", "departure_rate_bps")
+    spec = Net1Spec(width=64, epochs=30, patience=5, batch_size=256, lcfs=names)
+    report = fit.report_net1(fit.fit_net1(spec, steps, seed=0)[0], steps, "test")
+    assert [n for n in names if "derived" in report[n]] == ["departure_rate_bps"]
+    assert report["departure_rate_bps"]["derived"]["r2"] > 0.8, report
+    # Without the busy fraction among its heads there is nothing to derive from.
+    spec = spec.model_copy(update={"lcfs": (names[0], names[2]), "epochs": 1})
+    report = fit.report_net1(fit.fit_net1(spec, steps, seed=0)[0], steps, "test")
+    assert not any("derived" in v for v in report.values())
 
 
 def test_expliccit_shapes_match_its_released_checkpoints() -> None:

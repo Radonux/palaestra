@@ -35,6 +35,8 @@ from expliccit_env.train.graph import (
     TruthColumns,
     WindowTarget,
 )
+from expliccit_env.train.lcfs import columns as lcf_columns
+from expliccit_env.train.lcfs import value as lcf_value
 from expliccit_env.train.models import (
     NET1,
     NET2,
@@ -226,10 +228,21 @@ def report_net1(net1: Net1, steps: Steps, split: Split | None = None) -> dict[st
     lo, hi = net1.bounds(steps.obs[rows]) if intervals else (pred, pred)
     busy = steps.labels["busy_fraction"][rows]
     dist = _report_distributions(net1, steps, rows) if isinstance(net1.kind, Bins) else {}
+
+    def part(column: str) -> F32:
+        """net1's estimate of a label column, in the column's own units."""
+        return pred[:, net1.lcfs.index(column)] / np.float32(LCF_UNITS[column][0])
+
     for k, name in enumerate(net1.lcfs):
         out[name] = {"unit": LCF_UNITS[name][1], "net1": _metrics(pred[:, k], true[:, k])}
         if name in dist:
             out[name]["distribution"] = dist[name]
+        parts = lcf_columns([name])
+        if parts != {name} and parts <= set(net1.lcfs):
+            # A composite whose parts net1 also states: the formula on the
+            # parts' estimates, to say whether its own head adds anything.
+            derived = lcf_value(name, part) * np.float32(LCF_UNITS[name][0])
+            out[name]["derived"] = _metrics(derived, true[:, k])
         if name in base:
             out[name]["baseline"] = _metrics(base[name], true[:, k])
         if intervals:

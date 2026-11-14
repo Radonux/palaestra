@@ -1,0 +1,23 @@
+{
+  "title": "Composite LCFs on neto1: does a composite's own head beat its formula on the estimates of its parts?",
+  "description": "exp-neto1-heads-233 trained neto1 with 34 heads, the 12 composites of docs/lcf-concepts.md among them, and left one question open: a composite's head is redundant unless it beats the formula applied to its parts' heads. This reports, with no training, each of that run's three seeds on the same rows (experiments/net1_train.py --eval): per view and composite, the R^2 of the head and the R^2 of the formula on net1's estimates of the parts (fit.report_net1's derived). summary.md holds both for every view; composites.json the validation means, the only rows a choice of heads may use.",
+  "train": true,
+  "inputs": {
+    "d30": "release:exp-data-net1-broad-30s-218",
+    "d60": "release:exp-data-net1-broad-60s-219",
+    "ood": "release:exp-data-net1-broad-ood-220",
+    "w": "release:exp-data-net1-v6-221",
+    "h": "release:exp-neto1-heads-233"
+  },
+  "matrix": {
+    "seed": [
+      0,
+      1,
+      2
+    ]
+  },
+  "run": "R=\"$IN/h/net1-point-all34-s$SEED\"; uv run python experiments/net1_train.py \"$OUT/composites-s$SEED\" --spec experiments/specs/net1v4.json --set 'output={\"kind\":\"point\"}' --set dropout=0.05 --set \"lcfs=$(jq -c .spec.lcfs \"$R/report.json\")\" --seed $SEED --stride 24 --eval \"$R/net1.pt\" --data \"$IN/d30/campaign-train30\" \"$IN/d60/campaign-train60\" \"$IN/w/campaign-wide30\" \"$IN/w/campaign-wide120\" --ood competitors=\"$IN/ood/campaign-ood-competitors\" --ood loss=\"$IN/ood/campaign-ood-loss\" --ood rtt=\"$IN/ood/campaign-ood-rtt\" --ood buffer=\"$IN/ood/campaign-ood-buffer\" --ood rtt-wide=\"$IN/w/campaign-ood-rtt-wide\" --ood buffer-wide=\"$IN/w/campaign-ood-buffer-wide\"",
+  "collect": "uv run python experiments/composites_report.py \"$OUT\" \"$OUT\"/composites-s*",
+  "collect_inputs": false,
+  "timeout_minutes": 240
+}

@@ -59,8 +59,9 @@ def controllers(dirs: list[Path], steps: data.Steps) -> np.ndarray[Any, np.dtype
 
 
 def summary(rep: dict[str, Any]) -> dict[str, dict[str, float]]:
-    """Per LCF, the mean's R^2 and absolute error; for a distribution net1
-    also its coverage, CRPS skill and log loss."""
+    """Per LCF, the mean's R^2 and absolute error; for a composite whose
+    parts net1 states, the R^2 of the formula on their estimates; for a
+    distribution net1 also its coverage, CRPS skill and log loss."""
     out: dict[str, dict[str, float]] = {}
     for k, v in rep.items():
         if not (isinstance(v, dict) and "net1" in v):
@@ -69,6 +70,8 @@ def summary(rep: dict[str, Any]) -> dict[str, dict[str, float]]:
             "r2": v["net1"].get("r2", float("nan")),
             "mae": v["net1"].get("mae", float("nan")),
         }
+        if "derived" in v:
+            out[k]["derived_r2"] = v["derived"].get("r2", float("nan"))
         if "distribution" in v:
             d = v["distribution"]
             out[k] |= {
