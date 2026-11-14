@@ -1,0 +1,25 @@
+{
+  "title": "Round 25: a learned net2 on net1 v9 (27 LCFs), reading distributions or means, three seeds",
+  "description": "No learned net2 of our architecture has been trained since the cross-flow fix (312d15a) or on a 27-LCF net1: r18e05, the net2 that passed its gate, was trained on net1 v6 with the old guest, and round 24 (exp-net2-r24-point-231) ran the same recipe on neto1 v1 only. This run trains that recipe unchanged on net1 v9 (release exp-net1v9-243, the run named in its chosen.txt; 27 LCFs, a distribution per LCF): round 18's DAgger students with teacher gain 0.5, the rule at u = 0.25 (chosen for net1 v9 in exp-rule-paired-val-246), seeds 1 to 3. The actor reads either net1's distributions (view bins) or their means only (view means), so the run also says whether the distributions help a learned net2. Training reports validation scores every 20 iterations; round 24 drifted between iterations 39 and 59, so the iteration is chosen on validation afterwards. Closed-loop evaluation beside the rule and neto2 follows in its own run. Validation links only; no claim before tuning.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1v9-243",
+    "models": "release:model-net1v3"
+  },
+  "matrix": {
+    "view": [
+      "bins",
+      "means"
+    ],
+    "seed": [
+      1,
+      2,
+      3
+    ]
+  },
+  "prepare": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; uv run python experiments/net2_ppo_setup.py \"$OUT/setup\" --net1 \"$N\" --models \"$IN/models\" --u 0.25",
+  "run": "S=\"$OUT/spec-r25-$VIEW-s$SEED.json\"; jq --arg view \"$VIEW\" --argjson seed \"$SEED\" '.algo = \"dagger\" | .student = {\"kind\": \"gate3\", \"threshold\": 0.5} | .view = $view | .share_k = 0.5 | .critic_warmup = 0 | .lr = 0.001 | .updates_per_iteration = 50 | .replay_iterations = 16 | .tau_s = 1 | .noise_sigma = 0.05 | .group = 1 | .links_per_iteration = 32 | .compete = 0.8 | .copies = [2, 4] | .seed = $seed | .iterations = 60 | .eval_every = 20' \"$OUT/setup/ppo-base.json\" > \"$S\"; uv run expliccit train ppo \"$S\" \"$OUT/ppo-r25-$VIEW-s$SEED\" --build \"$UML\" --workers \"$WORKERS\"",
+  "collect": "uv run python experiments/net2_ppo_report.py \"$OUT\" \"$OUT\"/ppo-*",
+  "timeout_minutes": 360
+}
