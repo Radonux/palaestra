@@ -166,7 +166,12 @@ def crps(p: F32, bounds: F32, y: F32) -> F32:
 
 def _bin_bounds(y: F32, bins: int) -> F32:
     """Per LCF, B + 1 bin boundaries fitted to the training targets. A
-    quantity within [0, 1] gets B equal bins. Any other gets bin 0 below
+    quantity within [0, 1] gets B equal bins over [0, 1], unless 99.9% of
+    its values lie below 0.5 (a loss rate of a few percent): then B - 1
+    equal bins up to that quantile and one more step as the last bin, which
+    also takes everything above. Without this, such a quantity sits in the
+    first one or two bins and its mean is a bin's midpoint whatever the
+    truth. Any other gets bin 0 below
     the 0.1% quantile of its positive values (zero and near zero),
     log-spaced bins up to its 99.9% quantile, and one more log step as the
     last bin, which also takes everything above."""
@@ -175,7 +180,11 @@ def _bin_bounds(y: F32, bins: int) -> F32:
         v = y[:, j][np.isfinite(y[:, j])].astype(np.float64)
         pos = v[v > 0]
         if v.size and v.min() >= 0 and v.max() <= 1:
-            out[j] = np.linspace(0.0, 1.0, bins + 1)
+            top = float(np.quantile(v, 0.999))
+            if 0 < top < 0.5:
+                out[j] = [*np.linspace(0.0, top, bins), top * bins / (bins - 1)]
+            else:
+                out[j] = np.linspace(0.0, 1.0, bins + 1)
             continue
         lo = float(np.quantile(pos, 0.001)) if pos.size else 1.0
         hi = float(np.quantile(v, 0.999)) if v.size else lo * 10

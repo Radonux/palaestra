@@ -1,0 +1,23 @@
+{
+  "title": "net1 v9: net1 v8 with bins fitted to a small fraction's own range",
+  "description": "net1 v8 (release exp-net1v8-238) scored R^2 -6.97 on random_loss_rate on validation rows with 90% coverage 0.91, where neto1 v2 reaches 0.48. The cause is the bin layout, read from the checkpoint: a quantity within [0, 1] got 64 equal bins over [0, 1], each 0.0156 wide, so a loss rate of a few percent sits in the first two bins and the belief's mean is a bin's midpoint whatever the truth. fit._bin_bounds now gives a quantity within [0, 1] whose 99.9% training quantile is below 0.5 equal bins up to that quantile and one more step as the last bin. net1 v9 is net1 v8's recipe retrained with that change and nothing else: the same 27 LCFs, data, settings (dropout 0.05, width 512, 64 bins, three members) and seeds 0 to 2. net1 v8 (the run in its chosen.txt) is reported on the same rows, so the table shows whether random_loss_rate recovers and whether any other LCF moved. Which other LCFs change bins is read from the checkpoints after the run. Settings are not searched here. The test rows select nothing.",
+  "train": true,
+  "inputs": {
+    "d30": "release:exp-data-net1-broad-30s-218",
+    "d60": "release:exp-data-net1-broad-60s-219",
+    "ood": "release:exp-data-net1-broad-ood-220",
+    "w": "release:exp-data-net1-v6-221",
+    "m": "release:exp-net1v8-238"
+  },
+  "matrix": {
+    "seed": [
+      0,
+      1,
+      2
+    ]
+  },
+  "run": "uv run python experiments/net1_train.py \"$OUT/net1-v9-s$SEED\" --spec experiments/specs/net1v4.json --set dropout=0.05 --set width=512 --set 'lcfs=[\"queue_delay_mean_ns\", \"queue_pkts\", \"capacity_bps\", \"free_buffer_pkts\", \"busy_fraction\", \"one_way_delay_ns\", \"receive_rate_bps\", \"queue_delay_ns\", \"ack_queue_delay_mean_ns\", \"queue_bytes\", \"queue_min_pkts\", \"flow_queue_pkts\", \"capacity_ahead_bps\", \"buffer_pkts\", \"buffer_fill\", \"base_rtt_ns\", \"arrival_rate_bps\", \"flow_arrival_rate_bps\", \"active_flows\", \"random_loss_rate\", \"cross_traffic_share\", \"load_factor\", \"littles_delay_ns\", \"normalized_inflight\", \"normalized_power\", \"fair_share_bps\", \"rtt_ratio\"]' --seed $SEED --stride 24 --data \"$IN/d30/campaign-train30\" \"$IN/d60/campaign-train60\" \"$IN/w/campaign-wide30\" \"$IN/w/campaign-wide120\" --ood competitors=\"$IN/ood/campaign-ood-competitors\" --ood loss=\"$IN/ood/campaign-ood-loss\" --ood rtt=\"$IN/ood/campaign-ood-rtt\" --ood buffer=\"$IN/ood/campaign-ood-buffer\" --ood rtt-wide=\"$IN/w/campaign-ood-rtt-wide\" --ood buffer-wide=\"$IN/w/campaign-ood-buffer-wide\" --compare \"$IN/m/$(cat \"$IN/m/chosen.txt\")/net1.pt\"",
+  "collect": "uv run python experiments/net1_grid.py \"$OUT\" \"$OUT\"/net1-*",
+  "collect_inputs": false,
+  "timeout_minutes": 360
+}

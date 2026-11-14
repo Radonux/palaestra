@@ -459,6 +459,19 @@ def test_bins_cover_fractions_evenly_and_rates_on_a_log_scale() -> None:
     assert np.allclose(ratios, ratios[0], rtol=1e-4)  # log-spaced
 
 
+def test_a_fraction_that_stays_small_gets_bins_over_its_own_range() -> None:
+    rng = np.random.default_rng(0)
+    loss = rng.uniform(0, 0.03, 5000)
+    loss[:2500] = 0  # half the links lose nothing
+    b = fit._bin_bounds(loss[:, None].astype(np.float32), 16)[0]
+    assert b[0] == 0 and np.all(np.diff(b) > 0)
+    assert np.allclose(np.diff(b), b[1], rtol=1e-4)  # equal bins
+    assert 0.03 < b[-1] < 0.035  # the last bin starts at the 99.9% quantile
+    # A loss of 1% lands in a bin whose midpoint is within a bin of it.
+    mid = (b[:-1] + b[1:]) / 2
+    assert abs(mid[np.searchsorted(b, 0.01) - 1] - 0.01) < b[1]
+
+
 def _noisy(n_episodes: int = 60, sd_mbps: float = 2.0) -> data.Steps:
     """synthetic() with capacity noise net1 cannot predict, of known spread."""
     steps = synthetic(n_episodes=n_episodes)
