@@ -1,0 +1,32 @@
+{
+  "title": "Offline neto2 search: TD3+BC and IQL settings on neto1 v1 (7 heads) and neto1 v2 (27 heads), with an oracle",
+  "description": "exp-neto2-v1-val-235 put the best untuned offline arm (TD3+BC, window from the believed BDP, alpha 2.5) 0.15 below the fixed rule on the same net1, and more critic weight helped. This trains the settings that matter, on the step data of exp-data-net2-steps-222, for two estimators: neto1 v1 (seven heads, exp-net1-point-228) and neto1 v2 (27 heads, exp-neto1-v2-237), each the run in its chosen.txt. Arms (experiments/specs/net2/offline-search.json; all set the window from the believed BDP and learn from the log utility over 10 steps): TD3+BC with alpha 2.5, 5, 10 and 20, alpha 5 for 60,000 steps, alpha 5 with the action range widened from 3 to 5 (17% of logged actions were clipped at 3); IQL with expectile 0.7 or 0.9 and beta 3 or 10; and an oracle, TD3+BC at alpha 5 reading the true LCFs of the same head set, which separates the head set's worth from net1's error. Training only: the arms are compared in closed loop on validation links by a later experiment, and the test links select nothing.",
+  "train": true,
+  "inputs": {
+    "v1": "release:exp-net1-point-228",
+    "v2": "release:exp-neto1-v2-237",
+    "d": "release:exp-data-net2-steps-222"
+  },
+  "matrix": {
+    "net1": [
+      "v1",
+      "v2"
+    ],
+    "arm": [
+      "td3bc-a2.5",
+      "td3bc-a5",
+      "td3bc-a10",
+      "td3bc-a20",
+      "td3bc-a5-long",
+      "td3bc-a5-m5",
+      "iql-e0.7-b3",
+      "iql-e0.9-b3",
+      "iql-e0.7-b10",
+      "iql-e0.9-b10",
+      "oracle-td3bc-a5"
+    ]
+  },
+  "run": "N=\"$IN/$NET1/$(cat \"$IN/$NET1/chosen.txt\")/net1.pt\"; O=\"$OUT/neto2-$NET1-$ARM\"; mkdir -p \"$O\"; jq -n --arg d \"$IN/d\" --arg n \"$N\" --arg arm \"$ARM\" --slurpfile a experiments/specs/net2/offline-search.json '{data: [$d], split_by: \"link\", net1_from: $n, net2: $a[0][$arm]}' > \"$O/train.json\"; uv run expliccit train run \"$O/train.json\" \"$O\"; rm -f \"$O/net1.pt\"",
+  "collect": "{ echo \"| arm | transitions | actions clipped | validation BC error | final diagnostics |\"; echo \"|---|---|---|---|---|\"; for r in \"$OUT\"/neto2-*/report.json; do echo \"| $(basename \"$(dirname \"$r\")\") | $(jq -r '[.net2.transitions, .net2.actions_clipped, .net2.val_bc_mse, (.net2.final | to_entries | map(\"\\(.key) \\(.value | tostring | .[0:7])\") | join(\", \"))] | join(\" | \")' \"$r\") |\"; done; } > \"$OUT/summary.md\"",
+  "timeout_minutes": 240
+}

@@ -1,0 +1,103 @@
+{
+ "td3bc-a2.5": {
+  "algo": "td3bc",
+  "action": "bdp",
+  "action_max": 3.0,
+  "reward": "log_utility",
+  "reward_scale": 1.0,
+  "n_step": 10,
+  "alpha": 2.5
+ },
+ "td3bc-a5": {
+  "algo": "td3bc",
+  "action": "bdp",
+  "action_max": 3.0,
+  "reward": "log_utility",
+  "reward_scale": 1.0,
+  "n_step": 10,
+  "alpha": 5.0
+ },
+ "td3bc-a10": {
+  "algo": "td3bc",
+  "action": "bdp",
+  "action_max": 3.0,
+  "reward": "log_utility",
+  "reward_scale": 1.0,
+  "n_step": 10,
+  "alpha": 10.0
+ },
+ "td3bc-a20": {
+  "algo": "td3bc",
+  "action": "bdp",
+  "action_max": 3.0,
+  "reward": "log_utility",
+  "reward_scale": 1.0,
+  "n_step": 10,
+  "alpha": 20.0
+ },
+ "td3bc-a5-long": {
+  "algo": "td3bc",
+  "action": "bdp",
+  "action_max": 3.0,
+  "reward": "log_utility",
+  "reward_scale": 1.0,
+  "n_step": 10,
+  "alpha": 5.0,
+  "steps": 60000
+ },
+ "td3bc-a5-m5": {
+  "algo": "td3bc",
+  "action": "bdp",
+  "action_max": 5.0,
+  "reward": "log_utility",
+  "reward_scale": 1.0,
+  "n_step": 10,
+  "alpha": 5.0
+ },
+ "iql-e0.7-b3": {
+  "algo": "iql",
+  "action": "bdp",
+  "action_max": 3.0,
+  "reward": "log_utility",
+  "reward_scale": 1.0,
+  "n_step": 10
+ },
+ "iql-e0.9-b3": {
+  "algo": "iql",
+  "action": "bdp",
+  "action_max": 3.0,
+  "reward": "log_utility",
+  "reward_scale": 1.0,
+  "n_step": 10,
+  "expectile": 0.9
+ },
+ "iql-e0.7-b10": {
+  "algo": "iql",
+  "action": "bdp",
+  "action_max": 3.0,
+  "reward": "log_utility",
+  "reward_scale": 1.0,
+  "n_step": 10,
+  "beta": 10.0
+ },
+ "iql-e0.9-b10": {
+  "algo": "iql",
+  "action": "bdp",
+  "action_max": 3.0,
+  "reward": "log_utility",
+  "reward_scale": 1.0,
+  "n_step": 10,
+  "expectile": 0.9,
+  "beta": 10.0
+ },
+ "oracle-td3bc-a5": {
+  "algo": "td3bc",
+  "action": "bdp",
+  "action_max": 3.0,
+  "reward": "log_utility",
+  "reward_scale": 1.0,
+  "n_step": 10,
+  "alpha": 5.0,
+  "inputs": "truth"
+ }
+}
