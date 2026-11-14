@@ -1,0 +1,23 @@
+{
+  "title": "neto1 v2: the original architecture with the chosen 27 heads",
+  "description": "neto1 v2 is expliCCit's encoder (one value per LCF) with a larger head set, trained on neto1 v1's data (exp-net1-point-228) with its settings (robust scaling, dropout 0.05), seeds 0 to 2. The head set was chosen on validation rows from exp-neto1-heads-233 and exp-neto1-composites-236 by a rule fixed beforehand: keep net1's seven LCFs; keep every stored label and composite whose head reaches R^2 0.3 (this drops random_drop_fraction at 0.02 and sending_ratio at 0.25); drop a composite whose formula on its parts' heads scores within 0.02 of its own head, since net2 can compute it (this drops departure_rate_bps, available_capacity_bps, excess_demand_bps, bdp_pkts and cross_arrival_rate_bps). That leaves 27 heads: 21 stored labels and six composites (load_factor, littles_delay_ns, normalized_inflight, normalized_power, fair_share_bps, rtt_ratio), whose formulas score below their heads on estimated parts, most of them because they divide by an estimate. neto1 v1 (seven heads, seed 0) is reported on the same rows. Settings are neto1 v1's and are not searched here; the seed for net2 is chosen on validation rows by mean R^2. The test rows select nothing.",
+  "train": true,
+  "inputs": {
+    "d30": "release:exp-data-net1-broad-30s-218",
+    "d60": "release:exp-data-net1-broad-60s-219",
+    "ood": "release:exp-data-net1-broad-ood-220",
+    "w": "release:exp-data-net1-v6-221",
+    "n": "release:exp-net1-point-228"
+  },
+  "matrix": {
+    "seed": [
+      0,
+      1,
+      2
+    ]
+  },
+  "run": "uv run python experiments/net1_train.py \"$OUT/neto1-v2-s$SEED\" --spec experiments/specs/net1v4.json --set 'output={\"kind\":\"point\"}' --set dropout=0.05 --set 'lcfs=[\"queue_delay_mean_ns\", \"queue_pkts\", \"capacity_bps\", \"free_buffer_pkts\", \"busy_fraction\", \"one_way_delay_ns\", \"receive_rate_bps\", \"queue_delay_ns\", \"ack_queue_delay_mean_ns\", \"queue_bytes\", \"queue_min_pkts\", \"flow_queue_pkts\", \"capacity_ahead_bps\", \"buffer_pkts\", \"buffer_fill\", \"base_rtt_ns\", \"arrival_rate_bps\", \"flow_arrival_rate_bps\", \"active_flows\", \"random_loss_rate\", \"cross_traffic_share\", \"load_factor\", \"littles_delay_ns\", \"normalized_inflight\", \"normalized_power\", \"fair_share_bps\", \"rtt_ratio\"]' --seed $SEED --stride 24 --data \"$IN/d30/campaign-train30\" \"$IN/d60/campaign-train60\" \"$IN/w/campaign-wide30\" \"$IN/w/campaign-wide120\" --ood competitors=\"$IN/ood/campaign-ood-competitors\" --ood loss=\"$IN/ood/campaign-ood-loss\" --ood rtt=\"$IN/ood/campaign-ood-rtt\" --ood buffer=\"$IN/ood/campaign-ood-buffer\" --ood rtt-wide=\"$IN/w/campaign-ood-rtt-wide\" --ood buffer-wide=\"$IN/w/campaign-ood-buffer-wide\" --compare \"$IN/n/net1-point-ours-s0/net1.pt\"",
+  "collect": "uv run python experiments/net1_point_report.py --compare-name \"neto1 v1 (7 heads)\" \"$OUT\" \"$OUT\"/neto1-v2-*",
+  "collect_inputs": false,
+  "timeout_minutes": 360
+}
