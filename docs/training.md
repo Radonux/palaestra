@@ -110,7 +110,7 @@ Experiment files and release tags keep the names they were run under.
 | Model | What it is | Release | Chosen run |
 |---|---|---|---|
 | net1 v7 | net1 v6's recipe on the fixed-guest data, 7 LCFs | [`exp-net1v6-229`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v6-229) | `net1-v6-s2` |
-| net1 v8 | 27 LCFs | UNRUN: trained in run 238, not yet published | |
+| net1 v8 | 27 LCFs | [`exp-net1v8-238`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v8-238) | `net1-v8-s2` |
 | neto1 v1 | 7 LCFs | [`exp-net1-point-228`](https://github.com/Radonux/palaestra/releases/tag/exp-net1-point-228) | `net1-point-ours-s0` |
 | neto1 v2 | 27 LCFs | [`exp-neto1-v2-239`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-v2-239) | `net1-point-v2-s0` |
 
@@ -118,7 +118,8 @@ The 27 LCFs are net1's seven plus every candidate whose head reached a
 validation R^2 of 0.3 in [`exp-neto1-heads-233`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-heads-233), except a composite
 that its formula on other heads predicts within 0.02 of its own head
 ([`exp-neto1-composites-236`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-composites-236)). On validation rows neto1 v2 keeps the
-seven shared heads within 0.03 R^2 of neto1 v1. These are validation rows,
+seven shared heads within 0.03 R^2 of neto1 v1, and net1 v8 keeps them
+within 0.01 of net1 v7 in both R^2 and 90% coverage. These are validation rows,
 so they choose a model and support no claim about it.
 
 ## net1: `train run`
