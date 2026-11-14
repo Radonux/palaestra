@@ -70,6 +70,21 @@ def main(out: Path, runs: list[Path]) -> None:
                 has = first["views"][view][model]
                 cells = [cell(r2([first], view, model, k)) if k in has else "" for k in lcfs]
                 lines.append(f"| {view} | {name} | " + " | ".join(cells) + " |")
+    # R^2 is owned by a few rows when a net1 extrapolates without bound (an
+    # unclipped input far outside its training range), so each model's rank
+    # correlation is shown too.
+    lines += ["", "Spearman's rank correlation of the value with the truth:", ""]
+    lines += ["| view | model | " + " | ".join(lcfs) + " |", "|" + "---|" * (len(lcfs) + 2)]
+    for view in ("val", "test"):
+        models = {f"point, {a}": (reps, "net1") for a, reps in arms.items()}
+        models |= {n: ([first], m) for m, n in NAMES.items() if m in first["views"][view]}
+        for name, (reps, model) in models.items():
+            has = reps[0]["views"][view][model]
+            cells = [
+                cell([rep["views"][view][model][k]["rank_r"] for rep in reps]) if k in has else ""
+                for k in lcfs
+            ]
+            lines.append(f"| {view} | {name} | " + " | ".join(cells) + " |")
     out.mkdir(parents=True, exist_ok=True)
     (out / "summary.md").write_text("\n".join(lines) + "\n")
     (out / "chosen.txt").write_text(f"net1-point-{best}-s0\n")

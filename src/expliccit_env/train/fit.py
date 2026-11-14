@@ -191,6 +191,12 @@ def targets(steps: Steps, lcfs: tuple[str, ...]) -> F32:
     return np.stack([steps.labels[n] * np.float32(LCF_UNITS[n][0]) for n in lcfs], axis=1)
 
 
+def _ranks(x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Each value's rank, ties sharing their mean rank."""
+    _, inverse, counts = np.unique(x, return_inverse=True, return_counts=True)
+    return (np.cumsum(counts) - (counts - 1) / 2)[inverse]
+
+
 def _metrics(pred: F32, true: F32) -> dict[str, float]:
     ok = np.isfinite(true) & np.isfinite(pred)
     p, t = pred[ok].astype(np.float64), true[ok].astype(np.float64)
@@ -198,11 +204,17 @@ def _metrics(pred: F32, true: F32) -> dict[str, float]:
         return {"n": 0}
     var = float(t.var())
     mse = float(((p - t) ** 2).mean())
+    rp, rt = _ranks(p), _ranks(t)
     return {
         "n": int(t.size),
         "mae": float(np.abs(p - t).mean()),
         "rmse": mse**0.5,
         "r2": 1 - mse / var if var > 0 else float("nan"),
+        # Spearman's rank correlation: unlike R^2, a few rows with a huge
+        # error (an input far outside a net1's training range) cannot own it.
+        "rank_r": float(np.corrcoef(rp, rt)[0, 1])
+        if rp.std() > 0 and rt.std() > 0
+        else float("nan"),
     }
 
 

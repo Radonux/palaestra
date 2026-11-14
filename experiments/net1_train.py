@@ -69,6 +69,7 @@ def summary(rep: dict[str, Any]) -> dict[str, dict[str, float]]:
         out[k] = {
             "r2": v["net1"].get("r2", float("nan")),
             "mae": v["net1"].get("mae", float("nan")),
+            "rank_r": v["net1"].get("rank_r", float("nan")),
         }
         if "derived" in v:
             out[k]["derived_r2"] = v["derived"].get("r2", float("nan"))

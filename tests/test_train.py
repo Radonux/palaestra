@@ -100,6 +100,7 @@ def test_net1_learns_and_net2_runs() -> None:
     net1, log = fit.fit_net1(spec, steps, seed=0)
     report = fit.report_net1(net1, steps, "test")["capacity_bps"]
     assert report["net1"]["r2"] > 0.9, (report, log)
+    assert report["net1"]["rank_r"] > 0.9, report
     actor, net2_log = fit.fit_net2(Net2Spec(hidden=32, steps=200, batch_size=64), steps, net1, 0)
     assert net2_log["transitions"] > 0 and np.isfinite(net2_log["final"]["critic"])
     with torch.no_grad():
