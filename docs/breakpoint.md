@@ -7,6 +7,13 @@ to pick it up. Every number comes from the release named beside it unless
 it says "local"; terms are defined in [methodology.md](methodology.md#terms)
 and scores are log utility, paired by link, minus the named reference.
 
+This page keeps the state of 2026-11-09. Every release it cites ran on
+the guest before the cross-flow fix (`312d15a`), and it predates the
+model names in [training.md](training.md#model-names), where net1 v6's
+recipe on the fixed-guest data is net1 v7. Later work, including learned
+net2 against learned neto2, is in
+[results.md](results.md#learned-net2-against-learned-neto2).
+
 ## Where things stand
 
 - **net1.** The current estimator is net1 v6
