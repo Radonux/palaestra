@@ -20,52 +20,26 @@ the claims and defines every term used below.
 
 ## What we found
 
-With the learner, its recipe, the data and the 27 LCFs held fixed, net2
-on our net1 (a distribution per LCF) beat neto2 on expliCCit's kind of
-net1 (one value per LCF) on the held-out test links: +0.146 against
-+0.111 and +0.096 in log utility over BBRv3, over three training seeds
-([`exp-dagger-twins-test-258`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-test-258)).
-Trained offline instead, the two made no reliable difference.
-
-The findings below come from runs before the cross-flow fix (`312d15a`).
-
-1. net1 estimates most LCFs well on links it never saw (R^2 0.88 to 1.00
-   for five of seven), and its 90% intervals hold 91% to 97% of the time.
-   It is weak where the measurements say little (free buffer, R^2 0.47;
-   capacity on an idle link) and not calibrated outside the ranges it was
-   trained on. A random row split, as expliCCit used, overstates
-   generalization; breadth of training links mattered more than any
-   hyperparameter.
-2. The split costs little. The simplest net2, a fixed multiple of net1's
-   believed bandwidth-delay product, beats every Linux controller on
-   held-out test links, by 0.133 in log utility over BBRv3 and 0.076 over
-   BBRv1, and the same rule on the true state does only 0.023 better
-   ([`exp-final-test-100`](https://github.com/Radonux/palaestra/releases/tag/exp-final-test-100)).
-3. What limits a rule is the other flows: pushing against a buffer-filling
-   flow (Cubic) pays, pushing against copies of oneself hurts, and the
-   seven LCFs do not say which is present. Told the number of flows, a
-   rule on the true state handles both (an oracle bound).
-4. A learned net2 beats the rule against competitors and matches it
-   elsewhere. Imitation of a teacher that knows the other flows (DAgger),
-   with a student inferring stock TCP and copies of itself from net1's
-   output alone, passed its gate and on test beat the rule with Cubic
-   from the start (+0.068) and in the competition conditions (+0.039),
-   both intervals above zero, matching it in every other family and as
-   copies
-   ([`exp-net2-test-r18e05-168`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-test-r18e05-168)).
-   RL from the reward (PPO) gains more against competitors but pushes
-   among copies. A black box trained the same way on the raw measurements
-   ends 0.2 to 0.4 below the rule from its own start, and about 0.05
-   below the split when started from a clone of the split's rule: the
-   split's lead is its start.
+1. With the learner, its recipe, the data and the 27 LCFs held fixed,
+   net2 on our net1 (a distribution per LCF) beat neto2 on expliCCit's
+   kind of net1 (one value per LCF) on the held-out test links: +0.146
+   against +0.111 and +0.096 in log utility over BBRv3, over three
+   training seeds, and it alone stayed ahead as copies
+   ([`exp-dagger-twins-test-258`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-test-258)).
+   Trained offline instead, the two made no reliable difference.
+2. net1 estimates most LCFs well on links it never saw (test R^2 0.88 to
+   1.00 for five of expliCCit's seven), and its 90% intervals hold 89% to
+   97% of the time; it is weak where the measurements say little (free
+   buffer, R^2 0.29) and not calibrated outside its training ranges
+   ([`exp-net1v9-243`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v9-243)).
+3. The simplest net2, a fixed multiple of net1's believed bandwidth-delay
+   product, already beats BBRv3 by 0.136 on the test links; what limits
+   it is the other flows, above all copies of itself.
+4. net2 gains nothing from net1's stated uncertainty: reading the
+   distributions does no better than reading their means.
 5. None of expliCCit's three checked results reproduced as stated: R^2
    above 0.9 for every LCF, the split's cost against Sage, and its
    case-study diagnosis.
-6. Alarms computed without ground truth catch beliefs the flow's own
-   measurements contradict, and a capacity fault was repaired by
-   retraining net1 alone.
-7. So far net2 gains nothing from net1's stated uncertainty: acting on
-   the beliefs' means does as well.
 
 Evidence, caveats and every release: [docs/results.md](docs/results.md).
 

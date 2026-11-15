@@ -27,80 +27,65 @@ action taken (the next step's column 76) and whether a policy set it.
 `--tables steps` drops the large link tables; `--steps-stride K` keeps
 every K-th step (enough for net1, not for net2, which needs consecutive
 steps). A sweep `{"kind": "paths", "paths": [...]}` takes any paths, and
-`"ccs_per_point": k` runs k of the controllers per point: net1 learns
-more from many links with a few controllers than the reverse. Any of the
-17 Linux controllers can teach (`StockName` in `spec.py`). The datasets:
+`"ccs_per_point": k` runs k of the controllers per point. Any of the 17
+Linux controllers can teach (`StockName` in `spec.py`).
 
-| Data | Made by | Used for |
+The datasets in use, each from the experiment file of the same stem, all
+recorded after the guest's TCP cross flows were fixed (`312d15a`):
+
+| Data | Release | Used for |
 |---|---|---|
-| expliCCit-like: BBRv1, Cubic and Vegas on 120 paths, 30 s | `examples/campaign-expliccit-teachers.json` | the reproduction, the row split |
-| 180 links with every controller, 1,050 with three each | `examples/net1_varied.py` | net1 v3; the evaluation links |
-| 3,600 broad links under 64 conditions, and four held-out families | `examples/net1_broad.py` | net1 v4 and v5; net2's training paths |
+| Broad links (`examples/net1_broad.py`), 30 s and 60 s | [`exp-data-net1-broad-30s-218`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-30s-218), [`exp-data-net1-broad-60s-219`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-60s-219) | training every net1 and neto1 |
+| Wider delays, buffers and capacities, 30 s and 120 s | [`exp-data-net1-v6-221`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-v6-221) | the same |
+| Held-out families | [`exp-data-net1-broad-ood-220`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-ood-220) | scoring net1 outside its ranges |
+| net2's 600 training links, every step kept | [`exp-data-net2-steps-222`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net2-steps-222) | offline net2 and neto2 |
 
-Commit 312d15a fixed the guest's TCP cross flows. Before it, a cross flow
-kept sending after its planned stop (59% of stopped flows for more than
-1 s, at most 22.4 s), and one whose handshake met a standing queue started
-later than planned (median 0.45 s, at most 11.1 s), while the labels
-assumed the planned window. Every release made before 312d15a used the
-old guest. Which earlier published results used episodes with an
-affected cross flow has not been worked out (UNRUN). The datasets on
-each guest:
-
-| Data | Old guest, what net1 v4 to v6 were trained on | Fixed guest |
-|---|---|---|
-| Broad links, 30 s | `exp-data-net1-broad-30s-73` | [`exp-data-net1-broad-30s-218`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-30s-218) |
-| Broad links, 60 s | `exp-data-net1-broad-60s-74` | [`exp-data-net1-broad-60s-219`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-60s-219) |
-| Held-out families | `exp-data-net1-broad-ood-75` | [`exp-data-net1-broad-ood-220`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-ood-220) |
-| Wide links | `exp-data-net1-v6-146` | [`exp-data-net1-v6-221`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-v6-221) |
-| net2 step data, 600 links no net1 was trained on, every step kept | | [`exp-data-net2-steps-222`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net2-steps-222) |
+The reproduction's teachers (BBRv1, Cubic and Vegas on 120 paths, 30 s)
+come from `examples/campaign-expliccit-teachers.json`.
 
 ### Model names
-
-Two series of models are trained on the fixed-guest data. A new set of
-heads is a new version in the same series; it does not change the
-architecture.
 
 - **net1 vX, net2 vX**: this project's architecture, where net1 states a
   distribution per LCF.
 - **neto1 vX, neto2 vX**: expliCCit's original architecture, where net1
   gives one number per LCF.
 
-Experiment files and release tags keep the names they were run under.
+A new set of heads is a new version in the same series. Experiment files
+and release tags keep the names they were run under.
 
-| Model | What it is | Release | Chosen run |
+| Model | LCFs | Release | Chosen run |
 |---|---|---|---|
-| net1 v7 | net1 v6's recipe on the fixed-guest data, 7 LCFs | [`exp-net1v6-229`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v6-229) | `net1-v6-s2` |
-| net1 v8 | 27 LCFs | [`exp-net1v8-238`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v8-238) | `net1-v8-s2` |
-| net1 v9 | net1 v8 with bins fitted to `random_loss_rate` | [`exp-net1v9-243`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v9-243) | `net1-v9-s2` |
-| neto1 v1 | 7 LCFs | [`exp-net1-point-228`](https://github.com/Radonux/palaestra/releases/tag/exp-net1-point-228) | `net1-point-ours-s0` |
-| neto1 v2 | 27 LCFs | [`exp-neto1-v2-239`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-v2-239) | `net1-point-v2-s0` |
+| net1 v7 | expliCCit's 7 | [`exp-net1v6-229`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v6-229) | `net1-v6-s2` |
+| net1 v9 | 27 | [`exp-net1v9-243`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v9-243) | `net1-v9-s2` |
+| net1 v10 | 32 | `experiments/net1v10.json` (UNRUN when written) | |
+| neto1 v1 | expliCCit's 7 | [`exp-net1-point-228`](https://github.com/Radonux/palaestra/releases/tag/exp-net1-point-228) | `net1-point-ours-s0` |
+| neto1 v2 | 27 | [`exp-neto1-v2-239`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-v2-239) | `net1-point-v2-s0` |
+| neto1 v3 | 32 | `experiments/neto1-v3.json` (UNRUN when written) | |
 
-The 27 LCFs are net1's seven plus every candidate whose head reached a
-validation R^2 of 0.3 in [`exp-neto1-heads-233`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-heads-233), except a composite
-that its formula on other heads predicts within 0.02 of its own head
-([`exp-neto1-composites-236`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-composites-236)). On validation rows neto1 v2 keeps the
-seven shared heads within 0.03 R^2 of neto1 v1, and net1 v8 keeps them
-within 0.01 of net1 v7 in both R^2 and 90% coverage. net1 v8's
-`random_loss_rate` had a validation R^2 of -6.97: a quantity within
-[0, 1] got 64 equal bins over [0, 1], and a loss rate of a few percent
-fell in the first two. net1 v9 gives such a quantity bins up to its 99.9%
-training quantile instead, and `random_loss_rate` is the only LCF whose
-bins changed (read from the two checkpoints). Its top bin ends at a loss
-rate of 0.02, so a higher loss rate is outside what it can state. On
-validation rows its `random_loss_rate` R^2 is 0.43 (neto1 v2: 0.48) at
-90% coverage 0.91, and every other LCF stays within 0.03 R^2 of net1 v8.
+The 27 LCFs are expliCCit's seven plus every label or composite whose
+head reached a validation R^2 of 0.3
+([`exp-neto1-heads-233`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-heads-233)),
+less five composites that net2 could compute from other heads
+([`exp-neto1-composites-236`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-composites-236)).
+The 32 add those five back, so that net2 reads them by name instead of
+building them: `departure_rate_bps`, `available_capacity_bps`,
+`overload_bps` (max(y - C, 0), in place of the signed excess demand),
+`bdp_pkts` and `cross_arrival_rate_bps`. A distribution net1 gives a
+quantity within [0, 1] whose values stay below 0.5 (a loss rate) its bins
+up to its 99.9% training quantile, so net1 v9's top `random_loss_rate`
+bin ends at 0.02.
 
 ## net1: `train run`
 
     uv run expliccit train run train.json out/model
 
 `train.json` is a `TrainSpec` (`src/expliccit_env/train/spec.py`); only
-`data` is required. net1 v5's and v6's settings are
-`experiments/specs/net1v4.json`, and `experiments/net1_train.py` trains
-such a net1 and scores it on held-out families (as
-`experiments/net1v6.json` does; `--stride 24` fits net1 v6's data on a
-runner, and `--eval NET1.pt` scores a trained net1 without training, as
-`experiments/net1v6-inrange.json` does).
+`data` is required. Every current net1 starts from
+`experiments/specs/net1v4.json` (64 bins, 3 members, width 512) with
+`--set` overrides, through `experiments/net1_train.py`, which also scores
+it on the held-out families; `experiments/net1v9.json` and
+`experiments/neto1-v2.json` are the examples. `--eval NET1.pt` scores a
+trained net1 without training.
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -110,7 +95,7 @@ runner, and `--eval NET1.pt` scores a trained net1 without training, as
 | `controllers` | all | train only on these controllers' episodes |
 | `step_stride` | 1 | keep every n-th step and the step after it |
 | `net1_from` | none | reuse a trained `net1.pt`; `report.json` then holds no net1 test scores, which belong to the run that trained it |
-| `net1.output` | `{"kind": "point"}` | what net1 states per LCF: one value (`point`), a centre and an interval holding `coverage` (`interval`), or a distribution over `bins` fixed bins, trained with the log score and averaged over `members` net1s (`bins`; net1 v5 and v6: 64 bins, 3 members) |
+| `net1.output` | `{"kind": "point"}` | what net1 states per LCF: one value (`point`), a centre and an interval holding `coverage` (`interval`), or a distribution over `bins` fixed bins, trained with the log score and averaged over `members` net1s (`bins`) |
 | `net1.lcfs`, `net1.obs_cols` | expliCCit's 7 and 70 | what net1 predicts and reads; an LCF is any [label or composite](architecture.md#ground-truth-labels), in either window |
 | `net1.width`, `dropout`, `lr`, `epochs`, `patience` | 512, 0.3, 1e-3, 50, 5 | the network and its training |
 
@@ -174,9 +159,7 @@ Every learner update reports diagnostics in `report.json` and
 `--oracle` exports the same rule reading the guest's live truth. The share
 rule's exporter also takes `--flows N` (and `--used`) for the oracle rules
 told the number of flows; `experiments/mode_rule_export.py` exports the
-mode rule. Release `model-net1v5` holds net1 v5 (`net1v5.pt`), the fixed
-rule (`rule-u0.25.onnx`), its oracle (`rule-u0.25-oracle.onnx`) and the
-share rule (`share-u0.25-k0.5.onnx`).
+mode rule.
 
 ## Learned net2: `train ppo`
 
@@ -214,10 +197,7 @@ Output: `policy.onnx`, `actor.pt`, `critic.pt` (PPO's value network, or
 the one `dagger` trains for PPO to continue from), and `history.json`
 (each iteration's rollouts and diagnostics, and every `eval_every`
 iterations the policy against the rule). A taught run continues by PPO
-with `init_from`. The gate experiments
-(`experiments/net2-gate-*.json`) apply `experiments/net2_ppo_gate_report.py`;
-`gate_threshold_export.py` and `gate_ensemble_export.py` there re-export
-gate students at a threshold or as one policy on their mean belief.
+with `init_from`.
 
 ## Running and scoring a policy
 
