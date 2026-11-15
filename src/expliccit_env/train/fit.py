@@ -172,9 +172,13 @@ def _bin_bounds(y: F32, bins: int) -> F32:
     also takes everything above. Without this, such a quantity sits in the
     first one or two bins and its mean is a bin's midpoint whatever the
     truth. A signed quantity (more than 1% of values below 0, such as an
-    excess demand y - C) gets bin 0 below its 0.1% quantile, equal bins up
-    to its 99.9% quantile and one more step as the last bin: a log scale
-    would put every negative value in one bin. Any other gets bin 0 below
+    excess demand y - C) gets bin 0 below its 0.1% quantile, bins up to its
+    99.9% quantile spaced evenly in asinh(v / s), and one more step as the
+    last bin: a log scale would put every negative value in one bin, and
+    equal widths spend the bins on the tails (y - C spans -258 to +1837
+    Mbit/s with 89% of rows within -124 to +8). asinh is linear within
+    about s of zero and logarithmic beyond, either side; s is the median of
+    the nonzero |v|. Any other gets bin 0 below
     the 0.1% quantile of its positive values (zero and near zero),
     log-spaced bins up to its 99.9% quantile, and one more log step as the
     last bin, which also takes everything above."""
@@ -184,8 +188,11 @@ def _bin_bounds(y: F32, bins: int) -> F32:
         pos = v[v > 0]
         if v.size and np.mean(v < 0) > 0.01:
             lo, hi = float(np.quantile(v, 0.001)), float(np.quantile(v, 0.999))
-            inner = np.linspace(lo, hi, bins - 1)
-            out[j] = [float(v.min()), *inner, hi + (inner[1] - inner[0])]
+            s = float(np.median(np.abs(v[v != 0])))
+            steps = np.linspace(np.arcsinh(lo / s), np.arcsinh(hi / s), bins - 1)
+            inner = s * np.sinh(steps)
+            top = s * np.sinh(steps[-1] + (steps[1] - steps[0]))
+            out[j] = [min(float(v.min()), float(inner[0])), *inner, top]
             continue
         if v.size and v.min() >= 0 and v.max() <= 1:
             top = float(np.quantile(v, 0.999))

@@ -462,16 +462,21 @@ def test_bins_cover_fractions_evenly_and_rates_on_a_log_scale() -> None:
     assert np.allclose(ratios, ratios[0], rtol=1e-4)  # log-spaced
 
 
-def test_a_signed_quantity_gets_equal_bins_across_zero() -> None:
+def test_a_signed_quantity_gets_signed_log_bins() -> None:
     rng = np.random.default_rng(0)
-    excess = rng.normal(-20.0, 30.0, 5000)  # y - C in Mbit/s: mostly below capacity
-    b = fit._bin_bounds(excess[:, None].astype(np.float32), 16)[0]
+    # y - C in Mbit/s: mostly a little below or at capacity, with long tails both ways.
+    excess = np.concatenate([rng.normal(-5.0, 10.0, 4500), rng.lognormal(5, 1, 500)])
+    excess[:400] = -rng.lognormal(4.5, 0.5, 400)
+    b = fit._bin_bounds(excess[:, None].astype(np.float32), 32)[0]
     assert np.all(np.diff(b) > 0)
-    assert np.allclose(np.diff(b[1:]), b[2] - b[1], rtol=1e-4)  # equal bins
-    assert b[1] < -60 and b[-2] > 20  # from the 0.1% to the 99.9% quantile
-    # -20 and +10 land in different bins; a log scale would merge every negative value.
-    assert np.searchsorted(b, -20.0) != np.searchsorted(b, 10.0)
-    assert np.searchsorted(b, -20.0) != np.searchsorted(b, -50.0)
+    lo, hi = np.quantile(excess, [0.001, 0.999])
+    assert np.isclose(b[1], lo, rtol=1e-3) and np.isclose(b[-2], hi, rtol=1e-3)
+    s = np.median(np.abs(excess[excess != 0]))
+    steps = np.diff(np.arcsinh(b[1:-1] / s))
+    assert np.allclose(steps, steps[0], rtol=1e-3)  # even in asinh(v / s)
+    # The bulk near zero gets most bins; equal widths would give it about one.
+    assert np.sum((b > -20) & (b < 10)) >= 8
+    assert np.searchsorted(b, -5.0) != np.searchsorted(b, 5.0)
 
 
 def test_a_fraction_that_stays_small_gets_bins_over_its_own_range() -> None:
