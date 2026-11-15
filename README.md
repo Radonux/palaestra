@@ -20,6 +20,15 @@ the claims and defines every term used below.
 
 ## What we found
 
+With the learner, its recipe, the data and the 27 LCFs held fixed, net2
+on our net1 (a distribution per LCF) beat neto2 on expliCCit's kind of
+net1 (one value per LCF) on the held-out test links: +0.146 against
++0.111 and +0.096 in log utility over BBRv3, over three training seeds
+([`exp-dagger-twins-test-258`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-test-258)).
+Trained offline instead, the two made no reliable difference.
+
+The findings below come from runs before the cross-flow fix (`312d15a`).
+
 1. net1 estimates most LCFs well on links it never saw (R^2 0.88 to 1.00
    for five of seven), and its 90% intervals hold 91% to 97% of the time.
    It is weak where the measurements say little (free buffer, R^2 0.47;
@@ -113,8 +122,7 @@ scoring policies.
 
 ## Guarantees
 
-A change that weakens one of these says so in its commit message. UML
-checks need `EXPLICCIT_UML_DIR=build/uml`; the Mahak checks need a Mahak
+UML checks need `EXPLICCIT_UML_DIR=build/uml`; the Mahak checks need a Mahak
 checkout (`git clone https://github.com/Ppazhooh/mahak /tmp/mahak && git -C
 /tmp/mahak checkout 5077583`) in `EXPLICCIT_MAHAK_DIR`.
 
@@ -126,7 +134,7 @@ checkout (`git clone https://github.com/Ppazhooh/mahak /tmp/mahak && git -C
 | The same build, spec and seed give byte-identical records | `pytest tests/test_uml.py -k "bit_identical or loss_and_cross"` |
 | A failed or invalid episode becomes a `failed` row with a reason, never metrics or labels | `pytest tests/test_records_abi.py tests/test_agent.py::test_bad_policy_output_fails_the_episode tests/test_mahak.py::test_failed_queries_never_become_labels tests/test_score.py` |
 | The truth a policy reads equals the labels stored with its step | `pytest tests/test_truth.py` |
-| Every released policy (each `.onnx` asset of the `model-*` releases) runs on the current guest; rerun when the guest, its modules or the policy contract change | `experiments/onnx-compat.json` |
+| Every released policy (each `.onnx` asset of the `model-*` releases) runs on the current guest | `experiments/onnx-compat.json` |
 | Every kind of net1 (single values, intervals, distributions) trains with every net2 (offline, or taught then PPO; all beliefs or their means), exports a graph that computes what was trained, and runs in the guest | `pytest tests/test_e2e.py` |
 | Mahak's "mRTT" is one-way; a spec names one-way delay or base RTT, never both | `pytest tests/test_spec.py` |
 | Every episode row names its kernel tree, kernel config, repository commit and seed | columns `kernel_tree`, `config_sha256`, `repo_commit`, `seed` of `episodes.parquet` |
@@ -139,10 +147,7 @@ what was never run: [docs/validation.md](docs/validation.md).
 
 ## Working conventions
 
-Commits go to `main` in Conventional Commits form, kernel changes as
-their own commits under `third_party/linux`. Results come only from
-experiments in GitHub Actions, published as releases. Agent instructions
-are in `AGENTS.md` (also `CLAUDE.md`); agent skills come from the
+They are in `AGENTS.md` (also `CLAUDE.md`). Agent skills come from the
 [BTreeMap/SKILLs](https://github.com/BTreeMap/SKILLs) submodule at
 `.github/skills`, so clone with `--recurse-submodules`.
 
@@ -153,10 +158,7 @@ are in `AGENTS.md` (also `CLAUDE.md`); agent skills come from the
 | [docs/methodology.md](docs/methodology.md) | The claims, the terms, the evaluation protocol, the status of each claim |
 | [docs/lcf-concepts.md](docs/lcf-concepts.md) | Candidate LCFs from the literature: what each means, its ground truth in the emulator, and its definition |
 | [docs/results.md](docs/results.md) | The findings, their evidence and caveats, with releases |
-| [docs/rounds.md](docs/rounds.md) | Every learned-net2 round: its gates, evaluations and training runs |
-| [docs/breakpoint.md](docs/breakpoint.md) | Where net1 and net2 tuning stood when it paused (2026-11-09), and how to resume |
 | [docs/training.md](docs/training.md) | How to produce data, train net1 and net2, and run and score a policy |
-| [docs/staged-net2.md](docs/staged-net2.md) | The next architecture: net2 taught, then trained by RL, on a distributional net1; and the plan for real paths |
 | [docs/architecture.md](docs/architecture.md) | How an episode runs and why; known limits; decisions; extending |
 | [docs/validation.md](docs/validation.md) | What was checked, how, and what was not |
 | [kernel/modules/README.md](kernel/modules/README.md) | The kernel modules and their ABIs |

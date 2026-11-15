@@ -58,8 +58,7 @@ The same path from Mahimahi's shells:
   mm-link's arguments, give the uplink the same droptail limit, and add no
   `mm-loss uplink`.
 - Use ccBench's patched Mahimahi (`patches/mahimahi.core.v2.2.patch`),
-  which raises the shells' txqueuelen to 400000; without it a long, fast
-  path such as link d may not fill.
+  which raises the shells' txqueuelen to 400000.
 
 ## Host setup
 
@@ -79,24 +78,8 @@ Mahimahi needs. The Mahimahi shells refuse to run as root.
 
 The sender is an iperf3 server outside the shells; the receiver an iperf3
 client inside them in reverse mode (`-R`). The sender takes the host's
-default congestion control. With CC (`cubic`, `bbr` or `vegas`) and run R
-(1, 2 or 3), from `kit/`:
-
-    mkdir -p logs
-    sudo sysctl -w net.ipv4.tcp_congestion_control=CC
-    pkill -x iperf3; iperf3 -s -p 5201 -D
-
-    # link a
-    mm-delay 40 mm-link a.trace a.trace --downlink-log=logs/a.CC.R.log --uplink-queue=droptail --uplink-queue-args=packets=1000 --downlink-queue=droptail --downlink-queue-args=packets=1000 -- sh -c 'iperf3 -c $MAHIMAHI_BASE -p 5201 -R -C CC -t 45'
-    # link b
-    mm-delay 20 mm-link b.trace b.trace --downlink-log=logs/b.CC.R.log --uplink-queue=droptail --uplink-queue-args=packets=160 --downlink-queue=droptail --downlink-queue-args=packets=160 -- sh -c 'iperf3 -c $MAHIMAHI_BASE -p 5201 -R -C CC -t 30'
-    # link c
-    mm-delay 40 mm-loss downlink 0.01 mm-link c.trace c.trace --downlink-log=logs/c.CC.R.log --uplink-queue=droptail --uplink-queue-args=packets=320 --downlink-queue=droptail --downlink-queue-args=packets=320 -- sh -c 'iperf3 -c $MAHIMAHI_BASE -p 5201 -R -C CC -t 30'
-    # link d
-    mm-delay 80 mm-link d.trace d.trace --downlink-log=logs/d.CC.R.log --uplink-queue=droptail --uplink-queue-args=packets=5120 --downlink-queue=droptail --downlink-queue-args=packets=5120 -- sh -c 'iperf3 -c $MAHIMAHI_BASE -p 5201 -R -C CC -t 30'
-
-The single quotes keep `$MAHIMAHI_BASE` for the shell inside. All 36 runs
-as one loop:
+default congestion control. All 36 runs (four links; CC `cubic`, `bbr` or
+`vegas`; run R 1, 2 or 3), from the directory that holds `kit/`:
 
 ```bash
 run() {  # LINK CC R
@@ -125,9 +108,9 @@ done
 pkill -x iperf3
 ```
 
-`ss -tin` on the host shows the sender's controller during a run. If
-Ubuntu 16.04's iperf3 does not accept `-C`, drop it: the host's default
-already sets the controller.
+One run is `run LINK CC R` in `kit/`, after `mkdir -p logs` and the
+loop's `sysctl` and `iperf3 -s` lines. `ss -tin` on the host shows the
+sender's controller during a run.
 
 ## Sage
 
@@ -186,8 +169,7 @@ not needed. Then record the host and pack:
     tar -cf - logs | xz -9 > crosscheck-logs.tar.xz
 
 A 30 s log of link b with Cubic is about 5 MB, 0.13 MB after xz. We store
-the file as a release with `scripts/stash.sh` and cite it next to the
-comparison.
+the file as a release with `scripts/stash.sh`.
 
 ## Comparing
 
@@ -243,11 +225,12 @@ first 28000 lines of ccBench's `wired48` at `49b5ada`, `d.trace` equals
 a synthetic log in mm-link's format (utilization 0.500, mean delay 7.00
 ms, 95th percentile 25.00 ms, data start 500 ms); a log ending before
 its window and one with a malformed line gave no metrics, with reasons.
-On a Cubic episode of link b, the log written from its records and its stored `link_events` gave the same metrics bit for
-bit, equal to a direct computation and to the episode's own mm-th-delay
-metrics. The experiment's commands ran end to end on 4 cores (60
-episodes, all valid), and on all 60 the bytes, packets and delays rebuilt
-from `link_events` equal the episodes' `flow_seconds`.
+On a Cubic episode of link b, the log written from its records and its
+stored `link_events` gave the same metrics bit for bit, equal to a direct
+computation and to the episode's own mm-th-delay metrics. The
+experiment's commands ran end to end on 4 cores (60 episodes, all valid),
+and on all 60 the bytes, packets and delays rebuilt from `link_events`
+equal the episodes' `flow_seconds`.
 
 UNRUN, since no environment here runs the original stack: every
 command for it above (the shells, iperf3's flags on Ubuntu 16.04, the

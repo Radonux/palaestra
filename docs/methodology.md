@@ -5,29 +5,24 @@ estimator of the path's physical state (net1, trained against ground
 truth) and a decision maker that sees only net1's output (net2), at small
 cost, and does the split make the controller explainable and repairable?
 The idea is expliCCit's. This page states the claims, defines the terms,
-and fixes how results are measured. The results are in
+and fixes how results are measured; the results are in
 [results.md](results.md).
 
-The work has two phases with different rules.
-
-1. Reproduction, a short step: run expliCCit's released models and setup
-   in this environment and name every divergence, to show that the
-   emulation reproduces its setup and roughly its results. Here we stay
-   faithful to the original.
-2. Research, everything after it: algorithms, network sizes, rewards,
-   action spaces, and offline or online training are free choices, each
-   derived from the problem. Only the split itself is fixed.
+The work has two phases: reproduction, a short step that runs expliCCit's
+released models and setup faithfully here and names every divergence, and
+research, in which everything but the split is a free choice derived from
+the problem.
 
 ## Claims
 
-| | Claim | How it can fail |
-|---|---|---|
-| H1 | Sufficiency: a policy on the true LCFs does about as well as the best policy we can train on raw measurements | the LCFs omit something the decision needs |
-| H2 | Estimability: net1 recovers the LCFs from sender-side measurements, where the measurements allow it | some LCFs are not identifiable at some operating points |
-| H3 | Honesty: net1's stated confidence matches its actual error | over-confidence, above all where the link is idle |
-| H4 | No leakage: net1's output carries only its beliefs, and net2 acts on nothing else | soft outputs pass on information beyond the LCFs |
-| H5 | Repairability: a fault is traced to one LCF and fixed there, without retraining net2 from scratch | errors show only in combination |
-| H6 | Affordability: small loss against a black box with the same inputs, data and training | |
+| | Claim |
+|---|---|
+| H1 | Sufficiency: a policy on the true LCFs does about as well as the best policy we can train on raw measurements |
+| H2 | Estimability: net1 recovers the LCFs from sender-side measurements, where the measurements allow it |
+| H3 | Honesty: net1's stated confidence matches its actual error |
+| H4 | No leakage: net1's output carries only its beliefs, and net2 acts on nothing else |
+| H5 | Repairability: a fault is traced to one LCF and fixed there, without retraining net2 from scratch |
+| H6 | Affordability: small loss against a black box with the same inputs, data and training |
 
 ## Terms
 
@@ -54,27 +49,23 @@ The work has two phases with different rules.
 
 ## Why net1 reports beliefs
 
-A sender learns the link's capacity only while it keeps the link busy.
-Below capacity with an empty queue, the delivery rate equals the sending
-rate, so the measurements bound capacity from below and say nothing more.
-The minimum RTT has the opposite limit: it cannot be measured while a
-queue persists. No operating point reveals every LCF, so a single value
-per LCF misleads ("24 Mbit/s" where the data support "at least 18"). net1
-therefore reports a distribution per LCF, and net2 can learn when
-reducing uncertainty is worth the cost of probing.
+A sender learns the link's capacity only while it keeps the link busy:
+below capacity with an empty queue, the delivery rate equals the sending
+rate, so the measurements only bound capacity from below. The minimum RTT
+cannot be measured while a queue persists. No operating point reveals
+every LCF, so a single value per LCF misleads ("24 Mbit/s" where the data
+support "at least 18"). net1 therefore reports a distribution per LCF, and
+net2 can learn when reducing uncertainty is worth the cost of probing.
 
 net1 is trained with the log score (cross-entropy against the bin that
-holds the true value). Its expected value is the entropy of the true
-conditional distribution plus net1's KL divergence from it, so it is
-lowest only for the true distribution: overstating or understating
-confidence always costs (Gneiting and Raftery, 2007). The log score
-teaches the uncertainty the measurements leave, not uncertainty about
-inputs never seen; the ensemble widens the belief where its members
-disagree. Accuracy is the R^2 of the belief's mean; honesty is the
-coverage of central intervals (90% unless stated) on held-out links,
-reported separately for busy steps (busy fraction at least 0.95) and idle
-ones (below 0.8), because average calibration can hide over-confidence
-exactly where identifiability fails.
+holds the true value), whose expectation is lowest only for the true
+conditional distribution, so overstating or understating confidence
+always costs (Gneiting and Raftery, 2007). It teaches the uncertainty the
+measurements leave, not uncertainty about inputs never seen; the ensemble
+widens the belief where its members disagree. Accuracy is the R^2 of the
+belief's mean; honesty is the coverage of central intervals (90% unless
+stated) on held-out links, reported separately for busy steps (busy
+fraction at least 0.95) and idle ones (below 0.8).
 
 net2 is trained after net1, on a fixed net1's outputs, so it learns to act
 on net1's beliefs, errors included: the sequential regime of concept
@@ -150,7 +141,7 @@ A belief is a distribution over one physical quantity, so every statement
 can be checked against the truth: "capacity is about 24 Mbit/s (90%
 interval 22 to 26)", or "at least 18 Mbit/s (95%); the link was not kept
 busy". Each statement comes with net1's measured coverage on held-out
-links; the claim rests on that measurement. The plan:
+links. The plan:
 
 - Explain a decision by evaluating net2 on a changed belief: exact
   counterfactuals, and exact Shapley values over the seven LCFs in 2^7 =
@@ -163,10 +154,10 @@ links; the claim rests on that measurement. The plan:
   among the beliefs, entropy, and later measurements of delivery rate and
   min RTT.
 - Repair a fault in net1 alone (R3): retrain net1, keep net2. Replacing a
-  belief with the truth at run time can confirm a diagnosis, with two
-  cautions: the LCFs are coupled, so one patched LCF can describe a path
-  that cannot exist, and a net2 trained on net1's beliefs has adapted to
-  them, so the truth is not automatically a repair.
+  belief with the truth at run time can confirm a diagnosis but is not
+  automatically a repair: the LCFs are coupled, so one patched LCF can
+  describe a path that cannot exist, and net2 has adapted to net1's
+  beliefs.
 - Compare net2 on the full beliefs with net2 on a few percentiles per LCF
   in physical units, so that what an engineer reads is what net2 acts on.
   UNRUN.
@@ -176,7 +167,7 @@ links; the claim rests on that measurement. The plan:
 | | Verdict | Evidence |
 |---|---|---|
 | Reproduction | The link model equals a port of Mahimahi's link queue, event for event; none of expliCCit's three checked results reproduced here; the comparison on the original stack is UNRUN | [results](results.md#reproduction-of-expliccit) |
-| H1 | Evidence against, for a shared link: rules on the true LCFs fail among copies; told the number of flows, one rule handles copies and Cubic (an oracle bound). For a learned net2 at equal compute (round 19), the policy on the true LCFs ends 0.2 to 0.4 above the black box on raw measurements, and level with the one on net1. Measured: the raw measurements tell copies from a stock flow far better than net1's beliefs (0.753 against 0.496 balanced accuracy, three classes), and net1 learns it with a traffic head (0.909 on validation) | [results](results.md#what-limits-a-rule-is-the-other-flows) |
+| H1 | Evidence against, for a shared link: rules on the true LCFs fail among copies; told the number of flows, one rule handles copies and Cubic (an oracle bound). For a learned net2 at equal compute (round 19), the policy on the true LCFs ends 0.2 to 0.4 above the black box on raw measurements, and level with the one on net1. The raw measurements tell copies from a stock flow far better than net1's beliefs (0.753 against 0.496 balanced accuracy, three classes), and net1 learns it with a traffic head (0.909 on validation) | [results](results.md#what-limits-a-rule-is-the-other-flows) |
 | H2 | Yes for five LCFs (test R^2 0.88 to 1.00), weaker for capacity (0.81) and free buffer (0.47); estimation costs the fixed rule 0.023 | [results](results.md#net1-estimates-the-path-state-within-its-training-range) |
 | H3 | Yes within the training ranges (90% coverage 0.91 to 0.97 on test links); no outside them. Wider training data (net1 v6) made it honest where v5 failed and moved the edge, beyond which it fails again. On real cellular traces, outside every training range, coverage falls to 0.65 to 0.95 | [results](results.md#net1-estimates-the-path-state-within-its-training-range) |
 | H4 | Partly: the learned net2 run unchanged on two other seeds of net1 v6 (same bins) kept 70% to 100% of its gains, with wider intervals. But net1's capacity belief under sharing carries the other flows' share: with the true capacity instead, the same net2 collapses as copies (-1.25) | [results](results.md#a-learned-net2-beats-the-rule-against-competitors) |

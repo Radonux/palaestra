@@ -6,8 +6,8 @@ Commands assume a UML build (`scripts/build-uml.sh build/uml &&
 scripts/build-guest.sh build/uml`), `uv sync --extra train`, and, where
 named, `EXPLICCIT_UML_DIR=build/uml`, a Mahak checkout at `5077583` in
 `EXPLICCIT_MAHAK_DIR`, or a Sage checkout at `eedd281` and g++ in
-`EXPLICCIT_SAGE_DIR`. Tests check their property, not the exact numbers
-quoted, which come from the run where each check was first made.
+`EXPLICCIT_SAGE_DIR`. Tests check their property; the numbers quoted come
+from the run where each check was first made.
 
 ## Summary
 
@@ -41,20 +41,17 @@ quoted, which come from the run where each check was first made.
 
 On 2026-11-06, without a UML build or the Mahak and Sage checkouts,
 `uv run pytest -q` gave 116 passed and 46 skipped (the tests that need
-them). The UML tests run in CI (below); the Actions tab has their current
-state.
+them). The UML tests run in CI (below).
 
 ## Feasibility findings
 
-The M0 probes (`tools/m0/`, 2026-10-30) asked whether Linux 7.0 runs as UML
-in virtual time with the networking, modules and hooks the environment
-needs. It builds in under two minutes as a static binary, boots under
-`time-travel=inf-cpu` (a guest `sleep 10` measured 10.000064512 s), runs
-three namespaces with veth and TCP, loads out-of-tree modules, and lets a
-module attach to `tcp:tcp_probe`. arch/um hard-codes HZ at 100 (patched to
-1000, D9). It has no kprobes, and BPF `struct_ops` cannot register (no BPF
-JIT on arch/um), so controllers are modules (D5). The code cites five
-findings:
+The M0 probes (`tools/m0/`, 2026-10-30) showed that Linux 7.0 builds as a
+static UML binary in under two minutes, boots under `time-travel=inf-cpu`
+(a guest `sleep 10` measured 10.000064512 s), runs three namespaces with
+veth and TCP, loads out-of-tree modules, and lets a module attach to
+`tcp:tcp_probe`. arch/um hard-codes HZ at 100 (patched to 1000, D9). It has
+no kprobes, and BPF `struct_ops` cannot register (no BPF JIT on arch/um),
+so controllers are modules (D5). The code cites these findings by number:
 
 - F1. With no rate limit on the path, CPU work costs no virtual time, so a
   bulk transfer is infinitely fast and a 20 s transfer never ends: every
@@ -62,10 +59,9 @@ findings:
   every guest.
 - F2. A guest process that makes many syscalls without blocking advances
   virtual time artificially (one jiffy per 10000 unscheduled userspace
-  switches): guest code must block or sleep, never spin.
+  switches), so guest code blocks or sleeps instead of spinning.
 - F3. Large queues are fine with `sch_mmlink`: 20000-packet buffers at 100
-  Mbit/s run 14 times faster than real time (the slowdown first seen came
-  from a netem probe with a 100000-packet limit).
+  Mbit/s run 14 times faster than real time.
 - F4. UML's clock ticks every 256 ns, and every clock read from process
   context advances virtual time one tick: sender timestamps carry that
   grain, the link model does not.
@@ -93,7 +89,7 @@ into the kernel changed seeded BBRv1 runs through boot-time work alone
 (now a module loaded only for `bbr3`). The final kernel gives identical
 files. The extra Linux controllers are likewise built as out-of-tree
 modules, leaving the kernel image bit-identical. The check needs two
-kernel builds, so it is not in CI; rerun it when the patch set changes.
+kernel builds, so it is not in CI.
 
 Seeded runs are reproducible for one build, not across guest versions:
 rerun on a later guest, both Cubic episodes and one BBRv1 episode stayed
@@ -121,21 +117,16 @@ sending costs no virtual time: one 60 s episode of a delay-threshold
 teacher offered 5.4 Gbit/s to a 76 Mbit/s link, 71 arrivals per departure.
 A real host with 64 MB would flood too; whether at that rate is UNRUN.
 The send buffer is therefore sized to the path
-([architecture.md](architecture.md#one-episode)): what autotuning asks for
-four times the packets the path holds at BBR's factor (12 times 2304
-bytes per packet; Linux counts the buffer in memory, and 2304 bytes is one
-segment's share in this build). Stock controllers' largest windows, measured
-on 340 episodes, were at most 2.15 times the path (6.24 for Hybla's slow
-start). With the limit, all 160 stock and 120 BBR episodes of that sample
-are identical to 64 MB, and 57 of 60 Hybla ones (the others moved by at most
-0.0003 in utilization); the growing agent of
-`test_a_window_far_beyond_the_path_is_bounded` puts 9.0 arrivals per
-departure on the link, against 54.4 with 64 MB. Two earlier limits were
-replaced: 16 times the path with a 1 MB floor (a guess), and one window of
-the path, which changed ordinary flows.
+([architecture.md](architecture.md#one-episode)). Stock controllers'
+largest windows, measured on 340 episodes, were at most 2.15 times the
+path (6.24 for Hybla's slow start). With the limit, all 160 stock and 120
+BBR episodes of that sample are identical to 64 MB, and 57 of 60 Hybla
+ones (the others moved by at most 0.0003 in utilization); the growing
+agent of `test_a_window_far_beyond_the_path_is_bounded` puts 9.0 arrivals
+per departure on the link, against 54.4 with 64 MB.
 
 The guest, the kernel and these settings are frozen at `1365f0e`; every run
-from #69 on uses them, and a change restarts the chain from net1's data.
+from #69 on uses them.
 
 ## Smaller checks
 
@@ -148,10 +139,10 @@ from #69 on uses them, and a change restarts the chain from net1's data.
   extra RTT gave the same `flow_seconds` before and after the qdisc.
 - Several step loops: one loop never needed a settle step, but without a
   1 ns one, 16 agents gave 1 step of 6,330 whose queue truth was one
-  packet off; with it, 10 and 16 agents
-  matched exactly, and 64 agents (the cap) 7,908 of 7,909 steps. Labels
-  are exact either way. Single-agent episodes are unchanged by multi-agent
-  support (every table equal on three episodes).
+  packet off; with it, 10 and 16 agents matched exactly, and 64 agents
+  (the cap) 7,908 of 7,909 steps. Labels are exact either way.
+  Single-agent episodes are unchanged by multi-agent support (every table
+  equal on three episodes).
 - Mahak's maps at its default budget of 20 rank 60 held-out points with
   Spearman 0.50 (Cubic) to 0.81 (BBRv1); a budget of 100 reaches 0.90 for
   Cubic, at under a second per query.
@@ -161,12 +152,12 @@ from #69 on uses them, and a change restarts the chain from net1's data.
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every commit that changes more than
-docs: ruff, pyright and pytest with the Mahak reference and the trainer
-(UML tests skip), plus workflow and shell lint. `uml.yml` runs when the
-guest, kernel, modules, `src`, tests or build change: Rust format, clippy
-and build, kernel style (`scripts/check-kernel.sh`), the UML build and
-tests, and a smoke campaign. On demand it also runs the mainline tripwire.
+`ci.yml` runs ruff, pyright, pytest with the Mahak reference and the
+trainer (UML tests skip), and workflow and shell lint on every commit that
+changes more than docs. `uml.yml` runs Rust format, clippy and build,
+kernel style (`scripts/check-kernel.sh`), the UML build and tests, and a
+smoke campaign when the guest, kernel, modules, `src`, tests or build
+change, and the mainline tripwire on demand.
 
 ## Not run
 

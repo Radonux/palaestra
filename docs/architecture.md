@@ -1,7 +1,6 @@
 # Architecture
 
-How one episode runs and why it is built this way, for a reader who wants
-to understand or extend it. The guarantees are in
+How one episode runs and why it is built this way. The guarantees are in
 [README.md](../README.md#guarantees), the checks in
 [validation.md](validation.md).
 
@@ -42,10 +41,12 @@ no autocorking. One limit is sized to the path instead: the send buffer
 (`EpisodeSpec._send_buffer`) grants what Linux's autotuning asks for a
 window of four times the packets the path holds (peak capacity over 1 s
 times the RTT of a full queue) at BBR's factor, 12 times 2304 bytes per
-packet the path holds, at least 10 segments and at most 64 MB. Stock
-controllers reach about twice the path and never meet it; a window far
-beyond the path does, which a real NIC and CPU would stop but which costs
-nothing in virtual time ([validation.md](validation.md#tcp-buffer-limits)).
+packet the path holds (Linux counts the buffer in memory, and 2304 bytes
+is one segment's share in this build), at least 10 segments and at most
+64 MB. Stock controllers reach about twice the path and never meet it; a
+window far beyond the path does, which a real NIC and CPU would stop but
+which costs nothing in virtual time
+([validation.md](validation.md#tcp-buffer-limits)).
 
 Cross traffic shares the path in the same direction. Cross flow `i` sends
 from port `6000 + i`, the observed flow from 5001, and ports tell flows
@@ -55,20 +56,19 @@ with its own policy, step loop and noise; a UDP cross flow sends one
 observed per ACK. A TCP cross flow with `extra_rtt_ms` has its ACKs held
 that much longer by `sch_flowdelay` on the receiver's device.
 
-A TCP cross flow sends only inside its planned window, but it does not
-start exactly at `start_ms`: its receiver connects then, and the flow
-begins when the handshake completes. Behind a standing queue that can
-take seconds, or fail if the SYN-ACKs are dropped. The episodes table
-records when each flow connected (`cross_connected_ms`, null for UDP and
-for a flow that never connected, which then sent nothing), and the
-privileged critic's rival counts read that time, not the plan. At
-`stop_ms` both ends are aborted: the sender's unsent data is discarded
-(a graceful shutdown would still send it, for seconds on a deep buffer)
-and a handshake that completes later is refused. After the stop, data
-already in flight reaches the link for one more one-way delay, a few
-resets answer ACKs in flight for about one RTT, and the flow's packets
-already queued at the bottleneck still drain; the receiver answers
-those with resets on the ACK path.
+A TCP cross flow sends only inside its planned window: its receiver
+connects at `start_ms`, and the flow begins when the handshake completes,
+which behind a standing queue can take seconds, or fail if the SYN-ACKs
+are dropped. The episodes table records when each flow connected
+(`cross_connected_ms`, null for UDP and for a flow that never connected,
+which then sent nothing), and the privileged critic's rival counts read
+that time, not the plan. At `stop_ms` both ends are aborted: the sender's
+unsent data is discarded (a graceful shutdown would still send it, for
+seconds on a deep buffer) and a later handshake is refused. Data already
+in flight still reaches the link for one more one-way delay, a few resets
+answer ACKs in flight for about one RTT, and the flow's packets already
+queued at the bottleneck drain, each answered by a reset from the
+receiver.
 
 ## The link model (`sch_mmlink`)
 
@@ -99,9 +99,9 @@ netlink attribute of per-ms u8 counts.
 the guest idles or sleeps (findings F1 to F5 in
 [validation.md](validation.md#feasibility-findings)). So every episode
 needs a timed bottleneck, and the host enforces a wall-clock timeout; guest
-code must block or sleep, never spin (the record reader sleeps 20 ms
-between drains, flows sleep until deadlines); and each clock read advances
-virtual time one 256 ns tick, so sender timestamps carry that grain.
+code blocks or sleeps (the record reader sleeps 20 ms between drains,
+flows sleep until deadlines); and each clock read advances virtual time
+one 256 ns tick, so sender timestamps carry that grain.
 
 With `CONFIG_UML_SEEDED_RANDOM` (our patch), `um_seed=` and a fixed
 `time-travel-start=`, an episode is a pure function of the kernel build,
@@ -155,11 +155,8 @@ expliCCit's seven LCFs:
 
 Other labels of the instant: `queue_bytes`, `queue_delay_ns` (the latest
 data packet's exact delay), `base_rtt_ns`, `buffer_pkts`, `buffer_bytes`,
-`buffer_fill`, `random_loss_rate`, and:
-
-| Label | Definition |
-|---|---|
-| `flow_queue_pkts` | the observed flow's packets in `queue_pkts`; over all flows they add up to it |
+`buffer_fill`, `random_loss_rate`, and `flow_queue_pkts` (the observed
+flow's packets in `queue_pkts`; over all flows they add up to it).
 
 Other windowed labels: `drop_fraction` (the flow's packets dropped by the
 full queue over those that reached it), `cross_traffic_share`, and:
@@ -263,11 +260,9 @@ evaluated under `agent`, which paces 3.5% slower and less often.
 
 Every model runs on Linux 7.0's stack as it is: `tcp_info`, loss
 detection, rate sampling and the rest are mainline's, and nothing of 4.x
-is emulated, so results may differ from the models' 4.x deployments as
-the kernel has changed since. What a model needs beyond the stock
-interfaces lives in its controller in `tcp_agent`: Sage's pacing in
-`agent_pure`, and Orca's per-period statistics in `agent_cubic`, read
-through `TCP_CC_INFO`.
+is emulated. What a model needs beyond the stock interfaces lives in its
+controller in `tcp_agent`: Sage's pacing in `agent_pure`, and Orca's
+per-period statistics in `agent_cubic`, read through `TCP_CC_INFO`.
 
 `agent_rate` (Aurora-style) is rate-based: each action multiplies a
 sending rate (from 6 Mbit/s, kept in 0.5 to 300 Mbit/s, as PCC-RL's
@@ -310,15 +305,15 @@ publish: release `exp-NAME-RUN`, with the experiment's JSON and
 `summary.md` in its notes, tagged at the producing commit or, when main's
 workflow files have changed since, at main's head.
 
-Artifacts only carry data between jobs and expire (7 days; the UML build
-after 1). Releases are the record: every successful run is published, and
-`republish.yml` publishes a run whose publish job failed while its
-artifact lasts. A later experiment reads a release through
-`"inputs": {"NAME": "release:TAG"}`. Local files (weights) become release
-`TAG` through `scripts/stash.sh TAG FILE...`: it pushes a branch
-`stash/TAG`, and `stash.yml` publishes the files and deletes the branch, so
-they never enter main's history; `stash-sweep.yml`, dispatched by hand,
-deletes any stash branch a ruleset kept once its release holds every file.
+Every successful run is published. Artifacts carry data between jobs and
+expire (7 days; the UML build after 1); `republish.yml` publishes a run
+whose publish job failed while its artifact lasts. A later experiment
+reads a release through `"inputs": {"NAME": "release:TAG"}`. Local files
+(weights) become release `TAG` through `scripts/stash.sh TAG FILE...`: it
+pushes a branch `stash/TAG`, and `stash.yml` publishes the files and
+deletes the branch, so they never enter main's history; `stash-sweep.yml`,
+dispatched by hand, deletes any stash branch a ruleset kept once its
+release holds every file.
 
 ## Benchmark suites
 
@@ -344,22 +339,20 @@ Limits marked `ponytail` in the code name their upgrade path there.
 | One decision per 10 ms step | pacing refreshed per step, where Sage's kernel may pace per ACK |
 | At most 64 cross flows, all sender to receiver | no reverse traffic on the ACK path |
 | Several step loops each sleep 1 ns before reading their truth | at 64 agents, 1 of 7,909 steps saw a truth that differed from the labels; labels are always exact |
-| `truth` leaves out `queue_delay_ns` | a policy that reads the truth (the oracle arm, a patched belief) cannot use that one LCF; the mean queueing delay of the window is there |
-| Labels are stored when an episode is processed | a label added later is computed from the stored records (`dataset.read_episode`, then `labels.labels_at`); a shard written without `link_events` and `link_opp` (`--tables steps`) must be rerun |
+| `truth` leaves out `queue_delay_ns` | the oracle arm and a patched belief cannot use it; the window's mean queueing delay is there |
+| Labels are stored when an episode is processed | a later label is computed from the stored `link_events` and `link_opp` (`dataset.read_episode`, then `labels.labels_at`), so a shard written with `--tables steps` must be rerun |
 | Per-ms u8 trace counts | at most 3 Gbit/s and about 65 s per trace |
 | Mahak's metrics describe the whole link | with cross traffic, `utilization` and `mean_delay_ms` include other flows |
 | Virtual time is never checked against a real-time kernel | the effect of CPU cost on TCP is not measured (D19) |
 
 ## Decisions
 
-Each row records a decision as made; a later row may change an earlier
-one. D1 to D5 came from the project brief, the rest from the build.
+The numbers are stable ids, cited in code.
 
 | | Decision | Reason, and what was rejected |
 |---|---|---|
 | D1 | Real kernel TCP | From the brief: learned controllers are compared with the kernel's own, unmodified. |
 | D2 | The kernel runs as UML in virtual time | No root or KVM, any host, reproducible; confirmed by the M0 feasibility probes (2026-10-30). |
-| D3 | A native tier on Linux 7.0 hosts in real time | Dropped by D19. |
 | D4 | Linux 7.0 only | From the brief. A tripwire (`uml.yml` with `mainline`, `tools/ci/mainline_tree.py`) shows on demand where our patches stop applying to the newest mainline. |
 | D5 | Custom congestion controls as kernel modules | From the brief; M0 confirmed it: BPF `struct_ops` cannot register in UML (no BPF JIT on arch/um). |
 | D6 | The link model is a kernel qdisc | In the kernel under test, without per-packet crossings, at exact instants. Rejected: Mahimahi in the guest; netem plus a separate link. |
@@ -375,9 +368,9 @@ one. D1 to D5 came from the project brief, the rest from the build.
 | D16 | Random loss in `sch_mmlink`, before the link | One event order; lost packets never use capacity, so labels stay exact. Rejected: netem. |
 | D17 | Cross traffic from the guest runner through the same bottleneck, told apart by port | Deterministic, reactive, no extra hosts. Rejected: replayed traffic. |
 | D18 | Mahak's driver ported onto scikit-learn | Mahak's vendored modAL breaks on scikit-learn 1.8; the port is checked against the original. |
-| D19 | The native tier (D3) dropped | No environment here boots a patched kernel easily, so it could never run BBRv3. Cost: virtual time is never checked against real time. Its code was last in `faad5be`. |
+| D19 | No native tier on Linux 7.0 hosts in real time | No environment here boots a patched kernel easily, so it could never run BBRv3. Cost: virtual time is never checked against real time. Its code was last in `faad5be`. |
 | D20 | Sage's step ported into the guest, the only implementation | No train/serve skew; Sage's and expliCCit's column choices apply unchanged; raw `TCP_INFO` is kept for other designs. |
-| D21 | One policy contract: the whole message in, the graph selects and scales | Any network runs without guest changes. It replaced `tcpinfo-v1`, which no policy used. |
+| D21 | One policy contract: the whole message in, the graph selects and scales | Any network runs without guest changes. |
 | D22 | The trainer lives here, on PyTorch, exporting one ONNX graph per policy | Scaling travels in the graph; expliCCit's parameter names are kept so its checkpoints load. |
 | D23 | A policy's truth is computed live from link records with the labels' definitions | Oracle and patched policies need exactly the training truth during the episode. Rejected: a second definition in the kernel; replaying episodes. |
 | D24 | Large runs are GitHub Actions experiments, every result a release | Twenty 4-core runners, free for a public repository; artifacts expire. Rejected: Slurm arrays (no cluster). |
@@ -412,7 +405,5 @@ one. D1 to D5 came from the project brief, the rest from the build.
   started in `guest/src/cross.rs`, sleeping on absolute deadlines.
 - A congestion control: a module (enabling it in `kernel/uml.config`
   changes the kernel image), loaded only where used, named in `StockName`.
-- A kernel change: its own commit under `third_party/linux`, recorded in
-  `third_party/README.md`. A record layout change touches
-  `expliccit_rec.h`, `guest/src/recorder.rs` and `records.py` together and
-  bumps `EXPL_REC_ABI`.
+- A record layout: `expliccit_rec.h`, `guest/src/recorder.rs` and
+  `records.py` change together, and `EXPL_REC_ABI` goes up.
