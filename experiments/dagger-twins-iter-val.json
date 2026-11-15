@@ -1,0 +1,18 @@
+{
+  "title": "DAgger twins on validation: iterations 19, 39 and 59 of net2 (r25-means) and neto2 (r26), 29 policies",
+  "description": "exp-dagger-twins-val-255 compared round 25's DAgger students on net1 v9's means (net2) with round 26's on neto1 v2 (neto2, the same recipe, rule teacher at u = 0.25 or 0.375) after iteration 39, an iteration fixed beforehand, and one neto2 seed had dipped there during training. Before any claim the iteration is chosen on validation, for both sides alike: this run evaluates every training seed of r25-means, r26-u0.25 and r26-u0.375 after iterations 19, 39 and 59 (27 policies, named ARM-iN-sSEED), beside BBRv3 and, as reference lines only, the rule on net1 v9 at u = 0.25 (rule-v9) and on neto1 v2 at u = 0.375 (rule-v2), on the five validation families and as 2 and 4 copies, campaign seed 21 as in releases 253 and 255. Each arm's iteration is then the one with the best mean over its three training seeds on the five families; the chosen arms are confirmed at campaign seeds 11 and 31 before a single test run. The policies come from small model releases: model-net2-r25 (iterations 39 and 59), model-neto2-r26 (iteration 39) and model-dagger-twins-i19-i59 (round 25's iteration 19, round 26's iterations 19 and 59), copied unchanged from exp-net2-r25-v9-249 and exp-neto2-r26-v2-254. Validation links only; no claim about the test links.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "v9": "release:exp-net1v9-243",
+    "v2": "release:exp-neto1-v2-239",
+    "r": "release:model-net2-r25",
+    "q": "release:model-neto2-r26",
+    "x": "release:model-dagger-twins-i19-i59"
+  },
+  "prepare": "N9=\"$IN/v9/$(cat \"$IN/v9/chosen.txt\")/net1.pt\"; N2=\"$IN/v2/$(cat \"$IN/v2/chosen.txt\")/net1.pt\"; uv run python experiments/rule_export.py \"$OUT/v9\" \"$N9\" --u 0.25; uv run python experiments/rule_export.py \"$OUT/v2\" \"$N2\" --u 0.375; P=(--policy \"rule-v9=$OUT/v9/rule-u0.25.onnx\" --policy \"rule-v2=$OUT/v2/rule-u0.375.onnx\"); for d in r q x; do (cd \"$IN/$d\" && sha256sum -c SHA256SUMS); done; for f in \"$IN\"/r/ppo-r25-means-*-i39.onnx \"$IN\"/r/ppo-r25-means-*-i59.onnx \"$IN\"/q/ppo-r26-*-i39.onnx \"$IN\"/x/ppo-*.onnx; do n=\"$(basename \"$f\" .onnx)\"; n=\"${n#ppo-}\"; it=\"${n##*-}\"; b=\"${n%-*}\"; P+=(--policy \"${b%-*}-$it-${b##*-}=$f\"); done; [ \"${#P[@]}\" -eq 58 ]; experiments/rule_eval.sh \"$OUT\" val 21 21 bbr3 \"${P[@]}\"; uv run python experiments/copies.py \"$OUT/copies\" --split val --duration-ms 30000 --seed 21 --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"; jq -s add \"$OUT/aliases.json\" \"$OUT/copies/aliases.json\" > \"$OUT/a.json\"; mv \"$OUT/a.json\" \"$OUT/aliases.json\"",
+  "shards": 124,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+  "collect": "uv run python experiments/rule_report.py \"$OUT\" --apart copies-30s --best r25-means-i19 r25-means-i39 r25-means-i59 r26-u0.25-i19 r26-u0.25-i39 r26-u0.25-i59 r26-u0.375-i19 r26-u0.375-i39 r26-u0.375-i59 && uv run python experiments/versus_rule.py \"$OUT\" rule-v9",
+  "timeout_minutes": 350
+}
