@@ -371,10 +371,7 @@ and leaves copies out.
   more aggressive policy. neto2's arms sat between the two.
 - The online DAgger student on net1 v9's means is the strongest learned
   policy: level with the rule over the five families, and the only one
-  ahead of it as copies. It has no neto2 twin yet, so its lead over the
-  offline neto2 arms mixes the estimator with the learner. Round 26
-  trains the same recipe on neto1 v2 (`experiments/neto2-r26-v2.json`,
-  UNRUN when written).
+  ahead of it as copies. Its neto2 twin is below.
 - Each neto2 arm scored 0.009 to 0.011 below its value at the same
   campaign seed in
   [`exp-neto2-search2-val-247`](https://github.com/Radonux/palaestra/releases/tag/exp-neto2-search2-val-247),
@@ -385,6 +382,45 @@ and leaves copies out.
 
 These are validation links before any tuning of net2, so they choose what
 to run next and support no claim about the test links.
+
+### With the online learner fixed
+
+Round 26 trained round 25's DAgger recipe unchanged on neto1 v2, the same
+27 LCFs with one value each
+([`exp-neto2-r26-v2-254`](https://github.com/Radonux/palaestra/releases/tag/exp-neto2-r26-v2-254)),
+with the rule on neto1 v2 as teacher at round 25's u (0.25) or at the u
+chosen for neto1 v2 (0.375).
+[`exp-dagger-twins-val-255`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-val-255)
+ran both rounds' students after iteration 39 (fixed beforehand) in closed
+loop, as in release 253 (campaign seed 21, no failed episodes). Each row
+is the mean over three training seeds of log utility minus BBRv3:
+
+| Arm | Teacher | Mean | Per seed | Cubic first | Deep buffer | Copies |
+|---|---|---|---|---|---|---|
+| net2 on net1 v9 means (r25) | rule on net1 v9, u = 0.25 | +0.143 | +0.157, +0.133, +0.139 | -0.038 | +0.259 | +0.043 |
+| neto2 on neto1 v2 (r26) | rule on neto1 v2, u = 0.25 | +0.121 | +0.109, +0.132, +0.121 | +0.017 | +0.186 | -0.046 |
+| neto2 on neto1 v2 (r26) | rule on neto1 v2, u = 0.375 | +0.095 | +0.114, +0.038, +0.134 | -0.026 | +0.201 | -0.115 |
+| net2 on net1 v9 distributions (r25) | rule on net1 v9, u = 0.25 | +0.119 | +0.117, +0.123, +0.118 | -0.120 | +0.250 | -0.139 |
+| rule on net1 v9, u = 0.25 (reference) | | +0.140 | | -0.057 | +0.270 | -0.224 |
+| rule on neto1 v2, u = 0.375 (reference) | | +0.136 | | +0.032 | +0.262 | -0.749 |
+
+- With the same recipe and u, net2 led neto2 by 0.022. In the deep
+  buffer, new and both training families, every net2 seed scored above
+  every neto2 seed; with Cubic first neto2 led.
+- That lead matches the teachers' gap: at u = 0.25 the rule on neto1 v2
+  scored about 0.024 below the rule on net1 v9 at all three campaign
+  seeds of
+  [`exp-rule-paired-val-246`](https://github.com/Radonux/palaestra/releases/tag/exp-rule-paired-val-246).
+  Each student stayed near its teacher.
+- With each estimator's own u, the two teachers scored alike (+0.140 and
+  +0.136), the net2 students kept their teacher's score, and the neto2
+  students fell to +0.095, below their teacher in every family but
+  copies. One neto2 seed (+0.038) carries much of that, and it had dipped
+  during training at the fixed iteration.
+- r25-means scored +0.143 here and +0.144 in release 253.
+
+The iteration was fixed beforehand rather than chosen, so the next step
+chooses it on validation for both sides alike before anything is claimed.
 
 ## A learned net2 beats the rule against competitors
 
