@@ -320,6 +320,69 @@ LCFs: it describes the other endpoints, not the path, changes as flows
 come and go, and one sender's measurements fit several values of it. It
 is net2's to infer from how the others respond.
 
+## Learned net2 against learned neto2
+
+This section uses the guest with the cross-flow fix (`312d15a`, data from
+`exp-data-net1-broad-30s-218` on); the sections after it used the earlier
+guest. net2 reads our net1, which states a distribution per LCF; neto2
+reads expliCCit's kind of net1 (neto1), which gives one value per LCF
+([training.md](training.md#model-names)). The question is whether, with
+the learner held fixed, the estimator changes how well the learned policy
+acts.
+
+[`exp-net2-vs-neto2-val-253`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-vs-neto2-val-253)
+ran every policy in closed loop on the validation links (campaign seed
+21, no failed episodes). The offline arms on both sides are the same
+TD3+BC actor, data, arms and seeds
+([training.md](training.md#net2-from-step-data-train-run)); net2 reads
+either the means or each distribution pooled into 4 bins (bins4). r25 is
+round 25's online DAgger student on net1 v9
+([`exp-net2-r25-v9-249`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-r25-v9-249)),
+taken after iteration 39. Each row is the mean over three training seeds
+of log utility minus BBRv3; the mean is over the five validation families
+and leaves copies out.
+
+| Arm | Learner | Mean | Seed range | Cubic first | Deep buffer | Copies |
+|---|---|---|---|---|---|---|
+| net2, r25, net1 v9 means | DAgger | +0.144 | +0.135 to +0.158 | -0.058 | +0.247 | +0.044 |
+| net2, r25, net1 v9 distributions | DAgger | +0.121 | +0.120 to +0.122 | -0.135 | +0.237 | -0.153 |
+| net2, net1 v9 means, alpha 10 | TD3+BC | +0.118 | +0.098 to +0.146 | +0.225 | +0.002 | -0.460 |
+| net2, net1 v9 means, alpha 5 | TD3+BC | +0.106 | +0.041 to +0.142 | +0.178 | -0.017 | -0.535 |
+| net2, net1 v7 bins4, alpha 10 | TD3+BC | +0.092 | +0.018 to +0.133 | +0.224 | -0.170 | -0.689 |
+| net2, net1 v7 bins4, alpha 5 | TD3+BC | +0.088 | +0.050 to +0.136 | +0.223 | -0.184 | -0.636 |
+| neto2, neto1 v2, alpha 5 | TD3+BC | +0.056 | +0.024 to +0.076 | -0.081 | +0.059 | -0.217 |
+| neto2, neto1 v2, alpha 10 | TD3+BC | +0.048 | +0.026 to +0.088 | -0.018 | -0.015 | -0.272 |
+| neto2, neto1 v1, alpha 10 | TD3+BC | +0.033 | +0.031 to +0.036 | -0.182 | +0.026 | -0.106 |
+| neto2, neto1 v1, alpha 5 | TD3+BC | +0.013 | -0.008 to +0.046 | -0.192 | +0.000 | -0.070 |
+| net2, net1 v9 bins4, alpha 5 | TD3+BC | -0.003 | -0.076 to +0.076 | -0.045 | -0.271 | -0.226 |
+| net2, net1 v9 bins4, alpha 10 | TD3+BC | -0.005 | -0.038 to +0.018 | -0.047 | -0.308 | -0.162 |
+| net2, net1 v7 means, alpha 5 | TD3+BC | -0.045 | -0.083 to +0.002 | -0.313 | -0.086 | +0.155 |
+| net2, net1 v7 means, alpha 10 | TD3+BC | -0.078 | -0.101 to -0.066 | -0.364 | -0.193 | +0.181 |
+| rule on net1 v9, u = 0.25 (reference) | none | +0.142 | | -0.077 | +0.259 | -0.227 |
+| rule on neto1 v2, u = 0.375 (reference) | none | +0.138 | | +0.013 | +0.249 | -0.761 |
+
+- With the offline learner held fixed, the estimator made no reliable
+  difference. On 27 LCFs read as means, net2 led neto2 by about 0.06; on
+  7 LCFs read as means, it trailed by 0.06 to 0.11. Counting copies as a
+  sixth family, every offline arm on both sides fell between -0.040 and
+  +0.022.
+- The offline net2 arms traded rather than gained: they won where Cubic
+  starts first and lost in deep buffers and as copies, the shape of a
+  more aggressive policy. neto2's arms sat between the two.
+- The online DAgger student on net1 v9's means is the strongest learned
+  policy: level with the rule over the five families, and the only one
+  ahead of it as copies. It has no neto2 twin yet, so its lead over the
+  offline neto2 arms mixes the estimator with the learner. Round 26
+  trains the same recipe on neto1 v2 (`experiments/neto2-r26-v2.json`,
+  UNRUN when written).
+- Each neto2 arm scored 0.009 to 0.011 below its value at the same
+  campaign seed in
+  [`exp-neto2-search2-val-247`](https://github.com/Radonux/palaestra/releases/tag/exp-neto2-search2-val-247),
+  and so did the rule on neto1 v2; the cause is not traced.
+
+These are validation links before any tuning of net2, so they choose what
+to run next and support no claim about the test links.
+
 ## A learned net2 beats the rule against competitors
 
 A learned net2 on net1 v6 beat the fixed rule against competitors on the

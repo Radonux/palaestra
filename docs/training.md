@@ -186,8 +186,9 @@ net2 on net1 v7 and v9, with its two best arms (TD3+BC, alpha 5 and 10,
 (`experiments/net2-offline-v9c.json`), reading either the means (`view`
 `means`, neto2's input) or each distribution pooled into 4 bins
 (`input_bins` 4; 16 bins over 27 LCFs did not fit a runner's memory).
-`experiments/net2-vs-neto2-val.json` scores both in one closed-loop run
-(UNRUN when written).
+`experiments/net2-vs-neto2-val.json` scores both in one closed-loop run,
+[`exp-net2-vs-neto2-val-253`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-vs-neto2-val-253)
+([results](results.md#learned-net2-against-learned-neto2)).
 
 | `net2` field | Default | Meaning |
 |---|---|---|
