@@ -1,16 +1,11 @@
 # LCF concepts from the literature
 
 An LCF (latent congestion factor) is a quantity about the path that net1
-estimates and net2 acts on. Its true value must be exact in the emulator;
-the sender need not be able to measure it.
-
-A basic concept is a quantity the link itself determines and the emulator
-logs directly, such as capacity, the queue or a packet's delay. A
-compositional concept is a fixed formula over basic concepts in a short
-window (about 10 ms to 100 ms), such as the fraction of capacity in use.
-Each section below gives the concepts' meanings first, then their
-definitions, each copied from the source named in the last column. The
-sources are listed in the appendix.
+estimates and net2 acts on. Its true value is exact in the emulator; the
+sender need not be able to measure it. This is the pool of concepts LCFs
+are chosen from. Each section gives the concepts' meanings, then their
+definitions, each copied from the source named in the last column and
+listed in the appendix.
 
 In the meaning tables:
 
@@ -18,8 +13,7 @@ In the meaning tables:
   logs every arrival, departure and drop (with its cause and its flow), the
   queue after each event, one delivery-opportunity record per millisecond,
   and the buffer limit. "Exact" means a function of those records in the
-  window; "exact, per flow" also needs each packet's flow; "model" means
-  the value exists only in a model the emulator does not run.
+  window; "exact, per flow" also needs each packet's flow.
 - "Sender" says whether the sender can measure the value: "yes",
   "estimate" (biased, delayed or conditional) or "no".
 - "Label" is the name palaestra gives the value: a stored ground-truth
@@ -264,11 +258,11 @@ them directly.
 
 ## Ad-hoc concepts from concept-based explainers
 
-Agua names eight congestion control concepts without formulas; a concept's
-value there is the similarity between text embeddings of an LLM-written
-description of the state and of the concept's name. The same group's
-earlier paper (Patel 2024) defines concepts for adaptive bitrate only. The
-closed forms in the second column are our proposal, built from the
+Agua names eight congestion control concepts without formulas: a
+concept's value there is the similarity between text embeddings of an
+LLM-written description of the state and of the concept's name (the same
+group's earlier Patel 2024 defines concepts for adaptive bitrate only).
+The closed forms in the second column are ours, built from the
 definitions above.
 
 | Concept (Agua) | Closed form we propose | Built from |

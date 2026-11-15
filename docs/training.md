@@ -35,64 +35,24 @@ more from many links with a few controllers than the reverse. Any of the
 |---|---|---|
 | expliCCit-like: BBRv1, Cubic and Vegas on 120 paths, 30 s | `examples/campaign-expliccit-teachers.json` | the reproduction, the row split |
 | 180 links with every controller, 1,050 with three each | `examples/net1_varied.py` | net1 v3; the evaluation links |
-| 3,600 broad links under 64 conditions, and four held-out families | `examples/net1_broad.py`; releases `exp-data-net1-broad-30s-73`, `-60s-74`, `-ood-75` | net1 v4 and v5; net2's training paths |
-
-net1's four datasets were regenerated on 2026-11-12 so that their steps
-hold all 37 label columns (both windows, dataset version 8) in place of
-the 16 they held before. The paths, controllers and seeds are the same.
-
-| Data | Old release, what net1 v4 to v6 were trained on | New release, 37 labels |
-|---|---|---|
-| Broad links, 30 s | `exp-data-net1-broad-30s-73` | [`exp-data-net1-broad-30s-212`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-30s-212) |
-| Broad links, 60 s | `exp-data-net1-broad-60s-74` | [`exp-data-net1-broad-60s-213`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-60s-213) |
-| Held-out families | `exp-data-net1-broad-ood-75` | [`exp-data-net1-broad-ood-215`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-ood-215) |
-| Wide links (net1 v6) | `exp-data-net1-v6-146` | [`exp-data-net1-v6-214`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-v6-214) |
-
-Every planned episode ran: 14,400, 7,200 and 3,600 with none failed, and
-12,600 in the wide release with one failed. That one (a cross flow that
-did not start, so the episode was rejected and its row holds no metrics)
-failed the same way in `-146`.
-
-The new releases repeat the old ones, up to run-to-run variation. All
-37,800 episodes have the same id and spec in both. Over every episode
-that ran in both, the campaign means of goodput, delay, drop fraction,
-utilization and step count agree to within 1 percent, and the median
-episode differs from its old run by under 1 percent in each (the 90th
-percentile difference reaches 51 percent, largest for delay on the wide
-held-out links: an episode is not reproduced bit for bit). In the
-held-out release the 16 old label columns have the same distribution as
-in `-ood-75` (10th, 50th and 90th percentiles within about 2 percent).
-For the other three, one shard of each campaign was compared: the 30 s
-and 60 s shards agree to within 5 percent on all 16 columns; the wide
-release's shards hold as few as 30 episodes and differ far more (a
-percentile of the drop fraction by up to 91 percent, of the queue labels
-by up to 28 percent), so the label
-comparison over that whole release is UNRUN. Every shard checked holds
-the 37 columns with no nulls.
-
-No net1 has been trained on the 212 to 215 releases, and none should be:
-the cross-flow fix below replaced them.
-
-### Regenerated after the cross-flow fix
+| 3,600 broad links under 64 conditions, and four held-out families | `examples/net1_broad.py` | net1 v4 and v5; net2's training paths |
 
 Commit 312d15a fixed the guest's TCP cross flows. Before it, a cross flow
 kept sending after its planned stop (59% of stopped flows for more than
 1 s, at most 22.4 s), and one whose handshake met a standing queue started
-later than planned (median 0.45 s, at most 11.1 s). The labels assumed the
-planned window, so they described traffic that was not there and missed
-traffic that was. Every release made before 312d15a used the old guest.
-The datasets were generated again with the fixed guest:
+later than planned (median 0.45 s, at most 11.1 s), while the labels
+assumed the planned window. Every release made before 312d15a used the
+old guest. Which earlier published results used episodes with an
+affected cross flow has not been worked out (UNRUN). The datasets on
+each guest:
 
-| Data | Release on the fixed guest |
-|---|---|
-| Broad links, 30 s | [`exp-data-net1-broad-30s-218`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-30s-218) |
-| Broad links, 60 s | [`exp-data-net1-broad-60s-219`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-60s-219) |
-| Held-out families | [`exp-data-net1-broad-ood-220`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-ood-220) |
-| Wide links | [`exp-data-net1-v6-221`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-v6-221) |
-| net2 step data, 600 links no net1 was trained on, every step kept | [`exp-data-net2-steps-222`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net2-steps-222) |
-
-Which earlier published results used episodes with an affected cross flow
-has not been worked out (UNRUN).
+| Data | Old guest, what net1 v4 to v6 were trained on | Fixed guest |
+|---|---|---|
+| Broad links, 30 s | `exp-data-net1-broad-30s-73` | [`exp-data-net1-broad-30s-218`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-30s-218) |
+| Broad links, 60 s | `exp-data-net1-broad-60s-74` | [`exp-data-net1-broad-60s-219`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-60s-219) |
+| Held-out families | `exp-data-net1-broad-ood-75` | [`exp-data-net1-broad-ood-220`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-broad-ood-220) |
+| Wide links | `exp-data-net1-v6-146` | [`exp-data-net1-v6-221`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net1-v6-221) |
+| net2 step data, 600 links no net1 was trained on, every step kept | | [`exp-data-net2-steps-222`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net2-steps-222) |
 
 ### Model names
 
@@ -120,15 +80,15 @@ validation R^2 of 0.3 in [`exp-neto1-heads-233`](https://github.com/Radonux/pala
 that its formula on other heads predicts within 0.02 of its own head
 ([`exp-neto1-composites-236`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-composites-236)). On validation rows neto1 v2 keeps the
 seven shared heads within 0.03 R^2 of neto1 v1, and net1 v8 keeps them
-within 0.01 of net1 v7 in both R^2 and 90% coverage. net1 v8 failed on one LCF: `random_loss_rate` had a validation R^2 of -6.97,
-because a quantity within [0, 1] got 64 equal bins over [0, 1] and a loss
-rate of a few percent fell in the first two. net1 v9 gives such a quantity
-bins up to its 99.9% training quantile instead. Its `random_loss_rate` R^2
-is 0.43 (neto1 v2: 0.48) at 90% coverage 0.91, every other LCF stays within
-0.03 R^2 of net1 v8, and `random_loss_rate` is the only LCF whose bins
-changed (read from the two checkpoints). Its top bin ends at a loss rate of
-0.02, so a higher loss rate is outside what it can state. These are validation rows,
-so they choose a model and support no claim about it.
+within 0.01 of net1 v7 in both R^2 and 90% coverage. net1 v8's
+`random_loss_rate` had a validation R^2 of -6.97: a quantity within
+[0, 1] got 64 equal bins over [0, 1], and a loss rate of a few percent
+fell in the first two. net1 v9 gives such a quantity bins up to its 99.9%
+training quantile instead, and `random_loss_rate` is the only LCF whose
+bins changed (read from the two checkpoints). Its top bin ends at a loss
+rate of 0.02, so a higher loss rate is outside what it can state. On
+validation rows its `random_loss_rate` R^2 is 0.43 (neto1 v2: 0.48) at
+90% coverage 0.91, and every other LCF stays within 0.03 R^2 of net1 v8.
 
 ## net1: `train run`
 
@@ -145,7 +105,7 @@ runner, and `--eval NET1.pt` scores a trained net1 without training, as
 | Field | Default | Meaning |
 |---|---|---|
 | `data` | | campaign directories, searched for `steps.parquet` |
-| `split_by` | `spec` | `link` keeps a link's episodes in one split under every condition; use it |
+| `split_by` | `spec` | `link` keeps a link's episodes in one split under every condition |
 | `val_fraction`, `test_fraction`, `seed` | 0.1, 0.1, 0 | the split and the initialization |
 | `controllers` | all | train only on these controllers' episodes |
 | `step_stride` | 1 | keep every n-th step and the step after it |
@@ -165,12 +125,8 @@ idle steps. `fit.quantiles` reads a median and intervals off a belief.
 
 `train run` also trains an offline net2 on net1's beliefs, expliCCit's
 memoryless actor asked at every step, on any kind of net1 (single
-values, intervals or distributions). It did not beat the fixed rule
-([results](results.md#a-learned-net2-beats-the-rule-against-competitors)),
-and the defaults are untuned (TD3+BC on Sage's reward collapsed the
-window). A closed-loop TD3 for this actor (`train online`) was removed
-once the recurrent learners below superseded it; release
-`exp-net2v4-val-16` holds its last runs.
+values, intervals or distributions). Its defaults are untuned (TD3+BC on
+Sage's reward collapsed the window).
 
 neto2 and net2 are trained with one recipe so that only the estimator
 differs: the arms in `experiments/specs/net2/offline-search2.json`
@@ -200,15 +156,15 @@ net2 on net1 v7 and v9, with its two best arms (TD3+BC, alpha 5 and 10,
 | `discount`, `n_step` | 0.95, 1 | multi-step returns let a target's effect over an RTT reach the critic |
 | `action_max`, `action_decimals` | 1.0, none | a = action_max tanh(...), rounded in the exported graph |
 
-Every learner update reports diagnostics (`report.json`, `history.json`).
-Read them before any closed-loop result:
+Every learner update reports diagnostics in `report.json` and
+`history.json`:
 
-| Key | Meaning | Warning sign |
-|---|---|---|
-| `q`, `q_pull`, `bc_pull` | TD3+BC: mean Q; per row, the critic's and the data's pull on the action | `q_pull` far above `bc_pull`: the actor follows the critic, not the data |
-| `ood` | TD3+BC: share of target actions outside the batch's logged range | high: the critic's targets are extrapolation |
-| `pi_mean`, `pi_std`, `sat` | the actor's output, and its share near the tanh limits | a mean far from the data's, or saturation |
-| `adv_std`, `w_mean`, `w_capped` | IQL: advantage spread, mean weight, share at the cap | weights near 1: IQL is cloning |
+| Key | Meaning |
+|---|---|
+| `q`, `q_pull`, `bc_pull` | TD3+BC: mean Q; per row, the critic's and the data's pull on the action; `q_pull` far above `bc_pull` means the actor follows the critic, not the data |
+| `ood` | TD3+BC: share of target actions outside the batch's logged range, where the critic's targets are extrapolation |
+| `pi_mean`, `pi_std`, `sat` | the actor's output, and its share near the tanh limits |
+| `adv_std`, `w_mean`, `w_capped` | IQL: advantage spread, mean weight, share at the cap; weights near 1 mean IQL is cloning |
 
 ## The rules
 
@@ -244,9 +200,9 @@ LCFs.
 | `student` | `{"kind": "u"}` | what the actor learns and how its output becomes u (`train/spec.py` U, Gate, Gate3). `u` learns u itself; its `base` `share` makes it a residual on the share rule (gain `share_k`). `gate` learns p, the probability that a stock TCP flow shares the link, and sets u = u_rule + p (share rule's u - u_rule), acting past `threshold`. `gate3` also learns q for copies (`threshold_q`) and cooperates with them, or with `copies` `rule` lets q veto the push. `dagger` teaches any of them, `ppo` continues any of them on the reward |
 | `u_rule`, `share_k` | 0.125, 0.5 | the fixed rule's u, and the share rule's gain (the teacher's gain for `dagger`) |
 | `init_actor`, `init_critic` | none | start from a saved `actor.pt`, and PPO's value network from a `critic.pt` |
-| `init_from` | none | continue an earlier run's directory (in place of the two above): its actor, and for `ppo` its value network where it reads the same inputs; refuses another net1 or another actor shape ([staged-net2.md](staged-net2.md)) |
-| `anchor` | 0 | `ppo`: weight of the KL divergence to the policy it started from, added to the loss |
-| `teacher_from` | none | `dagger`, student `u`: a run on the true LCFs (`inputs` "truth") as the teacher, in place of the rules |
+| `init_from` | none | continue an earlier run's directory (in place of the two above): its actor, and for `ppo` its value network where it matches (`critic_truth`, `critic_flows`, `critic_hidden`); refuses a run on another net1, or one whose `view`, `input_bins`, `hidden`, `memory`, student kind, `base`, `inputs` or `action_max` differ |
+| `anchor` | 0 | `ppo`: weight of the KL divergence to the policy it started from, added to the loss (`kl_to_start` reports that divergence either way) |
+| `teacher_from` | none | `dagger`, student `u`: a run on the true LCFs (`inputs` "truth", student `u`, the same net1) as the teacher, in place of the rules; at each decision it reads the truth and the window the student set, and the student learns its window as u on the student's own believed BDP (for `raw`, the measured one) |
 | `alone`, `compete`, `copies`, `copies_share`, `competition` | 0, 0.5, (2, 3, 4), none, `at-start` | share of training links where the flow runs alone (no cross flows, the link's loss kept), share with competition (the rest keep the paths' conditions), the copies drawn there, the share of competition links with copies (none: as likely as each of Cubic and BBRv1), and when stock competitors start (`broad`: within the first 10 s, a second one half the time; `diverse`: the same with any controller but the held-out BBRv3 and Westwood; `dynamic`: as `diverse`, arriving anywhere in the first 60% of the episode, and 30% leaving early) |
 | `copies_reward`, `critic_flows` | `own`, false | `team`: copies learn from their mean utility; the critic also counts the flows on the link |
 | `iterations`, `links_per_iteration`, `group` | 40, 8, 4 | rollouts per iteration are links times group (K rollouts per link) |
@@ -258,7 +214,7 @@ Output: `policy.onnx`, `actor.pt`, `critic.pt` (PPO's value network, or
 the one `dagger` trains for PPO to continue from), and `history.json`
 (each iteration's rollouts and diagnostics, and every `eval_every`
 iterations the policy against the rule). A taught run continues by PPO
-with `init_from`; [staged-net2.md](staged-net2.md) has the recipe. The gate experiments
+with `init_from`. The gate experiments
 (`experiments/net2-gate-*.json`) apply `experiments/net2_ppo_gate_report.py`;
 `gate_threshold_export.py` and `gate_ensemble_export.py` there re-export
 gate students at a threshold or as one policy on their mean belief.
@@ -310,8 +266,7 @@ on the true value's bin (net1's own where the truth is NaN):
 
 ## expliCCit's released models
 
-expliCCit's released net1 and actor are in `third_party/expliccit-models`;
-its code stays out of this repository until expliCCit is published.
+expliCCit's released net1 and actor are in `third_party/expliccit-models`.
 
     uv run expliccit train import-expliccit third_party/expliccit-models out/expliccit \
         --as-deployed [--truth busy_fraction] [--data out/teachers]
