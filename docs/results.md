@@ -454,8 +454,43 @@ net2 led the better neto2 arm by 0.020 to 0.021 at each campaign seed.
 Between training seeds the ranges still overlap (net2 +0.117 to +0.169,
 neto2 at u = 0.375 +0.124 to +0.138), so the variation that matters is
 between trained policies, not between episode draws.
-[`experiments/dagger-twins-test.json`](../experiments/dagger-twins-test.json)
-runs the same arms once on the test links.
+
+### On the test links
+
+[`exp-dagger-twins-test-258`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-test-258)
+ran the same arms once on the 27 test links, with nothing chosen there
+and no failed episodes. The held-out competitors (a BBRv3 and a Westwood
+flow) and copies are outside the mean, as in the r18e05 test:
+
+| Arm | Mean | Per training seed | Cubic first | Deep buffer | Held-out competitors | Copies |
+|---|---|---|---|---|---|---|
+| net2 on net1 v9 means, iteration 19 | +0.146 | +0.161, +0.159, +0.118 | -0.075 | +0.264 | +0.062 | +0.104 |
+| neto2 on neto1 v2, u = 0.25, iteration 39 | +0.111 | +0.094, +0.132, +0.106 | -0.061 | +0.189 | +0.025 | -0.052 |
+| neto2 on neto1 v2, u = 0.375, iteration 59 | +0.096 | +0.102, +0.083, +0.102 | -0.112 | +0.226 | -0.013 | -0.092 |
+| rule on net1 v9, u = 0.25 (reference) | +0.136 | | -0.101 | +0.271 | +0.093 | +0.054 |
+| rule on neto1 v2, u = 0.375 (reference) | +0.107 | | -0.062 | +0.235 | +0.084 | -0.593 |
+
+- With the learner, its recipe, the data and the 27 LCFs held fixed, net2
+  on the distributional net1 beat neto2 on the single-value net1 by 0.050
+  (neto2's validation-preferred u) and by 0.035 (net2's own u), against
+  0.021 and 0.028 on validation.
+- Every net2 training seed scored above every neto2 seed at u = 0.375. At
+  u = 0.25 one neto2 seed (+0.132) scored above net2's weakest (+0.118),
+  so that gap is suggestive with three seeds a side.
+- net2 led in the deep buffer, new and both training families, against
+  the held-out competitors and as copies, and trailed neto2 at u = 0.25
+  only with Cubic first.
+- net2 was the only learned arm above the rule on its own estimator. It
+  was below that rule against the held-out competitors, mostly through
+  one training seed (-0.012 there, -0.154 with Cubic first).
+- net2 read net1 v9's means; on validation the full distributions did no
+  better, so the gain comes from the estimator, not from handing net2 its
+  uncertainty. Part of it is the rule: at a shared u the rule on neto1 v2
+  was the weaker teacher, and with its own u its students still fell
+  short.
+- One link family (8 to 100 Mbit/s, 5 to 50 ms, buffers of 0.25 to 4
+  BDP) and three training seeds per arm; nothing here speaks to other
+  links.
 
 ## A learned net2 beats the rule against competitors
 
