@@ -49,7 +49,12 @@ def train(spec: TrainSpec, out: Path) -> dict[str, Any]:
     report: dict[str, Any] = {
         "rows": {s: int(steps.rows(s).sum()) for s in ("train", "val", "test")},
         "episodes": len(steps.episode_ids),
-        "net1": {"training": net1_log, "test": fit.report_net1(net1, steps, "test")},
+        # A loaded net1 was scored where it was trained. Scoring it again here
+        # holds rows x LCFs x bins probabilities at once, more than a runner has
+        # with 27 LCFs and millions of net2 steps.
+        "net1": {"training": net1_log}
+        if spec.net1_from is not None
+        else {"training": net1_log, "test": fit.report_net1(net1, steps, "test")},
         "net2": net2_log,
     }
     # A net2 on the true LCFs runs on the guest's live truth (an oracle).

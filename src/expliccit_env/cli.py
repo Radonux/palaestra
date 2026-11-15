@@ -167,7 +167,7 @@ def _train(a: argparse.Namespace) -> int:
     from expliccit_env.train.spec import TrainSpec  # noqa: PLC0415
 
     report = run.train(TrainSpec.parse(Path(a.spec).read_text()), Path(a.out))
-    print(json.dumps(report["net1"]["test"], indent=2))
+    print(json.dumps(report["net1"].get("test", report["net2"]), indent=2))
     return 0
 
 

@@ -114,6 +114,27 @@ def test_an_offline_net2_on_every_net1_trains_and_exports(
     _onnx_matches(graph, steps.obs)
 
 
+def test_a_loaded_net1_is_not_scored_again(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Scoring a distribution net1 holds rows x LCFs x bins probabilities,
+    which does not fit beside a net2 dataset; its own run already did it."""
+    from expliccit_env.train import run  # noqa: PLC0415
+    from expliccit_env.train.spec import TrainSpec  # noqa: PLC0415
+
+    steps = synthetic(n_episodes=10, steps=120)
+    _net1("bins", steps, tmp_path)
+    monkeypatch.setattr(data, "load", lambda *_a, **_k: steps)
+    net2 = {"algo": "td3bc", "steps": 20, "batch_size": 64, "hidden": 16, "action": "bdp"}
+    spec = {"data": [str(tmp_path)], "net2": net2 | {"action_max": 2.0}}
+    loaded = run.train(
+        TrainSpec.model_validate(spec | {"net1_from": str(tmp_path / "net1.pt")}), tmp_path / "a"
+    )
+    assert "test" not in loaded["net1"] and loaded["net2"]["transitions"] > 0
+    assert (tmp_path / "a" / "policy.onnx").stat().st_size > 0
+    net1 = {"width": 32, "epochs": 1, "batch_size": 256}
+    trained = run.train(TrainSpec.model_validate(spec | {"net1": net1}), tmp_path / "b")
+    assert trained["net1"]["test"]
+
+
 def _flow(steps: data.Steps, episode: int) -> pa.Table:
     """One synthetic episode as a rollout's step table (the window 20)."""
     rows = steps.episode == episode
