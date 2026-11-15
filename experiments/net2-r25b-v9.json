@@ -1,0 +1,24 @@
+{
+  "title": "Round 25b: round 25's net2 on net1 v9 means, training seeds 4 to 6 (replication)",
+  "description": "Replication declared after the single test run exp-dagger-twins-test-258 and before any new result: three more training seeds (4 to 6) of each DAgger twin, trained with the identical recipe, then judged at the iterations already chosen in exp-dagger-twins-iter-val-256 (r25-means after iteration 19, r26-u0.25 after 39, r26-u0.375 after 59), nothing re-chosen: first on the validation links at campaign seed 21, then once on the test links beside the first three seeds. This file trains round 25's recipe unchanged (experiments/net2-r25-v9.json: round 18's DAgger gate3 students, teacher gain 0.5, the rule on net1 v9 at u = 0.25, 60 iterations, validation every 20) on net1 v9 (exp-net1v9-243), reading the means only, at training seeds 4, 5 and 6. Validation links only; no claim from this release on its own.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1v9-243",
+    "models": "release:model-net1v3"
+  },
+  "matrix": {
+    "view": [
+      "means"
+    ],
+    "seed": [
+      4,
+      5,
+      6
+    ]
+  },
+  "prepare": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; uv run python experiments/net2_ppo_setup.py \"$OUT/setup\" --net1 \"$N\" --models \"$IN/models\" --u 0.25",
+  "run": "S=\"$OUT/spec-r25-$VIEW-s$SEED.json\"; jq --arg view \"$VIEW\" --argjson seed \"$SEED\" '.algo = \"dagger\" | .student = {\"kind\": \"gate3\", \"threshold\": 0.5} | .view = $view | .share_k = 0.5 | .critic_warmup = 0 | .lr = 0.001 | .updates_per_iteration = 50 | .replay_iterations = 16 | .tau_s = 1 | .noise_sigma = 0.05 | .group = 1 | .links_per_iteration = 32 | .compete = 0.8 | .copies = [2, 4] | .seed = $seed | .iterations = 60 | .eval_every = 20' \"$OUT/setup/ppo-base.json\" > \"$S\"; uv run expliccit train ppo \"$S\" \"$OUT/ppo-r25-$VIEW-s$SEED\" --build \"$UML\" --workers \"$WORKERS\"",
+  "collect": "uv run python experiments/net2_ppo_report.py \"$OUT\" \"$OUT\"/ppo-*",
+  "timeout_minutes": 360
+}
