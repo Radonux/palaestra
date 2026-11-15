@@ -171,7 +171,10 @@ def _bin_bounds(y: F32, bins: int) -> F32:
     equal bins up to that quantile and one more step as the last bin, which
     also takes everything above. Without this, such a quantity sits in the
     first one or two bins and its mean is a bin's midpoint whatever the
-    truth. Any other gets bin 0 below
+    truth. A signed quantity (more than 1% of values below 0, such as an
+    excess demand y - C) gets bin 0 below its 0.1% quantile, equal bins up
+    to its 99.9% quantile and one more step as the last bin: a log scale
+    would put every negative value in one bin. Any other gets bin 0 below
     the 0.1% quantile of its positive values (zero and near zero),
     log-spaced bins up to its 99.9% quantile, and one more log step as the
     last bin, which also takes everything above."""
@@ -179,6 +182,11 @@ def _bin_bounds(y: F32, bins: int) -> F32:
     for j in range(y.shape[1]):
         v = y[:, j][np.isfinite(y[:, j])].astype(np.float64)
         pos = v[v > 0]
+        if v.size and np.mean(v < 0) > 0.01:
+            lo, hi = float(np.quantile(v, 0.001)), float(np.quantile(v, 0.999))
+            inner = np.linspace(lo, hi, bins - 1)
+            out[j] = [float(v.min()), *inner, hi + (inner[1] - inner[0])]
+            continue
         if v.size and v.min() >= 0 and v.max() <= 1:
             top = float(np.quantile(v, 0.999))
             if 0 < top < 0.5:

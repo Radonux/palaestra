@@ -462,6 +462,18 @@ def test_bins_cover_fractions_evenly_and_rates_on_a_log_scale() -> None:
     assert np.allclose(ratios, ratios[0], rtol=1e-4)  # log-spaced
 
 
+def test_a_signed_quantity_gets_equal_bins_across_zero() -> None:
+    rng = np.random.default_rng(0)
+    excess = rng.normal(-20.0, 30.0, 5000)  # y - C in Mbit/s: mostly below capacity
+    b = fit._bin_bounds(excess[:, None].astype(np.float32), 16)[0]
+    assert np.all(np.diff(b) > 0)
+    assert np.allclose(np.diff(b[1:]), b[2] - b[1], rtol=1e-4)  # equal bins
+    assert b[1] < -60 and b[-2] > 20  # from the 0.1% to the 99.9% quantile
+    # -20 and +10 land in different bins; a log scale would merge every negative value.
+    assert np.searchsorted(b, -20.0) != np.searchsorted(b, 10.0)
+    assert np.searchsorted(b, -20.0) != np.searchsorted(b, -50.0)
+
+
 def test_a_fraction_that_stays_small_gets_bins_over_its_own_range() -> None:
     rng = np.random.default_rng(0)
     loss = rng.uniform(0, 0.03, 5000)
