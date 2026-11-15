@@ -1,0 +1,25 @@
+{
+  "title": "Round 26: round 25's DAgger net2 recipe on neto1 v2 (27 heads, one value each), the learned neto2 twin, three seeds",
+  "description": "exp-net2-vs-neto2-val-253 found the strongest learned net2 to be round 25's online DAgger student reading net1 v9's means (r25-means, +0.144 against BBRv3 on validation links, tying the rule), while the offline TD3+BC twins showed no reliable difference between net2 and neto2. No neto2 has been trained with round 25's recipe since the cross-flow fix or on 27 heads (round 24, exp-net2-r24-point-231, used neto1 v1's 7 heads), so r25's lead over neto2 still mixes the estimator with the learner. This run trains round 25's recipe unchanged on neto1 v2 (exp-neto1-v2-239, the run named in its chosen.txt; the same 27 LCFs as net1 v9, one value per LCF, which is what view means hands net2 from net1 v9): round 18's DAgger gate3 students, teacher gain 0.5, seeds 1 to 3, 60 iterations, validation every 20. The teacher and starting point is the fixed rule on neto1 v2, at u = 0.25 (round 25's u, so the recipe is identical) or at u = 0.375 (the u chosen for neto1 v2 in exp-rule-paired-val-246, as 0.25 was chosen for net1 v9). Iteration 39's students then run in closed loop beside r25-means in their own validation run. Validation links only; no claim before tuning.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "n": "release:exp-neto1-v2-239",
+    "models": "release:model-net1v3"
+  },
+  "matrix": {
+    "u": [
+      0.25,
+      0.375
+    ],
+    "seed": [
+      1,
+      2,
+      3
+    ]
+  },
+  "prepare": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; uv run python experiments/net2_ppo_setup.py \"$OUT/setup\" --net1 \"$N\" --models \"$IN/models\" --u 0.25; uv run python experiments/rule_export.py \"$OUT/setup/rule\" \"$N\" --u 0.375",
+  "run": "S=\"$OUT/spec-r26-u$U-s$SEED.json\"; jq --arg rule \"$OUT/setup/rule/rule-u$U.onnx\" --argjson u \"$U\" --argjson seed \"$SEED\" '.rule_policy = $rule | .u_rule = $u | .algo = \"dagger\" | .student = {\"kind\": \"gate3\", \"threshold\": 0.5} | .view = \"means\" | .share_k = 0.5 | .critic_warmup = 0 | .lr = 0.001 | .updates_per_iteration = 50 | .replay_iterations = 16 | .tau_s = 1 | .noise_sigma = 0.05 | .group = 1 | .links_per_iteration = 32 | .compete = 0.8 | .copies = [2, 4] | .seed = $seed | .iterations = 60 | .eval_every = 20' \"$OUT/setup/ppo-base.json\" > \"$S\"; uv run expliccit train ppo \"$S\" \"$OUT/ppo-r26-u$U-s$SEED\" --build \"$UML\" --workers \"$WORKERS\"",
+  "collect": "uv run python experiments/net2_ppo_report.py \"$OUT\" \"$OUT\"/ppo-*",
+  "timeout_minutes": 360
+}
