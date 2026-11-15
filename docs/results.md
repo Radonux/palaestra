@@ -435,8 +435,27 @@ The rules scored +0.140 (net1 v9) and +0.137 (neto1 v2) in the same run.
 With the iteration chosen, net2 led the better neto2 arm by 0.020, with
 overlapping seed ranges. Counting copies as a sixth family would have
 picked iteration 39 for net2 (iteration 19 scored -0.060 as copies); the
-criterion was fixed before the run and kept. These choices are confirmed
-at two more campaign seeds before the one test run.
+criterion was fixed before the run and kept.
+
+[`exp-dagger-twins-confirm-val-257`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-confirm-val-257)
+ran the chosen arms on fresh validation episodes at campaign seeds 11
+and 31 (no failed episodes), choosing nothing. The order held at every
+campaign seed:
+
+| Arm | Seed 11 | Seed 21 (release 256) | Seed 31 | Mean | With copies, seeds 11 and 31 |
+|---|---|---|---|---|---|
+| net2 on net1 v9 means, iteration 19 | +0.148 | +0.149 | +0.153 | +0.150 | +0.115 |
+| neto2 on neto1 v2, u = 0.375, iteration 59 | +0.127 | +0.129 | +0.132 | +0.129 | +0.101 |
+| neto2 on neto1 v2, u = 0.25, iteration 39 | +0.121 | +0.120 | +0.126 | +0.122 | +0.101 |
+| rule on net1 v9, u = 0.25 (reference) | +0.140 | +0.140 | +0.144 | +0.141 | +0.081 |
+| rule on neto1 v2, u = 0.375 (reference) | +0.134 | +0.137 | +0.140 | +0.137 | -0.009 |
+
+net2 led the better neto2 arm by 0.020 to 0.021 at each campaign seed.
+Between training seeds the ranges still overlap (net2 +0.117 to +0.169,
+neto2 at u = 0.375 +0.124 to +0.138), so the variation that matters is
+between trained policies, not between episode draws.
+[`experiments/dagger-twins-test.json`](../experiments/dagger-twins-test.json)
+runs the same arms once on the test links.
 
 ## A learned net2 beats the rule against competitors
 
