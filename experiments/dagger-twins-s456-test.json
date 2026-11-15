@@ -1,0 +1,16 @@
+{
+  "title": "DAgger twins, training seeds 4 to 6, on the test links once, 11 policies",
+  "description": "Training seeds 4 to 6 of the DAgger twins (exp-net2-r25b-v9-259: net2 on net1 v9's means; exp-neto2-r26b-v2-260: neto2 on neto1 v2 with the rule at u = 0.25 or 0.375 as teacher), at the iterations chosen for seeds 1 to 3 in exp-dagger-twins-iter-val-256 (net2 after 19, neto2 after 39 at u = 0.25 and after 59 at u = 0.375), nothing re-chosen; policies from model-dagger-twins-s456, beside BBRv3 and both rules as reference lines. The test links and campaigns of exp-dagger-twins-test-258 (training seed 13, others 31, held-out competitors and copies at 31), so per-seed scores pool with that release's seeds 1 to 3.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "v9": "release:exp-net1v9-243",
+    "v2": "release:exp-neto1-v2-239",
+    "y": "release:model-dagger-twins-s456"
+  },
+  "prepare": "N9=\"$IN/v9/$(cat \"$IN/v9/chosen.txt\")/net1.pt\"; N2=\"$IN/v2/$(cat \"$IN/v2/chosen.txt\")/net1.pt\"; uv run python experiments/rule_export.py \"$OUT/v9\" \"$N9\" --u 0.25; uv run python experiments/rule_export.py \"$OUT/v2\" \"$N2\" --u 0.375; P=(--policy \"rule-v9=$OUT/v9/rule-u0.25.onnx\" --policy \"rule-v2=$OUT/v2/rule-u0.375.onnx\"); (cd \"$IN/y\" && sha256sum -c SHA256SUMS); for f in \"$IN\"/y/ppo-r25-means-s*-i19.onnx \"$IN\"/y/ppo-r26-u0.25-s*-i39.onnx \"$IN\"/y/ppo-r26-u0.375-s*-i59.onnx; do n=\"$(basename \"$f\" .onnx)\"; n=\"${n#ppo-}\"; it=\"${n##*-}\"; b=\"${n%-*}\"; P+=(--policy \"${b%-*}-$it-${b##*-}=$f\"); done; [ \"${#P[@]}\" -eq 22 ]; experiments/rule_eval.sh \"$OUT\" test 13 31 bbr3 \"${P[@]}\"; uv run python experiments/heldout.py \"$OUT/spec-held-competitors-60\" --split test --family held-competitors --duration-ms 60000 --seed 31 --stock bbr3 \"${P[@]}\"; uv run expliccit campaign plan \"$OUT/spec-held-competitors-60/campaign.json\" \"$OUT/c-held-competitors-60\"; uv run python experiments/copies.py \"$OUT/copies\" --split test --duration-ms 30000 --seed 31 --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"; jq -s add \"$OUT/aliases.json\" \"$OUT/copies/aliases.json\" > \"$OUT/a.json\"; mv \"$OUT/a.json\" \"$OUT/aliases.json\"",
+  "shards": 60,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+  "collect": "uv run python experiments/rule_report.py \"$OUT\" --apart held-competitors-60 copies-30s && uv run python experiments/versus_rule.py \"$OUT\" rule-v9",
+  "timeout_minutes": 350
+}
