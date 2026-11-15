@@ -82,6 +82,7 @@ our names for simple differences.
 | Utilization (busy fraction) | the fraction of the link's capacity that was used; stops at 1 once the queue never empties | exact | estimate | busy_fraction |
 | Available capacity | capacity left unused by all flows (spare capacity); never negative | exact | estimate | available_capacity_bps |
 | Excess demand | arrival rate minus capacity: positive means the queue grows | exact | estimate | excess_demand_bps |
+| Overload | the excess demand where it is positive and 0 elsewhere: the rate a queue builds at on an overloaded link; with available capacity it covers both sides without a signed value | exact | estimate | overload_bps |
 | Load factor | arrival rate over a target rate just below capacity; unlike utilization it keeps growing under overload | exact | no | load_factor |
 | Idle time | the fraction of the window in which the link had nothing to send | exact | no | none (1 minus busy fraction) |
 

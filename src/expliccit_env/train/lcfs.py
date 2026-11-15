@@ -105,6 +105,19 @@ COMPOSITES: Final[dict[str, tuple[Callable[[Get], F32], float, str]]] = {
     ),
     # y - C: positive while the queue grows (XCP's spare bandwidth, negated).
     "excess_demand_bps": (lambda g: g("arrival_rate_bps") - g("capacity_bps"), 1e-6, "Mbit/s"),
+    # max(y - C, 0): the arrivals above capacity, the rate a queue builds at
+    # on an overloaded link, and 0 otherwise. Its positive part keeps a
+    # head's bins on one side of 0 (y - C is negative in half the rows);
+    # available_capacity_bps states the other side.
+    "overload_bps": (
+        lambda g: _where(
+            g("arrival_rate_bps") > g("capacity_bps"),
+            g("arrival_rate_bps") - g("capacity_bps"),
+            0.0,
+        ),
+        1e-6,
+        "Mbit/s",
+    ),
     # z = y / C, which keeps growing under overload where U stops at 1 (the
     # OSU scheme's load factor with the target at capacity). TIMELY's queue
     # growth rate (y - C) / C is this less 1.

@@ -190,6 +190,7 @@ $`q`$ the queue in bytes, $`R`$ the base RTT and $`N`$ the active flows:
 | `departure_rate_bps` | $`C\,U`$ | RFC 5136 (usage), HPCC |
 | `available_capacity_bps` | $`C\,(1 - U)`$ | RFC 5136 |
 | `excess_demand_bps` | $`y - C`$ | XCP |
+| `overload_bps` | $`\max(y - C, 0)`$: the arrivals above capacity, so never negative | XCP, its positive part |
 | `load_factor` | $`y / C`$; TIMELY's queue growth rate is this less 1 | OSU scheme, with the target at capacity |
 | `bdp_pkts` | $`C R`$, in 1504-byte packets | CCmatic |
 | `littles_delay_ns` | $`q / (C\,U)`$ | PIE |

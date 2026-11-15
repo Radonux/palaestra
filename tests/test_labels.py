@@ -218,6 +218,8 @@ def test_composites_are_formulas_over_one_windows_labels(episode) -> None:
         same(f"departure_rate_bps{s}", cap * np.nan_to_num(busy))
         same(f"available_capacity_bps{s}", cap * (1 - np.nan_to_num(busy)))
         same(f"excess_demand_bps{s}", y - cap)
+        same(f"overload_bps{s}", np.maximum(y - cap, 0))
+        assert np.nanmin(lab[f"overload_bps{s}"]) >= 0, w
         same(f"load_factor{s}", load)
         same(f"bdp_pkts{s}", bdp_bits / (8 * 1504))
         same(f"littles_delay_ns{s}", wait)
