@@ -419,8 +419,24 @@ is the mean over three training seeds of log utility minus BBRv3:
   during training at the fixed iteration.
 - r25-means scored +0.143 here and +0.144 in release 253.
 
-The iteration was fixed beforehand rather than chosen, so the next step
-chooses it on validation for both sides alike before anything is claimed.
+The iteration was fixed beforehand rather than chosen, so
+[`exp-dagger-twins-iter-val-256`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-iter-val-256)
+then ran every arm after iterations 19, 39 and 59 on the same validation
+episodes and took, for each arm, the iteration with the best five-family
+mean over its three training seeds (no failed episodes):
+
+| Arm | Chosen iteration | Mean | Seed range | Other iterations |
+|---|---|---|---|---|
+| net2 on net1 v9 means (r25) | 19 | +0.149 | +0.119 to +0.165 | 39: +0.145, 59: +0.126 |
+| neto2 on neto1 v2, u = 0.375 (r26) | 59 | +0.129 | +0.127 to +0.131 | 19: +0.115, 39: +0.100 |
+| neto2 on neto1 v2, u = 0.25 (r26) | 39 | +0.120 | +0.111 to +0.132 | 19: +0.079, 59: +0.103 |
+
+The rules scored +0.140 (net1 v9) and +0.137 (neto1 v2) in the same run.
+With the iteration chosen, net2 led the better neto2 arm by 0.020, with
+overlapping seed ranges. Counting copies as a sixth family would have
+picked iteration 39 for net2 (iteration 19 scored -0.060 as copies); the
+criterion was fixed before the run and kept. These choices are confirmed
+at two more campaign seeds before the one test run.
 
 ## A learned net2 beats the rule against competitors
 
