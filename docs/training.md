@@ -172,6 +172,23 @@ window). A closed-loop TD3 for this actor (`train online`) was removed
 once the recurrent learners below superseded it; release
 `exp-net2v4-val-16` holds its last runs.
 
+neto2 and net2 are trained with one recipe so that only the estimator
+differs: the arms in `experiments/specs/net2/offline-search2.json`
+(TD3+BC or IQL, action `bdp` up to 3, `log_utility`, 10-step returns) on
+[`exp-data-net2-steps-222`](https://github.com/Radonux/palaestra/releases/tag/exp-data-net2-steps-222),
+seeds 0 to 2. neto2 on neto1 v1 and v2 is
+[`exp-neto2-search2-245`](https://github.com/Radonux/palaestra/releases/tag/exp-neto2-search2-245),
+scored in closed loop in
+[`exp-neto2-search2-val-247`](https://github.com/Radonux/palaestra/releases/tag/exp-neto2-search2-val-247).
+net2 on net1 v7 and v9, with its two best arms (TD3+BC, alpha 5 and 10,
+200000 steps), is
+[`exp-net2-offline-v9c-252`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-offline-v9c-252)
+(`experiments/net2-offline-v9c.json`), reading either the means (`view`
+`means`, neto2's input) or each distribution pooled into 4 bins
+(`input_bins` 4; 16 bins over 27 LCFs did not fit a runner's memory).
+`experiments/net2-vs-neto2-val.json` scores both in one closed-loop run
+(UNRUN when written).
+
 | `net2` field | Default | Meaning |
 |---|---|---|
 | `algo` | `td3bc` | `iql` (implicit Q-learning), `bc` (cloning), `expliccit-v1` (expliCCit's objective, kept for comparison) |
