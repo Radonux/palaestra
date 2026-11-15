@@ -378,7 +378,10 @@ and leaves copies out.
 - Each neto2 arm scored 0.009 to 0.011 below its value at the same
   campaign seed in
   [`exp-neto2-search2-val-247`](https://github.com/Radonux/palaestra/releases/tag/exp-neto2-search2-val-247),
-  and so did the rule on neto1 v2; the cause is not traced.
+  and so did the rule on neto1 v2. The shift is in BBRv3's own episodes:
+  on the same links BBRv3 scored higher in release 253 (deep-long +0.037,
+  new +0.016, Cubic first +0.015), while the other controllers moved
+  less. Compare policies within one release, as every table here does.
 
 These are validation links before any tuning of net2, so they choose what
 to run next and support no claim about the test links.
