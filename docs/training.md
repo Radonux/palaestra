@@ -57,7 +57,7 @@ and release tags keep the names they were run under.
 |---|---|---|---|
 | net1 v7 | expliCCit's 7 | [`exp-net1v6-229`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v6-229) | `net1-v6-s2` |
 | net1 v9 | 27 | [`exp-net1v9-243`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v9-243) | `net1-v9-s2` |
-| net1 v10 | 32 | `experiments/net1v10.json` (UNRUN when written) | |
+| net1 v10 | 32 | [`exp-net1v10-266`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v10-266) | `net1-v10-s2` |
 | neto1 v1 | expliCCit's 7 | [`exp-net1-point-228`](https://github.com/Radonux/palaestra/releases/tag/exp-net1-point-228) | `net1-point-ours-s0` |
 | neto1 v2 | 27 | [`exp-neto1-v2-239`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-v2-239) | `net1-point-v2-s0` |
 | neto1 v3 | 32 | [`exp-neto1-v3-264`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-v3-264) | `net1-point-v3-s0` |
@@ -70,9 +70,15 @@ less five composites that net2 could compute from other heads
 The 32 add those five back, so that net2 reads them by name instead of
 building them: `departure_rate_bps`, `available_capacity_bps`,
 `overload_bps` (max(y - C, 0), in place of the signed excess demand),
-`bdp_pkts` and `cross_arrival_rate_bps`. On the test rows neto1 v3's
-27 shared heads score within 0.04 of neto1 v2's R^2, and the five new
-ones 0.86, 0.62, 0.93, 0.80 and 0.43 in that order.
+`bdp_pkts` and `cross_arrival_rate_bps`. On the test rows the heads
+shared with the 27-LCF estimators score within 0.04 of those estimators'
+R^2 (within 0.02 for net1 v10, whose 90% coverage stays 0.88 to 0.97), and
+the five new ones score:
+
+| | departure rate | available capacity | overload | BDP | cross arrival rate |
+|---|---|---|---|---|---|
+| net1 v10 R^2 (90% coverage) | 0.87 (0.89) | 0.63 (0.91) | 0.89 (0.92) | 0.79 (0.92) | 0.47 (0.89) |
+| neto1 v3 R^2 | 0.86 | 0.62 | 0.93 | 0.80 | 0.43 |
 
 A distribution net1 gives a quantity within [0, 1] whose values stay
 below 0.5 (a loss rate) its bins up to its 99.9% training quantile, so
