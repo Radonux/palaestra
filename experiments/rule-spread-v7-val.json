@@ -1,0 +1,14 @@
+{
+ "title": "The fixed rule on net1 v7 with its target lowered by net1's stated capacity spread, on validation",
+ "description": "exp-capacity-belief-v7-286 found that, when the flow is alone, net1 v7's capacity mean overshoots the truth by about 0.8 in log2 per unit of stated spread (the standard deviation of log2 capacity) above 0.15, and that beside a TCP flow a wide belief carries no bias; exp-truth-patch-lcf-val-283 found that capacity's estimation error costs the learned net2 0.023 on the five-family mean. This runs the fixed rule on net1 v7 at u = 0.25 and 0.375, plain and with its window target lowered by K times the spread past 0.15 (graph.SpreadTarget, experiments/rule_export.py --spread K --s0 0.15) for K = -0.4 and -0.8 (-0.8 undoes the overshoot seen when alone), beside the learned net2 on net1 v7 (round 29, iteration 39, seeds 1 to 3, model-truth-patch-src). Question, stated before the run: does net1's stated spread carry information the decision can use? Criterion: a spread rule beats the better plain rule by at least 0.01 on the five-family mean without losing more than that among copies. Expected: gains on the clean and lossy conditions, losses beside Cubic and BBR, where a wide belief is not too high; the net sign is the question. Validation links at campaign seed 21 (the five families) and 2 and 4 copies. Nothing is chosen for test.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "t": "release:model-truth-patch-src"
+ },
+ "prepare": "(cd \"$IN/t\" && sha256sum -c SHA256SUMS); uv run python experiments/rule_export.py \"$OUT/r\" \"$IN/t/net1-v7.pt\" --u 0.25 0.375 --spread -0.4 -0.8 --s0 0.15; P=(); for u in 0.25 0.375; do for x in \"\" -spread-0.4 -spread-0.8; do P+=(--policy \"rule-u$u$x=$OUT/r/rule-u$u$x.onnx\"); done; done; for s in s1 s2 s3; do d=\"$OUT/runs/r29-$s\"; mkdir -p \"$d\"; cp \"$IN/t/net1-v7.pt\" \"$d/net1.pt\"; cp \"$IN/t/r29-$s.actor.pt\" \"$d/actor.pt\"; cp \"$IN/t/r29-$s.ppo_spec.json\" \"$d/ppo_spec.json\"; uv run python experiments/gate_ensemble_export.py \"$OUT/p\" \"net2-v7-$s\" \"$d\" --t 0.5; P+=(--policy \"net2-v7-$s=$OUT/p/net2-v7-$s.onnx\"); done; [ \"${#P[@]}\" -eq 18 ]; experiments/rule_eval.sh \"$OUT\" val 21 21 bbr3 \"${P[@]}\"; uv run python experiments/copies.py \"$OUT/copies\" --split val --duration-ms 30000 --seed 21 --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"; jq -s add \"$OUT/aliases.json\" \"$OUT/copies/aliases.json\" > \"$OUT/a.json\"; mv \"$OUT/a.json\" \"$OUT/aliases.json\"",
+ "shards": 60,
+ "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+ "collect": "uv run python experiments/rule_report.py \"$OUT\" --apart copies-30s && uv run python experiments/versus_rule.py \"$OUT\" rule-u0.25",
+ "timeout_minutes": 350
+}
