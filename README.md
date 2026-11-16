@@ -20,22 +20,18 @@ the claims and defines every term used below.
 
 ## What we found
 
-1. With the learner, its recipe, the data and the 27 LCFs held fixed,
-   net2 on our net1 (a distribution per LCF) beat neto2 on expliCCit's
-   kind of net1 (one value per LCF) on the held-out test links: +0.136
-   against +0.088 and +0.074 in log utility over BBRv3, over six
-   training seeds a side (a net2 seed above a neto2 seed in 30 and 34 of
-   36 pairs), and it kept its lead as copies (+0.177 against +0.018 and
-   -0.005)
+1. A learned net2 (online DAgger on net1's means, taught by the fixed
+   rule) beats BBRv3 on the held-out test links by +0.146 in log utility
+   on net1 v10's 32 LCFs (two training seeds; +0.149 over three at an
+   earlier iteration)
+   ([`exp-dagger32-test-275`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger32-test-275))
+   and by +0.136 on net1 v9's 27, over six training seeds
    ([`exp-dagger-twins-test-258`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-test-258),
    [`exp-dagger-twins-s456-test-272`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-s456-test-272)).
-   It matched, not beat, the fixed rule on net1 v9 it learned from
-   (+0.136).
-   With five composite heads added to both estimators the twins tied on
-   the test mean (+0.146 against +0.141 and +0.149): neto2 then pushed
-   harder beside a buffer-filling flow and lost as copies
-   ([`exp-dagger32-test-275`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger32-test-275)), so the gap depends on the estimators.
-   Trained offline instead, the two made no reliable difference.
+   It matches, not beats, the rule it learned from (+0.135 and +0.136):
+   its window follows net1's believed bandwidth-delay product, and its
+   learned step reads little else
+   ([`exp-occlusion-twins-val-276`](https://github.com/Radonux/palaestra/releases/tag/exp-occlusion-twins-val-276)).
 2. net1 estimates most LCFs well on links it never saw (test R^2 0.88 to
    1.00 for five of expliCCit's seven), and its 90% intervals hold 89% to
    97% of the time; it is weak where the measurements say little (free
