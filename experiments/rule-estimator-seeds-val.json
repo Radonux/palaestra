@@ -1,0 +1,17 @@
+{
+  "title": "The fixed rule on every training seed of the four twin estimators, on validation: 12 rules",
+  "description": "The DAgger twins differ in their estimator: net1 (a distribution per LCF) or neto1 (one value per LCF, expliCCit's kind), each with 27 heads (net1 v9, neto1 v2) or 32 (net1 v10, neto1 v3), and each release picked one of three training seeds by validation loss. With 27 heads net2 beat neto2 on the test links; with 32 heads they tied, and the rule on neto1 v3 moved the same way as its students. This run asks whether such differences follow the estimator's kind or the training seed drawn: the fixed rule at u = 0.25 on every training seed of the four estimators (rule-KIND-sSEED), beside BBRv3, on the five validation families and as 2 and 4 copies, campaign seed 21 (the links and campaigns of exp-dagger-twins-iter-val-256 and exp-dagger32-iter-val-273). Nothing is chosen or trained here; validation links only.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "v9": "release:exp-net1v9-243",
+    "v2": "release:exp-neto1-v2-239",
+    "v10": "release:exp-net1v10-266",
+    "v3": "release:exp-neto1-v3-264"
+  },
+  "prepare": "P=(); for k in v9 v2 v10 v3; do for d in \"$IN/$k\"/*/; do [ -f \"$d/net1.pt\" ] || continue; s=\"$(basename \"$d\")\"; s=\"${s##*-}\"; uv run python experiments/rule_export.py \"$OUT/rules/$k-$s\" \"$d/net1.pt\" --u 0.25; P+=(--policy \"rule-$k-$s=$OUT/rules/$k-$s/rule-u0.25.onnx\"); done; done; [ \"${#P[@]}\" -eq 24 ]; experiments/rule_eval.sh \"$OUT\" val 21 21 bbr3 \"${P[@]}\"; uv run python experiments/copies.py \"$OUT/copies\" --split val --duration-ms 30000 --seed 21 --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"; jq -s add \"$OUT/aliases.json\" \"$OUT/copies/aliases.json\" > \"$OUT/a.json\"; mv \"$OUT/a.json\" \"$OUT/aliases.json\"",
+  "shards": 56,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+  "collect": "uv run python experiments/rule_report.py \"$OUT\" --apart copies-30s",
+  "timeout_minutes": 350
+}
