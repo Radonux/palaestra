@@ -67,12 +67,36 @@ the simplest net2, the fixed rule on net1 v9 (u = 0.25), scored +0.136
 over BBRv3 on the five-family mean, and the learned net2 on net1 v9 the
 same over six training seeds ([Learned net2](#learned-net2)).
 
-On the old guest, the fixed rule on net1 v5 beat every Linux controller
-and Sage on the test links, and the same rule on the true LCFs did only
-0.023 better
-([`exp-final-test-100`](https://github.com/Radonux/palaestra/releases/tag/exp-final-test-100)).
-A black box with the same learner and budget on the raw measurements
-stayed 0.2 to 0.4 below net1 v6's fixed rule from its own start
+net1's estimation errors cost about 0.03 on one flow or beside a stock
+competitor
+([`exp-truth-patch-val-282`](https://github.com/Radonux/palaestra/releases/tag/exp-truth-patch-val-282),
+validation links at campaign seed 21). Fed expliCCit's seven LCFs from
+the live truth in place of net1's, with nothing retrained (arm A1
+against A3), the learned net2 rose from +0.157 to +0.184 over BBRv3 on
+the seven LCFs (three training seeds) and from +0.157 to +0.186 on the
+32 (two seeds; the other 25 still from net1), and the fixed rule from
++0.138 (net1 v7) and +0.141 (net1 v10) to +0.172.
+
+- Paired by link, every pair (each net2 seed, and the rule on each
+  net1) gained 0.01 to 0.06 in the training and new families, with
+  intervals excluding zero in 17 of those 21 cells, and 0.05 to 0.10
+  with Cubic first, excluding zero in 1 of 7.
+- In deep buffers the truth was level or up to 0.04 worse, all of it
+  beside the Cubic flow: there net1's larger believed BDP had kept a
+  larger window (1.34 against 1.21 times the true BDP, learned net2 on
+  net1 v7) and a larger share (0.52 against 0.41).
+- On clean links the gain is fewer drops: after the first 3 s the loss
+  term fell from 0.014 to 0.021 to 0.002 or 0.003, so net1's costly
+  errors there are overestimates of the BDP that overfill the buffer.
+- The learned step's lead over the rule was about the same on the truth
+  (+0.012 to +0.014) as on net1 (+0.016 to +0.019), so it does not make
+  up for net1's errors.
+- Among copies the truth is far worse; see
+  [What limits a rule is the other flows](#what-limits-a-rule-is-the-other-flows).
+
+On the old guest, a black box with the same learner and budget on the
+raw measurements stayed 0.2 to 0.4 below net1 v6's fixed rule from its
+own start
 ([`exp-net2-r19b-bbr-165`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-r19b-bbr-165))
 and ended about 0.05 below the same learner on net1 v6 when started from
 a clone of the rule
@@ -124,11 +148,20 @@ the validation links, the fixed rule on net1 v9 scored -0.228
 on the test links they scored +0.054 and -0.593, and the learned net2 on
 net1 v9 +0.177 over six training seeds (releases 258 and 272).
 
-On the old guest, rules on the true LCFs failed among copies, since each
-copy aims at the whole link's BDP
-([`exp-share-oracle-val-20`](https://github.com/Radonux/palaestra/releases/tag/exp-share-oracle-val-20)),
-while told the number of flows a rule on the truth handled both copies
-and Cubic (an oracle bound,
+On the true LCFs, copies collapse. As copies on the validation links,
+the learned net2 fed expliCCit's seven LCFs from the truth scored -1.36
+(seven LCFs) and -0.73 (32 LCFs) minus BBRv3, against -0.08 and -0.04
+on net1, and the fixed rule -1.21 against -0.04 on net1 v7
+([`exp-truth-patch-val-282`](https://github.com/Radonux/palaestra/releases/tag/exp-truth-patch-val-282)).
+On the truth each copy of the rule and of the seven-LCF net2 kept 1.2
+to 1.5 times the whole link's BDP in flight, and the loss term rose 2.6
+to 3.9 times. net1 reads the flow's own deliveries, and on a shared link
+its believed BDP fell (for the rule on net1 v7, to about 0.80 of the
+true BDP beside one copy and 0.68 beside three).
+The window should follow the capacity left to the flow, not the link's,
+so on shared links the true LCFs are no upper bound. Told the number of
+flows, a rule on the truth handled both copies and Cubic (an oracle
+bound, old guest,
 [`exp-fairshare-used-val-23`](https://github.com/Radonux/palaestra/releases/tag/exp-fairshare-used-val-23)).
 The raw measurements tell copies from a stock TCP flow better than net1
 v6's beliefs (balanced accuracy 0.753 against 0.496, chance 0.333;
@@ -332,7 +365,7 @@ stated. Everything in this section but neto1 v2 ran on the old guest.
 | expliCCit's result | Here | Evidence |
 |---|---|---|
 | net1 estimates every LCF with R^2 above 0.9 | Only with its random row split, which puts a training row of the same episode 10 ms from each test row, and not for free buffer even then (0.65). Split by link, expliCCit's encoder retrained here (neto1 v2) has 0.78 for capacity, 0.86 for busy fraction and 0.23 for free buffer on the test links | [`exp-net1-row-split-97`](https://github.com/Radonux/palaestra/releases/tag/exp-net1-row-split-97), [`exp-neto1-v2-239`](https://github.com/Radonux/palaestra/releases/tag/exp-neto1-v2-239) |
-| The split costs about 5% utilization and 9% queueing delay against Sage | The other way for our split (above). expliCCit's released policy, as deployed, has 41% less utilization than Sage on clean test links and 24% to 25% less on clean validation links | `exp-final-test-100`, [`exp-sage-v5-val-94`](https://github.com/Radonux/palaestra/releases/tag/exp-sage-v5-val-94) |
+| The split costs about 5% utilization and 9% queueing delay against Sage | The other way for our split (above). expliCCit's released policy, as deployed, has 41% less utilization than Sage on clean test links and 24% to 25% less on clean validation links | [`exp-final-test-100`](https://github.com/Radonux/palaestra/releases/tag/exp-final-test-100), [`exp-sage-v5-val-94`](https://github.com/Radonux/palaestra/releases/tag/exp-sage-v5-val-94) |
 | On a 24/48 Mbit/s link (40 ms one way, 1000-packet buffer), under-utilization traces to capacity underestimated by 25%, and the true capacity restores it | The released policy uses 0.48 of the link (0.34 to 0.53 on the eight links around it), and its capacity belief is within 14%; the true capacity gives 0.43. Its wrong beliefs are busy fraction (1.00 against 0.51) and queue (19 packets against 0); the true busy fraction gives 0.71 on all nine links. The deployed rounding of beliefs is not the cause | [`exp-expliccit-case-42`](https://github.com/Radonux/palaestra/releases/tag/exp-expliccit-case-42), [`exp-expliccit-case-91`](https://github.com/Radonux/palaestra/releases/tag/exp-expliccit-case-91) |
 
 Divergences from expliCCit's and Sage's setting, each a possible cause:
@@ -442,8 +475,7 @@ by retraining net1 alone, with net2 unchanged.
   Retraining only the capacity head recovered +0.16 of the +0.52 in
   closed loop
   ([`exp-r3-capacity-head-83`](https://github.com/Radonux/palaestra/releases/tag/exp-r3-capacity-head-83)).
-- A patch with the truth can hurt, because net2 adapts to its net1's
-  errors: given the true capacity, the learned net2 on net1 v6 collapsed
-  as copies (-1.247 against -0.008), since net1's lower belief on a
-  shared link had kept the copies safe
-  ([`exp-net2-patch-v6-172`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-patch-v6-172)).
+- A patch with the truth can hurt: net1's lower belief on a shared link
+  keeps copies safe, so copies fed the true LCFs collapse, the fixed rule
+  as well as the learned net2
+  ([What limits a rule is the other flows](#what-limits-a-rule-is-the-other-flows)).

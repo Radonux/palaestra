@@ -44,6 +44,11 @@ the claims and defines every term used below.
    97% of the time; it is weak where the measurements say little (free
    buffer, R^2 0.29) and not calibrated outside its training ranges
    ([`exp-net1v9-243`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v9-243)).
+   Its errors cost the learned net2 about 0.03 in log utility; among
+   copies of itself they help, since the true capacity is the whole
+   link's and net1's belief, read from the flow's own deliveries, is
+   lower
+   ([`exp-truth-patch-val-282`](https://github.com/Radonux/palaestra/releases/tag/exp-truth-patch-val-282)).
 3. The simplest net2, a fixed multiple of net1's believed bandwidth-delay
    product, already beats BBRv3 by 0.136 on the test links; what limits
    it is the other flows, above all copies of itself.
