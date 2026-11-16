@@ -81,13 +81,21 @@ the seven LCFs (three training seeds) and from +0.157 to +0.186 on the
   net1) gained 0.01 to 0.06 in the training and new families, with
   intervals excluding zero in 17 of those 21 cells, and 0.05 to 0.10
   with Cubic first, excluding zero in 1 of 7.
+- One LCF carries it. Capacity alone from the truth gained the
+  seven-LCF net2 0.023 (+0.164 to +0.187, three training seeds), one-way
+  delay alone -0.002 and the other five together 0.005
+  ([`exp-truth-patch-lcf-val-283`](https://github.com/Radonux/palaestra/releases/tag/exp-truth-patch-lcf-val-283)).
 - In deep buffers the truth was level or up to 0.04 worse, all of it
   beside the Cubic flow: there net1's larger believed BDP had kept a
   larger window (1.34 against 1.21 times the true BDP, learned net2 on
   net1 v7) and a larger share (0.52 against 0.41).
-- On clean links the gain is fewer drops: after the first 3 s the loss
-  term fell from 0.014 to 0.021 to 0.002 or 0.003, so net1's costly
-  errors there are overestimates of the BDP that overfill the buffer.
+- On clean links the cost is drops while a stepping link is at its
+  lower level. After the first 3 s, capacity from the truth gained 0.106
+  there (loss term 0.053 against 0.008; median window 1.29 against 1.19
+  times the true BDP), 0.014 at the higher level and 0.014 on constant
+  links, and as much more than 1 s after a change as within it. So net1's
+  costly error is a capacity belief that stays too high at the lower
+  level, not a lag after each step (net2 v7, release 283).
 - The learned step's lead over the rule was about the same on the truth
   (+0.012 to +0.014) as on net1 (+0.016 to +0.019), so it does not make
   up for net1's errors.
@@ -152,7 +160,10 @@ On the true LCFs, copies collapse. As copies on the validation links,
 the learned net2 fed expliCCit's seven LCFs from the truth scored -1.36
 (seven LCFs) and -0.73 (32 LCFs) minus BBRv3, against -0.08 and -0.04
 on net1, and the fixed rule -1.21 against -0.04 on net1 v7
-([`exp-truth-patch-val-282`](https://github.com/Radonux/palaestra/releases/tag/exp-truth-patch-val-282)).
+([`exp-truth-patch-val-282`](https://github.com/Radonux/palaestra/releases/tag/exp-truth-patch-val-282)). Capacity
+alone from the truth collapses them as much (-1.34 against -0.06), and
+one-way delay or the other five not at all
+([`exp-truth-patch-lcf-val-283`](https://github.com/Radonux/palaestra/releases/tag/exp-truth-patch-lcf-val-283)).
 On the truth each copy of the rule and of the seven-LCF net2 kept 1.2
 to 1.5 times the whole link's BDP in flight, and the loss term rose 2.6
 to 3.9 times. net1 reads the flow's own deliveries, and on a shared link
