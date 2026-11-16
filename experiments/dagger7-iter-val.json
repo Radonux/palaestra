@@ -1,0 +1,17 @@
+{
+  "title": "Seven heads against 32 on validation: DAgger net2 on net1 v7 (r29) at iterations 19, 39, 59, beside r27",
+  "description": "Round 29 trains round 27's DAgger recipe unchanged on net1 v7 (exp-net1v6-229), which has net1 v10's data and training spec but only expliCCit's seven hand-picked heads. This run chooses round 29's iteration as round 27's was chosen (exp-dagger32-iter-val-273): every training seed of r29-means after iterations 19, 39 and 59, named r29-means-iN-sSEED, on the five validation families and as 2 and 4 copies, campaign seed 21, beside BBRv3; the iteration with the best mean over its training seeds on the five families wins. In the same release: round 27's (net1 v10, 32 heads) chosen policies, iteration 59 (seeds 1 and 3) and iteration 39 (seeds 1 to 3), and, as reference lines only, the fixed rule at u = 0.25 on net1 v10 (rule-v10) and on net1 v7 (rule-v7, round 29's teacher). The round 29 policies are model-dagger7-cands, copied unchanged from training run 278; round 27's are model-dagger32-cands. Validation links only; the claim is made once on the test links.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "v7": "release:exp-net1v6-229",
+    "v10": "release:exp-net1v10-266",
+    "x": "release:model-dagger32-cands",
+    "y": "release:model-dagger7-cands"
+  },
+  "prepare": "N7=\"$IN/v7/$(cat \"$IN/v7/chosen.txt\")/net1.pt\"; N10=\"$IN/v10/$(cat \"$IN/v10/chosen.txt\")/net1.pt\"; uv run python experiments/rule_export.py \"$OUT/v7\" \"$N7\" --u 0.25; uv run python experiments/rule_export.py \"$OUT/v10\" \"$N10\" --u 0.25; P=(--policy \"rule-v10=$OUT/v10/rule-u0.25.onnx\" --policy \"rule-v7=$OUT/v7/rule-u0.25.onnx\"); (cd \"$IN/x\" && sha256sum -c SHA256SUMS); (cd \"$IN/y\" && sha256sum -c SHA256SUMS); for f in \"$IN\"/y/ppo-r29-*.onnx \"$IN\"/x/ppo-r27-means-s*-i59.onnx \"$IN\"/x/ppo-r27-means-s*-i39.onnx; do n=\"$(basename \"$f\" .onnx)\"; n=\"${n#ppo-}\"; it=\"${n##*-}\"; b=\"${n%-*}\"; P+=(--policy \"${b%-*}-$it-${b##*-}=$f\"); done; [ \"${#P[@]}\" -eq 32 ]; experiments/rule_eval.sh \"$OUT\" val 21 21 bbr3 \"${P[@]}\"; uv run python experiments/copies.py \"$OUT/copies\" --split val --duration-ms 30000 --seed 21 --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"; jq -s add \"$OUT/aliases.json\" \"$OUT/copies/aliases.json\" > \"$OUT/a.json\"; mv \"$OUT/a.json\" \"$OUT/aliases.json\"",
+  "shards": 72,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+  "collect": "uv run python experiments/rule_report.py \"$OUT\" --apart copies-30s --best r29-means-i19 r29-means-i39 r29-means-i59 r27-means-i59 r27-means-i39 && uv run python experiments/versus_rule.py \"$OUT\" rule-v10",
+  "timeout_minutes": 350
+}
