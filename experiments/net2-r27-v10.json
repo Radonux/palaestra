@@ -1,10 +1,10 @@
 {
   "title": "Round 27: round 25's DAgger net2 on net1 v10 (32 LCFs) reading the means, three seeds",
-  "description": "Round 25's recipe unchanged (experiments/net2-r25-v9.json: round 18's DAgger gate3 students, teacher gain 0.5, the rule at u = 0.25, 60 iterations, validation every 20) on net1 v10 (release exp-net1v10-265: net1 v9's 27 LCFs plus departure_rate_bps, available_capacity_bps, overload_bps, bdp_pkts and cross_arrival_rate_bps, so net2 reads them by name instead of building them), reading the means, seeds 1 to 3. Its twin is round 28 on neto1 v3.",
+  "description": "Round 25's recipe unchanged (experiments/net2-r25-v9.json: round 18's DAgger gate3 students, teacher gain 0.5, the rule at u = 0.25, 60 iterations, validation every 20) on net1 v10 (release exp-net1v10-266: net1 v9's 27 LCFs plus departure_rate_bps, available_capacity_bps, overload_bps, bdp_pkts and cross_arrival_rate_bps, so net2 reads them by name instead of building them), reading the means, seeds 1 to 3. Its twin is round 28 on neto1 v3.",
   "uml": true,
   "train": true,
   "inputs": {
-    "n": "release:exp-net1v10-265",
+    "n": "release:exp-net1v10-266",
     "models": "release:model-net1v3"
   },
   "matrix": {
