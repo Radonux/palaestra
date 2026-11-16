@@ -1,0 +1,24 @@
+{
+  "title": "Round 27: round 25's DAgger net2 on net1 v10 (32 LCFs) reading the means, three seeds",
+  "description": "Round 25's recipe unchanged (experiments/net2-r25-v9.json: round 18's DAgger gate3 students, teacher gain 0.5, the rule at u = 0.25, 60 iterations, validation every 20) on net1 v10 (release exp-net1v10-265: net1 v9's 27 LCFs plus departure_rate_bps, available_capacity_bps, overload_bps, bdp_pkts and cross_arrival_rate_bps, so net2 reads them by name instead of building them), reading the means, seeds 1 to 3. Its twin is round 28 on neto1 v3.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1v10-265",
+    "models": "release:model-net1v3"
+  },
+  "matrix": {
+    "view": [
+      "means"
+    ],
+    "seed": [
+      1,
+      2,
+      3
+    ]
+  },
+  "prepare": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; uv run python experiments/net2_ppo_setup.py \"$OUT/setup\" --net1 \"$N\" --models \"$IN/models\" --u 0.25",
+  "run": "S=\"$OUT/spec-r27-$VIEW-s$SEED.json\"; jq --arg view \"$VIEW\" --argjson seed \"$SEED\" '.algo = \"dagger\" | .student = {\"kind\": \"gate3\", \"threshold\": 0.5} | .view = $view | .share_k = 0.5 | .critic_warmup = 0 | .lr = 0.001 | .updates_per_iteration = 50 | .replay_iterations = 16 | .tau_s = 1 | .noise_sigma = 0.05 | .group = 1 | .links_per_iteration = 32 | .compete = 0.8 | .copies = [2, 4] | .seed = $seed | .iterations = 60 | .eval_every = 20' \"$OUT/setup/ppo-base.json\" > \"$S\"; uv run expliccit train ppo \"$S\" \"$OUT/ppo-r27-$VIEW-s$SEED\" --build \"$UML\" --workers \"$WORKERS\"",
+  "collect": "uv run python experiments/net2_ppo_report.py \"$OUT\" \"$OUT\"/ppo-*",
+  "timeout_minutes": 360
+}
