@@ -78,15 +78,32 @@ and ended about 0.05 below the same learner on net1 v6 when started from
 a clone of the rule
 ([`exp-net2-r20b-bb-ppo-171`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-r20b-bb-ppo-171)),
 so the split's lead was its start (old guest).
-On ccperf's experiments
-([`exp-ccperf-77`](https://github.com/Radonux/palaestra/releases/tag/exp-ccperf-77),
-[`exp-ccperf-v5-87`](https://github.com/Radonux/palaestra/releases/tag/exp-ccperf-v5-87))
-and ccBench's suites
-([`exp-ccbench-merged-92`](https://github.com/Radonux/palaestra/releases/tag/exp-ccbench-merged-92)),
-run unchanged on the old guest, the rules on net1 v5 kept the link full
-with a short queue alone, under random loss and on deep buffers, queued
-more than BBR on traces whose capacity jumps, and took less than half the
-link against a Cubic flow that started first.
+
+On ccBench's suites, run unchanged on links outside the train,
+validation and test sets (690 single-flow links of 12 to 192 Mbit/s, 5
+to 80 ms and buffers of 0.5 to 16 BDP, constant or stepping 2 or 4 times
+up or down; 125 runs beside a Cubic flow that starts 5 s earlier), and
+on three suites added to them
+([`exp-ccbench-net2-281`](https://github.com/Radonux/palaestra/releases/tag/exp-ccbench-net2-281)),
+the learned net2 (both arms below, means over training seeds) kept the
+link full with a short queue:
+
+| | Alone: utilization | Alone: queueing delay | 0.1% to 3% random loss: utilization | Share beside a Cubic flow that started first | Share beside BBRv1 or BBRv3 | Jain's index of 2, 4 or 8 copies |
+|---|---|---|---|---|---|---|
+| net2 on seven LCFs (three seeds) | 0.960 | 15.1 ms | 0.955 | 0.53 | 0.58 | 0.93 |
+| net2 on 32 LCFs (two seeds) | 0.960 | 12.4 ms | 0.956 | 0.50 | 0.51 | 0.89 |
+| BBRv3 | 0.922 | 42.2 ms | 0.682 | 0.39 | 0.38 | 0.99 |
+| BBRv1 | 0.936 | 35.3 ms | 0.926 | 0.50 | 0.54 | 0.97 |
+| Cubic | 0.946 | 153.9 ms | 0.214 | 0.37 | 0.44 | 0.93 |
+| Sage | 0.740 | 21.4 ms | 0.458 | 0.21 | 0.14 | 0.90 |
+| rule on net1 v10 (reference) | 0.961 | 12.5 ms | 0.954 | 0.55 | 0.54 | 0.94 |
+
+On the old guest, the rule on net1 v5 had taken 0.40 beside the earlier
+Cubic flow
+([`exp-ccbench-merged-92`](https://github.com/Radonux/palaestra/releases/tag/exp-ccbench-merged-92))
+and, on ccperf's experiments, queued more than BBR on traces whose
+capacity jumps
+([`exp-ccperf-v5-87`](https://github.com/Radonux/palaestra/releases/tag/exp-ccperf-v5-87)).
 
 The split's cost is inference
 ([`exp-overhead-206`](https://github.com/Radonux/palaestra/releases/tag/exp-overhead-206),
@@ -264,8 +281,12 @@ seed range, about 0.015.
   learner uses on these links, as the occlusion below suggests (the
   window target reads capacity and one-way delay, both among the
   seven).
-- This is one link family, one learner and recipe, and three training
-  seeds a side.
+- On ccBench's wider links ([above](#the-split-costs-little)) the two
+  also differ: the seven-LCF arm queued more alone (15.1 against 12.4 ms
+  at the same utilization) and took more beside BBR (0.58 against 0.51),
+  and its copies shared more evenly (Jain's index 0.93 against 0.89).
+- The test result is one link family, one learner and recipe, and three
+  training seeds a side.
 
 ### What the learned step reads
 

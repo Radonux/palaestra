@@ -35,6 +35,10 @@ the claims and defines every term used below.
    Trained on expliCCit's seven hand-picked LCFs instead of the 32
    chosen from data, it scored the same (+0.151 against +0.148,
    [`exp-dagger7-test-280`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger7-test-280)).
+   On ccBench's suites it used 0.96 of the link alone at 12 to 15 ms of
+   queueing delay, against 0.92 and 42 ms for BBRv3, and about half of
+   it beside a Cubic flow that started first
+   ([`exp-ccbench-net2-281`](https://github.com/Radonux/palaestra/releases/tag/exp-ccbench-net2-281)).
 2. net1 estimates most LCFs well on links it never saw (test R^2 0.88 to
    1.00 for five of expliCCit's seven), and its 90% intervals hold 89% to
    97% of the time; it is weak where the measurements say little (free
