@@ -1,0 +1,12 @@
+{
+ "title": "Where net1 v7's capacity belief is too high: held-out links of its 30 s training set",
+ "description": "Runs 282 and 283 traced net1's cost to the learned net2 to its capacity belief: taking capacity alone from the truth gained 0.106 at the lower level of stepping clean links and 0.014 elsewhere, and the cost did not fade after the step. This reads net1 v7 (net1-v6-s2 of exp-net1v6-229, model-truth-patch-src) on the validation and test links of exp-data-net1-broad-30s-218, which it never trained on (split by link, seed 1, as experiments/net1_train.py), every 12th step after the first 3 s, and compares its capacity belief with the truth (experiments/capacity_belief.py): on clean links by trace shape and level; at the lower level by time since the step down and whether the link was busy; and, for every condition, the overestimate log2(mean / truth) by net1's stated spread. Question: is the belief too high at the lower level only for a moment after the step (a lag), or for as long as the level lasts, and does a wide belief mean too high under every condition?",
+ "train": true,
+ "inputs": {
+  "t": "release:model-truth-patch-src",
+  "d30": "release:exp-data-net1-broad-30s-218"
+ },
+ "shards": 1,
+ "run": "(cd \"$IN/t\" && sha256sum -c SHA256SUMS) && uv run python experiments/capacity_belief.py \"$OUT\" \"$IN/t/net1-v7.pt\" \"$IN/d30\" --stride 12",
+ "timeout_minutes": 120
+}
