@@ -1,0 +1,18 @@
+{
+  "title": "Seven LCFs against 32 on the test links, once: DAgger net2 on net1 v7 (r29) beside net1 v10 (r27), 11 policies",
+  "description": "The one test-link run of round 29: round 27's online DAgger recipe unchanged on net1 v7 (exp-net1v6-229), which has net1 v10's data and training spec but only expliCCit's seven hand-picked heads, reading the means (exp-net2-r29-v7-278, r29-means), training seeds 1 to 3. Its iteration was chosen on the validation links at campaign seed 21 by its five-family mean over its training seeds (exp-dagger7-iter-val-279): iteration 39 (+0.152 over its three seeds, against +0.147 at 19 and +0.134 at 59; round 27 at iteration 59 scored +0.150 in the same run). Beside it, round 27 (net1 v10, 32 LCFs) at iteration 59 (seeds 1 and 3, its chosen iteration) and 39 (seeds 1 to 3, its three-seed check), as in exp-dagger32-test-275, so both arms are scored in one release. Reference lines only: the fixed rule at u = 0.25 on net1 v7 (rule-v7, round 29's teacher), net1 v10 (rule-v10) and net1 v9 (rule-v9, to tie this run to releases 258, 272 and 275, whose links and campaigns these are). The five families (training seed 13, others 31), the held-out competitors (BBRv3 and Westwood) and 2 and 4 copies. Question, with the criterion stated before the results: the two arms count as comparable if their seed-mean five-family scores differ by less than round 27's seed range (about 0.015). Nothing is chosen or tuned on these links.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "v7": "release:exp-net1v6-229",
+    "v10": "release:exp-net1v10-266",
+    "v9": "release:exp-net1v9-243",
+    "x": "release:model-dagger32-cands",
+    "y": "release:model-dagger7-cands"
+  },
+  "prepare": "N7=\"$IN/v7/$(cat \"$IN/v7/chosen.txt\")/net1.pt\"; N10=\"$IN/v10/$(cat \"$IN/v10/chosen.txt\")/net1.pt\"; N9=\"$IN/v9/$(cat \"$IN/v9/chosen.txt\")/net1.pt\"; uv run python experiments/rule_export.py \"$OUT/v7\" \"$N7\" --u 0.25; uv run python experiments/rule_export.py \"$OUT/v10\" \"$N10\" --u 0.25; uv run python experiments/rule_export.py \"$OUT/v9\" \"$N9\" --u 0.25; P=(--policy \"rule-v7=$OUT/v7/rule-u0.25.onnx\" --policy \"rule-v10=$OUT/v10/rule-u0.25.onnx\" --policy \"rule-v9=$OUT/v9/rule-u0.25.onnx\"); (cd \"$IN/x\" && sha256sum -c SHA256SUMS); (cd \"$IN/y\" && sha256sum -c SHA256SUMS); for f in \"$IN\"/y/ppo-r29-means-s*-i39.onnx \"$IN\"/x/ppo-r27-means-s*-i59.onnx \"$IN\"/x/ppo-r27-means-s*-i39.onnx; do n=\"$(basename \"$f\" .onnx)\"; n=\"${n#ppo-}\"; it=\"${n##*-}\"; b=\"${n%-*}\"; P+=(--policy \"${b%-*}-$it-${b##*-}=$f\"); done; [ \"${#P[@]}\" -eq 22 ]; experiments/rule_eval.sh \"$OUT\" test 13 31 bbr3 \"${P[@]}\"; uv run python experiments/heldout.py \"$OUT/spec-held-competitors-60\" --split test --family held-competitors --duration-ms 60000 --seed 31 --stock bbr3 \"${P[@]}\"; uv run expliccit campaign plan \"$OUT/spec-held-competitors-60/campaign.json\" \"$OUT/c-held-competitors-60\"; uv run python experiments/copies.py \"$OUT/copies\" --split test --duration-ms 30000 --seed 31 --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"; jq -s add \"$OUT/aliases.json\" \"$OUT/copies/aliases.json\" > \"$OUT/a.json\"; mv \"$OUT/a.json\" \"$OUT/aliases.json\"",
+  "shards": 60,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+  "collect": "uv run python experiments/rule_report.py \"$OUT\" --apart held-competitors-60 copies-30s && uv run python experiments/versus_rule.py \"$OUT\" rule-v10",
+  "timeout_minutes": 350
+}
