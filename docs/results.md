@@ -304,11 +304,55 @@ The rules are release 258's; release 272 reproduced them within 0.005.
 - This is one link family (8 to 100 Mbit/s, 5 to 50 ms, buffers of 0.25
   to 4 BDP) and six training seeds per arm.
 
+### With five composite heads added
+
+Rounds 27 and 28 ran the same recipe on estimators with five more heads
+(departure rate, available capacity, overload, BDP and the other flows'
+arrival rate: net1 v10 and neto1 v3, [training](training.md)), training
+seeds 1 to 3. On validation
+([`exp-dagger32-iter-val-273`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger32-iter-val-273)) net2 chose iteration 59, which only
+seeds 1 and 3 reached (seed 2 hit its time budget after 39), and neto2
+iteration 19 at both u; net2 led the better neto2 arm by 0.011, and by
+0.010 and 0.008 at campaign seeds 11 and 31
+([`exp-dagger32-confirm-val-274`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger32-confirm-val-274)), where the choice held. On the
+test links
+([`exp-dagger32-test-275`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger32-test-275), the links and campaigns of release 258;
+the rule on net1 v9 scored +0.135 there against +0.136):
+
+| Arm | Mean | Per training seed | Cubic first | Deep buffer | Held-out competitors | Copies |
+|---|---|---|---|---|---|---|
+| net2 on net1 v10 means, iteration 59 | +0.146 | +0.153, +0.139 (seeds 1, 3) | -0.085 | +0.241 | +0.127 | +0.007 |
+| net2 on net1 v10 means, iteration 39 (check) | +0.149 | +0.149, +0.145, +0.154 | -0.093 | +0.255 | +0.060 | -0.029 |
+| neto2 on neto1 v3, u = 0.25, iteration 19 | +0.141 | +0.131, +0.122, +0.170 | +0.022 | +0.207 | +0.056 | -0.311 |
+| neto2 on neto1 v3, u = 0.375, iteration 19 | +0.149 | +0.154, +0.151, +0.142 | +0.141 | +0.186 | +0.136 | -0.622 |
+| rule on net1 v10, u = 0.25 (reference) | +0.135 | | -0.113 | +0.259 | +0.115 | +0.060 |
+| rule on neto1 v3, u = 0.375 (reference) | +0.157 | | +0.124 | +0.218 | +0.154 | -0.893 |
+
+- The twins tied on the five-family mean: net2 +0.146 against +0.141
+  and +0.149. net2 led in the deep buffer, new and both training
+  families (by 0.016 to 0.088); neto2 led with Cubic first (by 0.107 and
+  0.226) and lost as copies.
+- The composites changed neto2, not net2. Against the 27-head twins'
+  same training seeds (release 258), net2 stayed at +0.146 while neto2
+  rose by 0.030 and 0.053, most of it with Cubic first (-0.061 to
+  +0.022, -0.112 to +0.141). Outside the mean it rose against the
+  held-out competitors and fell as copies (-0.052 to -0.311, -0.092 to
+  -0.622). The rule on the single-value estimator moved the same way
+  (+0.107 to +0.157 on the mean, -0.593 to -0.893 as copies), so the
+  change is in neto1 v3, and its students inherit it.
+- Neither 32-head twin reads the composites themselves (next section),
+  so the change comes from what training on five more heads did to
+  neto1's other estimates (an inference).
+- Whether net2 beats neto2 therefore depends on the pair of estimators:
+  with 27 heads net2 led by 0.048 and 0.061 over six training seeds; with
+  32 heads the two traded Cubic first against copies and tied on the
+  mean, over three training seeds (two at net2's chosen iteration).
+
 ### What the learned step reads
 
 [`exp-occlusion-twins-val-276`](https://github.com/Radonux/palaestra/releases/tag/exp-occlusion-twins-val-276)
-replayed each twin's chosen policies (every training seed, and the
-32-head twins below) over their own steps on the validation training
+replayed each twin's chosen policies (every training seed, 27 and 32
+heads) over their own steps on the validation training
 family, 24 episodes and about 11,000 to 13,000 decisions each, with one
 group of LCFs at a time held at its mean over those steps
 (experiments/occlusion.py). The replay set the same windows as the guest

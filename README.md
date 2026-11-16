@@ -31,6 +31,10 @@ the claims and defines every term used below.
    [`exp-dagger-twins-s456-test-272`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-s456-test-272)).
    It matched, not beat, the fixed rule on net1 v9 it learned from
    (+0.136).
+   With five composite heads added to both estimators the twins tied on
+   the test mean (+0.146 against +0.141 and +0.149): neto2 then pushed
+   harder beside a buffer-filling flow and lost as copies
+   ([`exp-dagger32-test-275`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger32-test-275)), so the gap depends on the estimators.
    Trained offline instead, the two made no reliable difference.
 2. net1 estimates most LCFs well on links it never saw (test R^2 0.88 to
    1.00 for five of expliCCit's seven), and its 90% intervals hold 89% to
