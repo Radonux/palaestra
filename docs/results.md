@@ -226,6 +226,47 @@ in release 275.
   while the rule did not move, so the spread is between trained
   policies.
 
+### Seven LCFs against 32
+
+Round 29 ran the same recipe on net1 v7, which has net1 v10's data and
+training spec but only expliCCit's seven hand-picked heads
+([`exp-net2-r29-v7-278`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-r29-v7-278)).
+On validation
+([`exp-dagger7-iter-val-279`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger7-iter-val-279),
+campaign seed 21) it chose iteration 39 (+0.152 over its three seeds,
+against +0.147 at 19 and +0.134 at 59), level with round 27 at its
+chosen iteration (+0.150 in the same run).
+[`exp-dagger7-test-280`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger7-test-280)
+then ran both once on the test links and campaigns of releases 258 and
+275, with no failed episodes. The criterion, stated before the run: the
+two count as comparable if their means differ by less than round 27's
+seed range, about 0.015.
+
+| Arm | Mean | Per training seed | Cubic first | Deep buffer | Held-out competitors | Copies |
+|---|---|---|---|---|---|---|
+| net1 v7 (seven LCFs) means, iteration 39 | +0.151 | +0.151, +0.156, +0.145 | -0.027 | +0.261 | +0.096 | +0.114 |
+| net1 v10 (32 LCFs) means, iteration 59 | +0.148 | +0.155, +0.140 (seeds 1, 3) | -0.083 | +0.242 | +0.111 | +0.025 |
+| net1 v10 (32 LCFs) means, iteration 39 (check) | +0.149 | +0.147, +0.147, +0.154 | -0.086 | +0.246 | +0.041 | +0.038 |
+| rule on net1 v7, u = 0.25 (reference) | +0.131 | | -0.096 | +0.262 | +0.076 | +0.093 |
+| rule on net1 v10, u = 0.25 (reference) | +0.135 | | -0.110 | +0.255 | +0.093 | +0.102 |
+
+- Comparable: the net2 on the seven LCFs scored within 0.003 of the one
+  on 32 (+0.151 against +0.148 and +0.149), inside the 32-LCF arm's seed
+  range. Round 27 reproduced its release 275 scores within 0.002.
+- The two traded families. The seven-LCF arm did better with Cubic first
+  on every seed (-0.003 to -0.051, against -0.044 to -0.123) and stayed
+  positive as copies on all three (+0.071 to +0.141, against -0.084 to
+  +0.133); the 32-LCF arm did better in the new and both training
+  families, by 0.015 to 0.023. Each policy's copies interval spans 0.4 to
+  0.5, so the copies gap is not established.
+- The 25 heads that net1 v10 adds, chosen from data, gave the learned
+  net2 nothing on the mean: expliCCit's seven already hold what this
+  learner uses on these links, as the occlusion below suggests (the
+  window target reads capacity and one-way delay, both among the
+  seven).
+- This is one link family, one learner and recipe, and three training
+  seeds a side.
+
 ### What the learned step reads
 
 [`exp-occlusion-twins-val-276`](https://github.com/Radonux/palaestra/releases/tag/exp-occlusion-twins-val-276)

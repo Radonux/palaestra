@@ -32,6 +32,9 @@ the claims and defines every term used below.
    its window follows net1's believed bandwidth-delay product, and its
    learned step reads little else
    ([`exp-occlusion-twins-val-276`](https://github.com/Radonux/palaestra/releases/tag/exp-occlusion-twins-val-276)).
+   Trained on expliCCit's seven hand-picked LCFs instead of the 32
+   chosen from data, it scored the same (+0.151 against +0.148,
+   [`exp-dagger7-test-280`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger7-test-280)).
 2. net1 estimates most LCFs well on links it never saw (test R^2 0.88 to
    1.00 for five of expliCCit's seven), and its 90% intervals hold 89% to
    97% of the time; it is weak where the measurements say little (free
