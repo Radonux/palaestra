@@ -103,6 +103,9 @@ net2, the iteration) are chosen on the validation links at campaign seed
 campaign seeds 11 and 31, and then run once on the test links (campaign
 seeds 13 and 31, plus the held-out competitors and copies):
 [`exp-dagger-twins-test-258`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-test-258).
+Training seeds 4 to 6 then ran at the chosen settings on the same test
+campaigns, with nothing re-chosen:
+[`exp-dagger-twins-s456-test-272`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-s456-test-272).
 
 ## Arms
 
@@ -132,7 +135,7 @@ fault in net1 is repaired by retraining net1 alone.
 
 | | Verdict | Evidence |
 |---|---|---|
-| net2 against neto2 | With the learner, recipe, data and 27 LCFs held fixed (online DAgger), net2 on the distributional net1 v9 beat neto2 on expliCCit's single-value net1 on the test links: +0.146 against +0.111 and +0.096 minus BBRv3, ahead in every family but Cubic first, against held-out competitors and as copies; every net2 training seed above every neto2 seed at neto2's validation-preferred u. Offline (TD3+BC) the estimator made no reliable difference on validation | [results](results.md#learned-net2-against-learned-neto2) |
+| net2 against neto2 | With the learner, recipe, data and 27 LCFs held fixed (online DAgger), net2 on the distributional net1 v9 beat neto2 on expliCCit's single-value net1 on the test links over six training seeds a side: +0.136 against +0.088 and +0.074 minus BBRv3 (permutation test on seed means p = 0.043 and 0.009), ahead in every family, against held-out competitors and as copies. net2 matched the rule on its estimator (+0.136); neto2 fell below the rule on its own. Offline (TD3+BC) the estimator made no reliable difference on validation | [results](results.md#learned-net2-against-learned-neto2) |
 | Stated uncertainty | No measurable value to net2: reading net1's distributions did no better than reading their means, online (+0.119 against +0.143) or offline (mixed by estimator) | [results](results.md#stated-uncertainty-has-not-helped-net2-yet) |
 | H2 | net1 v9 on the test links: R^2 0.88 to 1.00 for five of expliCCit's seven LCFs, 0.80 for capacity and 0.29 for free buffer | [`exp-net1v9-243`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v9-243) |
 | H3 | Within the training ranges, 90% intervals hold 89% to 97% of the time for every LCF on the test links; outside them coverage falls (to 0.26 for one-way delay with wider RTTs) | [`exp-net1v9-243`](https://github.com/Radonux/palaestra/releases/tag/exp-net1v9-243) |

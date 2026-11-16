@@ -22,10 +22,15 @@ the claims and defines every term used below.
 
 1. With the learner, its recipe, the data and the 27 LCFs held fixed,
    net2 on our net1 (a distribution per LCF) beat neto2 on expliCCit's
-   kind of net1 (one value per LCF) on the held-out test links: +0.146
-   against +0.111 and +0.096 in log utility over BBRv3, over three
-   training seeds, and it alone stayed ahead as copies
-   ([`exp-dagger-twins-test-258`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-test-258)).
+   kind of net1 (one value per LCF) on the held-out test links: +0.136
+   against +0.088 and +0.074 in log utility over BBRv3, over six
+   training seeds a side (a net2 seed above a neto2 seed in 30 and 34 of
+   36 pairs), and it kept its lead as copies (+0.177 against +0.018 and
+   -0.005)
+   ([`exp-dagger-twins-test-258`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-test-258),
+   [`exp-dagger-twins-s456-test-272`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-s456-test-272)).
+   It matched, not beat, the fixed rule on net1 v9 it learned from
+   (+0.136).
    Trained offline instead, the two made no reliable difference.
 2. net1 estimates most LCFs well on links it never saw (test R^2 0.88 to
    1.00 for five of expliCCit's seven), and its 90% intervals hold 89% to

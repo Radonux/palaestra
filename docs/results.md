@@ -64,8 +64,8 @@ weakest of the other heads:
 On the test links
 ([`exp-dagger-twins-test-258`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-test-258)),
 the simplest net2, the fixed rule on net1 v9 (u = 0.25), scored +0.136
-over BBRv3 on the five-family mean, and the learned net2 on net1 v9
-+0.146 ([Learned net2 against learned
+over BBRv3 on the five-family mean, and the learned net2 on net1 v9 the
+same over six training seeds ([Learned net2 against learned
 neto2](#learned-net2-against-learned-neto2)).
 
 On the old guest, the fixed rule on net1 v5 beat every Linux controller
@@ -251,43 +251,58 @@ campaign seed:
 net2 led the better neto2 arm by 0.020 to 0.021 at each campaign seed.
 Between training seeds the ranges still overlap (net2 +0.117 to +0.169,
 neto2 at u = 0.375 +0.124 to +0.138): the variation that matters is
-between trained policies, not between episode draws.
+between trained policies, not between episode draws. Training seeds 4
+to 6, at the same iterations and campaign seed 21, scored +0.135 (net2),
++0.058 (neto2, u = 0.25) and +0.101 (neto2, u = 0.375)
+([`exp-dagger-twins-s456-val-271`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-s456-val-271)).
 
 ### On the test links
 
 [`exp-dagger-twins-test-258`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-test-258)
-ran the same arms once on the 27 test links, with nothing chosen there
-and no failed episodes. The held-out competitors (a BBRv3 and a Westwood
-flow) and copies are outside the mean:
+ran the same arms once on the 27 test links (training seeds 1 to 3),
+with nothing chosen there, and
+[`exp-dagger-twins-s456-test-272`](https://github.com/Radonux/palaestra/releases/tag/exp-dagger-twins-s456-test-272)
+ran training seeds 4 to 6 at the same iterations on the same links and
+campaigns, so the per-seed scores pool. Neither had a failed episode.
+The held-out competitors (a BBRv3 and a Westwood flow) and copies are
+outside the mean; every column is the mean over six training seeds:
 
-| Arm | Mean | Per training seed | Cubic first | Deep buffer | Held-out competitors | Copies |
+| Arm | Mean | Per training seed (1 to 3; 4 to 6) | Cubic first | Deep buffer | Held-out competitors | Copies |
 |---|---|---|---|---|---|---|
-| net2 on net1 v9 means, iteration 19 | +0.146 | +0.161, +0.159, +0.118 | -0.075 | +0.264 | +0.062 | +0.104 |
-| neto2 on neto1 v2, u = 0.25, iteration 39 | +0.111 | +0.094, +0.132, +0.106 | -0.061 | +0.189 | +0.025 | -0.052 |
-| neto2 on neto1 v2, u = 0.375, iteration 59 | +0.096 | +0.102, +0.083, +0.102 | -0.112 | +0.226 | -0.013 | -0.092 |
+| net2 on net1 v9 means, iteration 19 | +0.136 | +0.161, +0.159, +0.118; +0.125, +0.157, +0.094 | -0.120 | +0.265 | -0.017 | +0.177 |
+| neto2 on neto1 v2, u = 0.25, iteration 39 | +0.088 | +0.094, +0.132, +0.106; +0.048, +0.042, +0.106 | -0.156 | +0.193 | -0.050 | +0.018 |
+| neto2 on neto1 v2, u = 0.375, iteration 59 | +0.074 | +0.102, +0.083, +0.102; +0.043, +0.041, +0.076 | -0.181 | +0.221 | -0.072 | -0.005 |
 | rule on net1 v9, u = 0.25 (reference) | +0.136 | | -0.101 | +0.271 | +0.093 | +0.054 |
 | rule on neto1 v2, u = 0.375 (reference) | +0.107 | | -0.062 | +0.235 | +0.084 | -0.593 |
 
+The rules are release 258's; release 272 reproduced them within 0.005.
+
 - With the learner, its recipe, the data and the 27 LCFs held fixed, net2
-  on the distributional net1 beat neto2 on the single-value net1 by 0.050
-  (neto2's validation-preferred u) and by 0.035 (net2's own u), against
-  0.021 and 0.028 on validation.
-- Every net2 training seed scored above every neto2 seed at u = 0.375. At
-  u = 0.25 one neto2 seed (+0.132) scored above net2's weakest (+0.118),
-  so that gap is suggestive with three seeds a side.
-- net2 led in the deep buffer, new and both training families, against
-  the held-out competitors and as copies, and trailed neto2 at u = 0.25
-  only with Cubic first.
-- net2 was the only learned arm above the rule on its own estimator. It
-  was below that rule against the held-out competitors, mostly through
-  one training seed (-0.012 there, -0.154 with Cubic first).
+  on the distributional net1 beat neto2 on the single-value net1 by 0.061
+  (neto2's validation-preferred u) and by 0.048 (net2's own u), against
+  0.021 and 0.028 on validation. A net2 seed scored above a neto2 seed in
+  34 of 36 pairs at u = 0.375 and in 30 of 36 at u = 0.25 (one tie); an
+  exact permutation test on the 12 seed means gives p = 0.009 and 0.043
+  (two-sided).
+- Seeds 4 to 6 scored lower than seeds 1 to 3 on both sides (net2 +0.125
+  against +0.146, neto2 +0.065 and +0.053 against +0.111 and +0.096), and
+  the gap grew (0.072 and 0.060 against 0.050 and 0.035). The rules
+  scored the same in both runs, so the spread is between trained
+  policies.
+- On the six-seed mean net2 led in all five families, against the
+  held-out competitors and as copies.
+- net2 matched the rule on its own estimator (+0.136 each), while both
+  neto2 arms fell below the rule on theirs (+0.107 at u = 0.375), by
+  0.019 and 0.033. Against the held-out competitors
+  every learned arm fell below both rules; for net2 mostly through
+  training seed 6 (-0.290 there; +0.038 over the other five seeds).
 - net2 read net1 v9's means; on validation the full distributions did no
   better, so the gain comes from the estimator, not from handing net2 its
   uncertainty. Part of it is the rule: at a shared u the rule on neto1 v2
   was the weaker teacher, and with its own u its students still fell
   short.
 - This is one link family (8 to 100 Mbit/s, 5 to 50 ms, buffers of 0.25
-  to 4 BDP) and three training seeds per arm.
+  to 4 BDP) and six training seeds per arm.
 
 ## Stated uncertainty has not helped net2 yet
 
