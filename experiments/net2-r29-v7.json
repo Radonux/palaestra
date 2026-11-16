@@ -1,0 +1,24 @@
+{
+  "title": "Round 29: round 27's DAgger net2 on net1 v7 (expliCCit's seven LCFs) reading the means, three seeds",
+  "description": "Round 27's recipe unchanged (experiments/net2-r27-v10.json: round 18's DAgger gate3 students, teacher gain 0.5, the rule at u = 0.25, 60 iterations, validation every 20, seeds 1 to 3) on net1 v7 (release exp-net1v6-229, chosen run net1-v6-s2: the same data, spec, width and dropout as net1 v10, with only expliCCit's seven heads), reading the means. It asks whether the 32 heads chosen from data (net1 v10) give a learned net2 that does as well as one on the seven hand-picked LCFs. The rules the students mix and the window target read only LCFs among the seven (busy fraction, receive rate, capacity, one-way delay), so the recipe needs no change. Expectation written before the results: a tie, since the 32-head students' u moved by at most 0.05 when every LCF was held at its mean (release exp-occlusion-twins-val-276) and their window target reads only capacity and one-way delay.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1v6-229",
+    "models": "release:model-net1v3"
+  },
+  "matrix": {
+    "view": [
+      "means"
+    ],
+    "seed": [
+      1,
+      2,
+      3
+    ]
+  },
+  "prepare": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; uv run python experiments/net2_ppo_setup.py \"$OUT/setup\" --net1 \"$N\" --models \"$IN/models\" --u 0.25",
+  "run": "S=\"$OUT/spec-r29-$VIEW-s$SEED.json\"; jq --arg view \"$VIEW\" --argjson seed \"$SEED\" '.algo = \"dagger\" | .student = {\"kind\": \"gate3\", \"threshold\": 0.5} | .view = $view | .share_k = 0.5 | .critic_warmup = 0 | .lr = 0.001 | .updates_per_iteration = 50 | .replay_iterations = 16 | .tau_s = 1 | .noise_sigma = 0.05 | .group = 1 | .links_per_iteration = 32 | .compete = 0.8 | .copies = [2, 4] | .seed = $seed | .iterations = 60 | .eval_every = 20' \"$OUT/setup/ppo-base.json\" > \"$S\"; uv run expliccit train ppo \"$S\" \"$OUT/ppo-r29-$VIEW-s$SEED\" --build \"$UML\" --workers \"$WORKERS\"",
+  "collect": "uv run python experiments/net2_ppo_report.py \"$OUT\" \"$OUT\"/ppo-*",
+  "timeout_minutes": 360
+}
