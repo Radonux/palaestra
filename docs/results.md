@@ -304,6 +304,34 @@ The rules are release 258's; release 272 reproduced them within 0.005.
 - This is one link family (8 to 100 Mbit/s, 5 to 50 ms, buffers of 0.25
   to 4 BDP) and six training seeds per arm.
 
+### What the learned step reads
+
+[`exp-occlusion-twins-val-276`](https://github.com/Radonux/palaestra/releases/tag/exp-occlusion-twins-val-276)
+replayed each twin's chosen policies (every training seed, and the
+32-head twins below) over their own steps on the validation training
+family, 24 episodes and about 11,000 to 13,000 decisions each, with one
+group of LCFs at a time held at its mean over those steps
+(experiments/occlusion.py). The replay set the same windows as the guest
+(median gap 0.002 to 0.005 in log2).
+
+- A twin's window is u plus the log2 of the BDP net1 believes in
+  (capacity times one-way delay). Holding expliCCit's seven LCFs at their
+  mean moved the window by 0.87 to 1.39 in log2, about a factor of 2,
+  through that target, but moved u itself by only 0.007 to 0.092.
+- u stays near its teacher's constant: 0.25 to 0.29 for net2 (rule at
+  0.25), 0.21 to 0.27 and 0.30 to 0.40 for neto2 (rules at 0.25 and
+  0.375). Holding every LCF at its mean moved u by 0.02 to 0.05 for net2
+  and 0.01 to 0.11 for neto2; what moves it most is capacity, receive
+  rate, buffer fill and active flows.
+- The five composite heads of the 32-head estimators moved u by at most
+  0.006 for net2 on net1 v10 and 0.042 for neto2 on neto1 v3: neither
+  32-head twin leans on them.
+- The decision therefore rests on net1's estimate of the BDP, with a
+  small learned correction, which suggests that the gap between the
+  twins comes mostly from the estimator rather than from what net2
+  learned on top of it (an inference from these numbers, not a separate
+  test).
+
 ## Stated uncertainty has not helped net2 yet
 
 On the validation links, net2 did no better on net1's full distributions
