@@ -56,6 +56,9 @@ from expliccit_env.train.spec import Point as PointOutput
 
 type F32 = npt.NDArray[np.float32]
 _EVAL_BATCH: Final = 65_536
+# Rows per forward pass when net1's output is kept: a batch's temporaries
+# through an ensemble of distribution heads are several times its output.
+_BELIEF_BATCH: Final = 8192
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,13 +77,16 @@ class Net1:
 
     @torch.no_grad()
     def beliefs(self, obs: F32) -> F32:
-        """net1's output z, for each row."""
+        """net1's output z, for each row, written batch by batch into one
+        array: concatenating the batches would hold the output twice, 5 GB
+        for 32 distributions on 621,000 validation rows, which a hosted
+        runner does not have to spare."""
         self.net.eval()
-        out = [
-            self.net(self.scaler(torch.from_numpy(obs[i : i + _EVAL_BATCH])))
-            for i in range(0, obs.shape[0], _EVAL_BATCH)
-        ]
-        return torch.cat(out).numpy() if out else np.zeros((0, self.width), np.float32)
+        out = np.empty((obs.shape[0], self.width), np.float32)
+        for i in range(0, obs.shape[0], _BELIEF_BATCH):
+            z = self.net(self.scaler(torch.from_numpy(obs[i : i + _BELIEF_BATCH])))
+            out[i : i + _BELIEF_BATCH] = z.numpy()
+        return out
 
     @property
     def width(self) -> int:
