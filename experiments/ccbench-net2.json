@@ -1,0 +1,17 @@
+{
+  "title": "ccBench and three more suites: learned net2 on seven and on 32 LCFs, beside the rule, Sage and four stock controllers",
+  "description": "ccBench's single-flow and friendliness suites (github.com/Soheil-ab/ccBench at 49b5ada) and the three suites experiments/ccbench.py adds (random loss, 2, 4 or 8 copies, BBRv1 or BBRv3 as the competitor), as in exp-ccbench-merged-92, which ran on the guest before the cross-flow fix (312d15a) with only rules as net2. Here on the current guest: the learned DAgger net2 on net1 v7's seven LCFs at iteration 39 (round 29, model-dagger7-cands, every training seed: net2-v7-sN) and on net1 v10's 32 LCFs at iteration 59 (round 27, model-dagger32-cands, seeds 1 and 3: net2-v10-sN), each the iteration chosen on validation (exp-dagger7-iter-val-279, exp-dagger32-iter-val-273); the fixed rule on net1 v10 at u = 0.25 (rule-v10, their teacher, a reference line); Sage's released policy (exp-sage-model-24); and Cubic, BBRv1, BBRv3 and Vegas. The leagues are games between the controllers of this run, so they differ from release 92's, which had every kernel controller; the absolute means (utilization, queueing delay, share against the competitor, Jain's index of copies) compare across runs. The links are not the train, validation or test links, and nothing is chosen on them.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "v10": "release:exp-net1v10-266",
+    "sage": "release:exp-sage-model-24",
+    "x": "release:model-dagger32-cands",
+    "y": "release:model-dagger7-cands"
+  },
+  "prepare": "N10=\"$IN/v10/$(cat \"$IN/v10/chosen.txt\")/net1.pt\"; SAGE=\"$IN/sage/sage/sage.onnx\"; echo \"fc0d6f1da45e4948ee3d96784642793954ed5e52adc1eddd0c9883d5d8fe2f9e  $SAGE\" | sha256sum -c; (cd \"$IN/x\" && sha256sum -c SHA256SUMS); (cd \"$IN/y\" && sha256sum -c SHA256SUMS); uv run python experiments/rule_export.py \"$OUT/v10\" \"$N10\" --u 0.25; P=(--policy \"sage=$SAGE\" --policy \"rule-v10=$OUT/v10/rule-u0.25.onnx\"); for s in 1 2 3; do P+=(--policy \"net2-v7-s$s=$IN/y/ppo-r29-means-s$s-i39.onnx\"); done; for s in 1 3; do P+=(--policy \"net2-v10-s$s=$IN/x/ppo-r27-means-s$s-i59.onnx\"); done; [ \"${#P[@]}\" -eq 14 ]; uv run python experiments/ccbench.py \"$OUT\" --suite solo friendly loss copies competitors --seed 7 --stock cubic,bbr,bbr3,vegas \"${P[@]}\"",
+  "shards": 60,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables flow_seconds; done",
+  "collect": "uv run python experiments/ccbench_report.py \"$OUT\"",
+  "timeout_minutes": 360
+}
