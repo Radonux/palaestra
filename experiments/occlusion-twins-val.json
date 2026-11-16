@@ -1,0 +1,16 @@
+{
+  "title": "Which LCFs the DAgger twins' decisions rest on: occlusion on the validation training family, 20 policies",
+  "description": "Replays each learned twin at its chosen iteration (every training seed) over the steps it recorded on the validation links' training family at 20 s, campaign seed 21 (the same episodes its iteration was chosen on), with one group of LCFs at a time held at its mean over those steps (experiments/occlusion.py), and reports how far each group moves the decision: the learned step u away from the believed BDP and the window it sets. Policies: the 27-head twins (r25-means-i19, net2 on net1 v9's means; r26-u0.25-i39 and r26-u0.375-i59, neto2 on neto1 v2) and the 32-head twins at the iterations exp-dagger32-iter-val-273 chose (r27-means-i59, seeds 1 and 3, and r27-means-i39, net2 on net1 v10's means; r28-u0.25-i19 and r28-u0.375-i19, neto2 on neto1 v3), whose estimators add five composite heads (departure rate, available capacity, overload, BDP and the other flows' arrival rate). Groups: the five composites, expliCCit's seven LCFs, the rest, all, and each LCF alone. Weights from model-occlusion-twins and model-dagger32-cands. Steps keep their observations (no experiments/slim_steps.py). This measures what the policies read, not how well they do; validation links only.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "o": "release:model-occlusion-twins",
+    "x": "release:model-dagger32-cands"
+  },
+  "prepare": "for d in o x; do (cd \"$IN/$d\" && sha256sum -c SHA256SUMS); done; P=(); for f in \"$IN\"/o/ppo-r2[56]-*.onnx \"$IN\"/x/ppo-r27-means-s*-i59.onnx \"$IN\"/x/ppo-r27-means-s*-i39.onnx \"$IN\"/x/ppo-r28-u0.25-s*-i19.onnx \"$IN\"/x/ppo-r28-u0.375-s*-i19.onnx; do n=\"$(basename \"$f\" .onnx)\"; n=\"${n#ppo-}\"; it=\"${n##*-}\"; b=\"${n%-*}\"; P+=(--policy \"${b%-*}-$it-${b##*-}=$f\"); done; [ \"${#P[@]}\" -eq 40 ]; RULE_EVAL_FAMILIES=training:20 experiments/rule_eval.sh \"$OUT\" val 21 21 bbr3 \"${P[@]}\"",
+  "shards": 22,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done",
+  "collect": "A=(); for name in $(jq -r '.[]' \"$OUT/aliases.json\"); do arm=\"${name%-i*}\"; s=\"${name##*-}\"; case \"$arm\" in r25-*) n=net1-v9.pt;; r26-*) n=neto1-v2.pt;; r27-*) n=net1-v10.pt;; r28-*) n=neto1-v3.pt;; esac; A+=(--policy \"$name=$IN/o/$arm-$s.spec.json,$IN/o/$n,$IN/o/$name.actor.pt\"); done; while IFS= read -r c; do A+=(--controllers \"$c\"); done < <(jq -r 'to_entries[] | \"\\(.value)=\\(.key)\"' \"$OUT/aliases.json\"); uv run python experiments/occlusion.py \"$OUT/occlusion\" --data \"$OUT/c-training-20\" --max-episodes 24 \"${A[@]}\" && cp \"$OUT/occlusion/occlusion.md\" \"$OUT/summary.md\"",
+  "collect_inputs": true,
+  "timeout_minutes": 350
+}

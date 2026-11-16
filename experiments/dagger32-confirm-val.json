@@ -1,0 +1,16 @@
+{
+  "title": "32-head DAgger twins confirmed at campaign seeds 11 and 31: chosen net2 and neto2 arms, 13 policies",
+  "description": "exp-dagger32-iter-val-273 chose each 32-head DAgger arm's iteration on the validation links at campaign seed 21, by the mean over its training seeds on the five families: r27-means after iteration 59 (+0.160 over its seeds 1 and 3, the only ones that reached it; seed 2 hit its training time budget after iteration 39), r28-u0.25 after iteration 19 (+0.149) and r28-u0.375 after iteration 19 (+0.121). r27-means after iteration 39 (+0.149 over all three seeds, +0.155 over seeds 1 and 3) also runs, as a three-seed check on the two-seed choice; it is not the chosen arm. r27-means is round 27's net2 on net1 v10 reading the means (exp-net2-r27-v10-270); r28-u0.25 and r28-u0.375 are round 28's neto2 on neto1 v3 with the rule at that u as teacher (exp-neto2-r28-v3-267). This run confirms those choices on fresh validation episodes at campaign seeds 11 and 31, every training seed of each chosen arm beside BBRv3 and, as reference lines only, the rule on net1 v10 at u = 0.25 (rule-v10) and on neto1 v3 at u = 0.375 (rule-v3), on the five validation families and as 2 and 4 copies. The links and campaigns are those of exp-dagger-twins-confirm-val-257, so the 27-head twins' scores there sit beside these. Nothing is chosen here; the test run follows with the same arms. Validation links only.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "v10": "release:exp-net1v10-266",
+    "v3": "release:exp-neto1-v3-264",
+    "x": "release:model-dagger32-cands"
+  },
+  "prepare": "N10=\"$IN/v10/$(cat \"$IN/v10/chosen.txt\")/net1.pt\"; N3=\"$IN/v3/$(cat \"$IN/v3/chosen.txt\")/net1.pt\"; uv run python experiments/rule_export.py \"$OUT/v10\" \"$N10\" --u 0.25; uv run python experiments/rule_export.py \"$OUT/v3\" \"$N3\" --u 0.375; P=(--policy \"rule-v10=$OUT/v10/rule-u0.25.onnx\" --policy \"rule-v3=$OUT/v3/rule-u0.375.onnx\"); (cd \"$IN/x\" && sha256sum -c SHA256SUMS); for f in \"$IN\"/x/ppo-r27-means-s*-i59.onnx \"$IN\"/x/ppo-r27-means-s*-i39.onnx \"$IN\"/x/ppo-r28-u0.25-s*-i19.onnx \"$IN\"/x/ppo-r28-u0.375-s*-i19.onnx; do n=\"$(basename \"$f\" .onnx)\"; n=\"${n#ppo-}\"; it=\"${n##*-}\"; b=\"${n%-*}\"; P+=(--policy \"${b%-*}-$it-${b##*-}=$f\"); done; [ \"${#P[@]}\" -eq 26 ]; for s in 11 31; do mkdir -p \"$OUT/s$s\"; experiments/rule_eval.sh \"$OUT/s$s\" val $s $s bbr3 \"${P[@]}\"; uv run python experiments/copies.py \"$OUT/s$s/copies\" --split val --duration-ms 30000 --seed $s --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/s$s/copies/c-copies-30s\" \"$OUT/s$s/\"; jq -s add \"$OUT/s$s/aliases.json\" \"$OUT/s$s/copies/aliases.json\" > \"$OUT/s$s/a.json\"; mv \"$OUT/s$s/a.json\" \"$OUT/s$s/aliases.json\"; done",
+  "shards": 112,
+  "run": "for c in \"$OUT\"/s*/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+  "collect": "for s in 11 31; do uv run python experiments/rule_report.py \"$OUT/s$s\" --apart copies-30s --best r27-means-i59 r27-means-i39 r28-u0.25-i19 r28-u0.375-i19; done; { for s in 11 31; do echo \"# Campaign seed $s\"; cat \"$OUT/s$s/summary.md\"; echo; done; } > \"$OUT/summary.md\"",
+  "timeout_minutes": 350
+}
