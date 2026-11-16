@@ -96,6 +96,16 @@ the seven LCFs (three training seeds) and from +0.157 to +0.186 on the
   links, and as much more than 1 s after a change as within it. So net1's
   costly error is a capacity belief that stays too high at the lower
   level, not a lag after each step (net2 v7, release 283).
+- Offline, on links of its training set that net1 v7 never trained on,
+  its capacity mean at the lower level of a stepping clean link was 1.08
+  times the truth (its median 1.05) and above 1.1 times in 45% of rows,
+  as often 5 to 10 s after the step down as within 0.5 s, and as often
+  while the link was busy. Alone on the link (clean or with random loss),
+  the overestimate grows with net1's stated spread, from +0.04 in log2
+  below a spread of 0.15 to +0.27 at 0.4 to 0.5; beside a TCP flow it
+  stays within 0.02 up to a spread of 0.7. A wide belief means "too high"
+  only when the flow is alone
+  ([`exp-capacity-belief-v7-286`](https://github.com/Radonux/palaestra/releases/tag/exp-capacity-belief-v7-286)).
 - The learned step's lead over the rule was about the same on the truth
   (+0.012 to +0.014) as on net1 (+0.016 to +0.019), so it does not make
   up for net1's errors.
