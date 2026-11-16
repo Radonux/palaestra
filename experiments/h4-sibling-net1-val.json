@@ -1,0 +1,15 @@
+{
+ "title": "No leakage (H4): the learned net2 on sibling net1s, unchanged, on validation",
+ "description": "Each learned DAgger net2 on net1 v7 (round 29, iteration 39, training seeds 1 to 3; model-truth-patch-src) was trained on net1 v7, which is training seed 2 of exp-net1v6-229 (net1-v6-s2). Seeds 0 and 1 of the same run have the same LCFs, bins and input scaler, so their outputs mean the same; they differ in their errors. Each net2 runs unchanged on its own net1 (net2-v7-sN) and on each sibling (net2-v7-n0-sN, net2-v7-n1-sN; experiments/gate_ensemble_export.py --net1), beside the fixed rule at u = 0.25 on each of the three (rule-n0, rule-n1, rule-n2). Question, stated before the run: does the learned net2 act on net1's stated beliefs alone, or has it learned the quirks of the one net1 it was trained on (H4)? Expected, if it acts on the beliefs alone: on a sibling it moves by about as much as the rule moves between the same two net1s, within the spread over training seeds. A drop well beyond the rule's means leakage. Validation links at campaign seed 21 (the five families) and 2 and 4 copies. Nothing is chosen.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "t": "release:model-truth-patch-src",
+  "n": "release:exp-net1v6-229"
+ },
+ "prepare": "(cd \"$IN/t\" && sha256sum -c SHA256SUMS); mkdir -p \"$OUT/n\"; cat \"$IN/n\"/net1v6.tar.zst.part-* | zstd -dc | tar -x -C \"$OUT/n\" ./net1-v6-s0/net1.pt ./net1-v6-s1/net1.pt; declare -A N=([n0]=\"$OUT/n/net1-v6-s0/net1.pt\" [n1]=\"$OUT/n/net1-v6-s1/net1.pt\" [n2]=\"$IN/t/net1-v7.pt\"); P=(); for k in n0 n1 n2; do uv run python experiments/rule_export.py \"$OUT/rule-$k\" \"${N[$k]}\" --u 0.25; P+=(--policy \"rule-$k=$OUT/rule-$k/rule-u0.25.onnx\"); done; for s in s1 s2 s3; do d=\"$OUT/runs/r29-$s\"; mkdir -p \"$d\"; cp \"$IN/t/net1-v7.pt\" \"$d/net1.pt\"; cp \"$IN/t/r29-$s.actor.pt\" \"$d/actor.pt\"; cp \"$IN/t/r29-$s.ppo_spec.json\" \"$d/ppo_spec.json\"; uv run python experiments/gate_ensemble_export.py \"$OUT/p\" \"net2-v7-$s\" \"$d\" --t 0.5; P+=(--policy \"net2-v7-$s=$OUT/p/net2-v7-$s.onnx\"); for k in n0 n1; do uv run python experiments/gate_ensemble_export.py \"$OUT/p\" \"net2-v7-$k-$s\" \"$d\" --t 0.5 --net1 \"${N[$k]}\"; P+=(--policy \"net2-v7-$k-$s=$OUT/p/net2-v7-$k-$s.onnx\"); done; done; [ \"${#P[@]}\" -eq 24 ]; experiments/rule_eval.sh \"$OUT\" val 21 21 bbr3 \"${P[@]}\"; uv run python experiments/copies.py \"$OUT/copies\" --split val --duration-ms 30000 --seed 21 --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"; jq -s add \"$OUT/aliases.json\" \"$OUT/copies/aliases.json\" > \"$OUT/a.json\"; mv \"$OUT/a.json\" \"$OUT/aliases.json\"",
+ "shards": 60,
+ "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+ "collect": "uv run python experiments/rule_report.py \"$OUT\" --apart copies-30s && for s in s1 s2 s3; do uv run python experiments/versus_rule.py \"$OUT\" \"net2-v7-$s\"; done && uv run python experiments/versus_rule.py \"$OUT\" rule-n2",
+ "timeout_minutes": 350
+}
