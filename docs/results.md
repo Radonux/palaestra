@@ -93,14 +93,19 @@ the seven LCFs (three training seeds) and from +0.157 to +0.186 on the
   lower level. After the first 3 s, capacity from the truth gained 0.106
   there (loss term 0.053 against 0.008; median window 1.29 against 1.19
   times the true BDP), 0.014 at the higher level and 0.014 on constant
-  links, and as much more than 1 s after a change as within it. So net1's
-  costly error is a capacity belief that stays too high at the lower
-  level, not a lag after each step (net2 v7, release 283).
+  links. Half of the gain at the lower level came in the first second
+  after the step down (0.37 in the first 0.5 s, nearly all of it drops)
+  and half later (0.06 to 0.10 from 0.5 to 5 s, 0.03 after), so net1's
+  capacity belief lags each step down and then stays too high (net2 v7,
+  release 283, steps timed by their trace time).
 - Offline, on links of its training set that net1 v7 never trained on,
   its capacity mean at the lower level of a stepping clean link was 1.08
-  times the truth (its median 1.05) and above 1.1 times in 45% of rows,
-  as often 5 to 10 s after the step down as within 0.5 s, and as often
-  while the link was busy. Alone on the link (clean or with random loss),
+  times the truth (its median 1.05) and above 1.1 times in 45% of rows:
+  in 65% within 0.5 s of the step down and in about half from 0.5 to 10 s
+  after it, busy or not
+  ([`exp-net1-v7-less-udp-290`](https://github.com/Radonux/palaestra/releases/tag/exp-net1-v7-less-udp-290);
+  release 286 timed steps at 10 ms each, which runs late, since a step
+  lasts until an ACK arrives). Alone on the link (clean or with random loss),
   the overestimate grows with net1's stated spread, from +0.04 in log2
   below a spread of 0.15 to +0.27 at 0.4 to 0.5; beside a TCP flow it
   stays within 0.02 up to a spread of 0.7. A wide belief means "too high"
