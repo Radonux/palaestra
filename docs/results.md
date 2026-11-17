@@ -539,10 +539,10 @@ every table in the report,
 
 ## Alarms and repair
 
-On the old guest, alarms computed without ground truth caught the wrong
-beliefs that the flow's own measurements contradict and missed the ones
-the measurements are consistent with, and a capacity fault was repaired
-by retraining net1 alone, with net2 unchanged. On the current guest a
+Alarms computed without ground truth catch the wrong beliefs that the
+flow's own measurements contradict and miss the ones the measurements
+are consistent with. On the old guest a capacity fault was repaired by
+retraining net1 alone, with net2 unchanged. On the current guest a
 learned net2 trained on a net1 that never saw another TCP flow did as
 well run unchanged on net1 v7 as one trained there, but retraining
 net1 v7 on a new capacity label did not fix its own capacity error.
@@ -550,17 +550,30 @@ net1 v7 on a new capacity label did not fix its own capacity error.
 - Each alarm is a statistic of one step from net1's beliefs and the
   sender's own measurements (physical invariants among the beliefs, each
   belief's entropy, and checks against the delivery rate and min RTT
-  measured later; `experiments/r2_alarms.py`), with thresholds that 8% to
-  17% of right episodes set off per LCF. They caught 97% to 100% of
-  injected faults in queueing delay, queue, capacity, one-way delay,
-  receive rate and busy fraction halved
-  ([`exp-r2-faults-210`](https://github.com/Radonux/palaestra/releases/tag/exp-r2-faults-210)),
-  whether or not the policy used the belief, and 36 of 37 wrong capacity
-  beliefs on real cellular traces (`exp-net1v6-cellular-207`).
-- They miss what the measurements cannot contradict: an overestimated
-  busy fraction (0 of 58 on the cellular traces) and a low capacity
-  under competition (0.12 of 43;
-  [`exp-r2-alarms-81`](https://github.com/Radonux/palaestra/releases/tag/exp-r2-alarms-81)).
+  measured later; `experiments/r2_alarms.py`). On net1 v7, with
+  thresholds at the 95th percentile on the validation links of its
+  training data, 8% to 16% of right test-link episodes set off an LCF's
+  alarms. They caught 97% to 100% of the episodes made wrong by an
+  injected fault (the fixed rule on net1 v7 with one belief halved or
+  doubled, 63 episodes each): queueing delay, queue, capacity, one-way
+  delay and receive rate either way, and busy fraction halved
+  ([`exp-alarms-v7-298`](https://github.com/Radonux/palaestra/releases/tag/exp-alarms-v7-298)).
+  They did so whether or not the rule read the belief; it reads only
+  capacity and one-way delay, whose faults moved it from 0.98 of the
+  link at 11 ms of queueing delay to 0.64 at 2 ms (halved) or 0.99 at
+  51 ms (doubled). Free buffer halved or doubled, and busy fraction
+  doubled, left net1 right in all but a few episodes, so there was
+  nothing to catch. On the old guest they also caught 36 of 37 wrong
+  capacity beliefs on real cellular traces (`exp-net1v6-cellular-207`).
+- They miss what the measurements cannot contradict. On its four
+  held-out families net1 v7 was wrong in at most 4% of episodes per LCF,
+  except free buffer in 8 to 16 BDP buffers (30%), and the alarms caught
+  6 of 36 wrong capacity beliefs beside a competing flow (Cubic from the
+  start, a held-out controller, BBRv3 or Westwood), 33 of 271 wrong free
+  buffer beliefs in deep buffers and 7 of 37 wrong queueing delays under
+  3% to 6% loss, against 17 of 27 wrong busy fractions under that loss.
+  On the old guest an overestimated busy fraction went uncaught on the
+  cellular traces (0 of 58).
 - They name a group of LCFs; only one-way delay has an alarm of its own.
 - expliCCit's released encoder is wrong in 41% of its (episode, LCF)
   pairs on the clean test links (net1 v6 in 1.1%), so thresholds set on
