@@ -1,0 +1,15 @@
+{
+ "title": "H6 on the current guest: round 31's students on net1 v7, net1 plus raw and raw alone, on the validation links",
+ "description": "Run 294 (exp-net2-r31-blackbox-294) trained round 29's DAgger recipe with a student that learns u directly, three seeds per arm, on net1 v7's means (r31-net1), on them plus the raw measurements (r31-net1raw), and on the raw measurements alone with hidden size 64 and 256 (r31-raw64, r31-raw256). Each arm's policy as evaluated at iteration 59 (iter059/policy-updated.onnx, the end of the equal budget, chosen before the results) runs unchanged on the validation links at campaign seed 21 (the five families) and among 2 and 4 copies, beside the fixed rule at u = 0.25 on net1 v7 (rule-v7) and round 29's gate3 students on net1 v7 (net2-v7-sN, model-truth-patch-src). Criteria, stated in run 294 before the results, on the five-family mean over three seeds: H6 holds on the current guest if r31-net1 is no more than 0.02 below the better of r31-raw64 and r31-raw256; the LCFs leave out something net2 can use (against H1) if r31-net1raw beats r31-net1 by more than 0.02. Nothing is chosen.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "t": "release:model-truth-patch-src",
+  "r": "release:exp-net2-r31-blackbox-294"
+ },
+ "prepare": "(cd \"$IN/t\" && sha256sum -c SHA256SUMS); mkdir -p \"$OUT/p\"; uv run python experiments/rule_export.py \"$OUT/rule-v7\" \"$IN/t/net1-v7.pt\" --u 0.25; P=(--policy \"rule-v7=$OUT/rule-v7/rule-u0.25.onnx\"); for s in 1 2 3; do d=\"$OUT/runs/r29-s$s\"; mkdir -p \"$d\"; cp \"$IN/t/net1-v7.pt\" \"$d/net1.pt\"; cp \"$IN/t/r29-s$s.actor.pt\" \"$d/actor.pt\"; cp \"$IN/t/r29-s$s.ppo_spec.json\" \"$d/ppo_spec.json\"; uv run python experiments/gate_ensemble_export.py \"$OUT/p\" \"net2-v7-s$s\" \"$d\" --t 0.5; P+=(--policy \"net2-v7-s$s=$OUT/p/net2-v7-s$s.onnx\"); for a in net1 net1raw raw64 raw256; do cp \"$IN/r/ppo-r31-$a-s$s/iter059/policy-updated.onnx\" \"$OUT/p/r31-$a-s$s.onnx\"; P+=(--policy \"r31-$a-s$s=$OUT/p/r31-$a-s$s.onnx\"); done; done; [ \"${#P[@]}\" -eq 32 ]; experiments/rule_eval.sh \"$OUT\" val 21 21 bbr3 \"${P[@]}\"; uv run python experiments/copies.py \"$OUT/copies\" --split val --duration-ms 30000 --seed 21 --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"; jq -s add \"$OUT/aliases.json\" \"$OUT/copies/aliases.json\" > \"$OUT/a.json\"; mv \"$OUT/a.json\" \"$OUT/aliases.json\"",
+ "shards": 80,
+ "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+ "collect": "uv run python experiments/rule_report.py \"$OUT\" --apart copies-30s",
+ "timeout_minutes": 350
+}
