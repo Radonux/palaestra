@@ -1,0 +1,15 @@
+{
+ "title": "H5 repair: the learned net2 v7, unchanged, on net1 v7 retrained with capacity less constant-rate UDP",
+ "description": "net1's cost to the learned net2 traces to its capacity belief, too high when the flow is alone, a hedge against constant-rate UDP that a flow cannot tell from a slower link (runs 283, 286). exp-net1-v7-less-udp-290 retrained net1 v7 with its scalers and bins kept, on the capacity label as before (net1 c, the control for retraining) and on the capacity less the constant-rate UDP traffic (net1 u, the repair). Each learned DAgger net2 on net1 v7 (round 29, iteration 39, training seeds 1 to 3; model-truth-patch-src) runs unchanged on net1 v7 (net2-v7-sN), on net1 c (net2-v7-c-sN) and on net1 u (net2-v7-u-sN; experiments/gate_ensemble_export.py --net1), beside the fixed rule at u = 0.25 on each (rule-v7, rule-c, rule-u). Validation links at campaign seed 21 (the five families) and 2 and 4 copies. Criterion, stated before the run: the repair holds (H5) if net2 on net1 u beats net2 on net1 c by at least 0.01 on the five-family mean over the three training seeds, with no family worse by more than 0.02. Nothing is chosen.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "t": "release:model-truth-patch-src",
+  "r": "release:exp-net1-v7-less-udp-290"
+ },
+ "prepare": "(cd \"$IN/t\" && sha256sum -c SHA256SUMS); declare -A N=([v7]=\"$IN/t/net1-v7.pt\" [c]=\"$IN/r/net1-v7-capacity/net1.pt\" [u]=\"$IN/r/net1-v7-less_udp/net1.pt\"); P=(); for k in v7 c u; do uv run python experiments/rule_export.py \"$OUT/rule-$k\" \"${N[$k]}\" --u 0.25; P+=(--policy \"rule-$k=$OUT/rule-$k/rule-u0.25.onnx\"); done; for s in s1 s2 s3; do d=\"$OUT/runs/r29-$s\"; mkdir -p \"$d\"; cp \"$IN/t/net1-v7.pt\" \"$d/net1.pt\"; cp \"$IN/t/r29-$s.actor.pt\" \"$d/actor.pt\"; cp \"$IN/t/r29-$s.ppo_spec.json\" \"$d/ppo_spec.json\"; uv run python experiments/gate_ensemble_export.py \"$OUT/p\" \"net2-v7-$s\" \"$d\" --t 0.5; P+=(--policy \"net2-v7-$s=$OUT/p/net2-v7-$s.onnx\"); for k in c u; do uv run python experiments/gate_ensemble_export.py \"$OUT/p\" \"net2-v7-$k-$s\" \"$d\" --t 0.5 --net1 \"${N[$k]}\"; P+=(--policy \"net2-v7-$k-$s=$OUT/p/net2-v7-$k-$s.onnx\"); done; done; [ \"${#P[@]}\" -eq 24 ]; experiments/rule_eval.sh \"$OUT\" val 21 21 bbr3 \"${P[@]}\"; uv run python experiments/copies.py \"$OUT/copies\" --split val --duration-ms 30000 --seed 21 --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"; jq -s add \"$OUT/aliases.json\" \"$OUT/copies/aliases.json\" > \"$OUT/a.json\"; mv \"$OUT/a.json\" \"$OUT/aliases.json\"",
+ "shards": 60,
+ "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+ "collect": "uv run python experiments/rule_report.py \"$OUT\" --apart copies-30s && for s in s1 s2 s3; do uv run python experiments/versus_rule.py \"$OUT\" \"net2-v7-c-$s\"; done && uv run python experiments/versus_rule.py \"$OUT\" rule-c",
+ "timeout_minutes": 350
+}
