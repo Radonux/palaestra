@@ -1,0 +1,27 @@
+{
+ "title": "Round 31: H6 on the current guest, round 29's DAgger student on net1 v7, on net1 plus raw, on raw alone",
+ "description": "The split's cost against a black box with the same learner, teacher, links and budget, measured so far on the old guest only. Every arm is round 29's DAgger recipe (experiments/net2-r29-v7.json: teacher the share rule while a stock TCP flow is active and the fixed rule at u = 0.25 otherwise, 60 iterations of 32 links, validation every 20, seeds 1 to 3) with a student that learns u directly (student u, as a black box cannot use the gate's rules on net1's beliefs), and differs only in what the student reads: net1 v7's means (net1, the split), net1 v7's means followed by the measurements net1 reads (net1raw, what the LCFs leave out), or the measurements alone through net1 v7's input scaler with the window aimed at BBR's measured BDP (raw64, and raw256 with a hidden size of 256 in case 64 limits a net that must also learn to estimate). Next, each arm's policy at iteration 59 (the end of the equal budget, chosen now) runs on the validation links beside the fixed rule and round 29's students. Criteria, stated now, on the validation five-family mean over three seeds: H6 holds on the current guest if the split arm is no more than 0.02 below the better raw arm; the LCFs leave out something net2 can use (against H1) if net1raw beats net1 by more than 0.02.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "t": "release:model-truth-patch-src",
+  "models": "release:model-net1v3"
+ },
+ "matrix": {
+  "arm": [
+   "net1",
+   "net1raw",
+   "raw64",
+   "raw256"
+  ],
+  "seed": [
+   1,
+   2,
+   3
+  ]
+ },
+ "prepare": "(cd \"$IN/t\" && sha256sum -c SHA256SUMS) && uv run python experiments/net2_ppo_setup.py \"$OUT/setup\" --net1 \"$IN/t/net1-v7.pt\" --models \"$IN/models\" --u 0.25",
+ "run": "case \"$ARM\" in net1) I=net1; H=64;; net1raw) I=net1+raw; H=64;; raw64) I=raw; H=64;; raw256) I=raw; H=256;; *) exit 1;; esac; S=\"$OUT/spec-r31-$ARM-s$SEED.json\"; jq --arg inputs \"$I\" --argjson hidden \"$H\" --argjson seed \"$SEED\" '.algo = \"dagger\" | .student = {\"kind\": \"u\"} | .inputs = $inputs | .hidden = $hidden | .view = \"means\" | .share_k = 0.5 | .critic_warmup = 0 | .lr = 0.001 | .updates_per_iteration = 50 | .replay_iterations = 16 | .tau_s = 1 | .noise_sigma = 0.05 | .group = 1 | .links_per_iteration = 32 | .compete = 0.8 | .copies = [2, 4] | .seed = $seed | .iterations = 60 | .eval_every = 20' \"$OUT/setup/ppo-base.json\" > \"$S\"; uv run expliccit train ppo \"$S\" \"$OUT/ppo-r31-$ARM-s$SEED\" --build \"$UML\" --workers \"$WORKERS\"",
+ "collect": "uv run python experiments/net2_ppo_report.py \"$OUT\" \"$OUT\"/ppo-*",
+ "timeout_minutes": 360
+}
