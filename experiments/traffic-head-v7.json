@@ -1,0 +1,16 @@
+{
+ "title": "A traffic head for net1 v7: training data on the fixed guest, the head, and its score on validation links",
+ "description": "net1 v7's beliefs keep little of what tells copies of the flow from a stock TCP flow (balanced accuracy 0.472 per step on held-out validation links, against 0.709 from the raw measurements; exp-competitor-info-v7-299). A traffic head (src/expliccit_env/train/traffic.py) estimates that class from net1's own scaled measurements, trained against ground truth, so the information can move into net1. This gathers its training data on the fixed guest: the fixed rule on net1 v7 (u = 0.25; exp-net1v6-229, its chosen run) as the observed flow on the training links (campaign seed 1, 30 s) under the new family's conditions and as 1, 2 and 4 copies, steps kept, the held-out competitors (BBRv3, Westwood) left out. experiments/traffic_head.py reports the head's balanced accuracy on training links held out of its fit and saves the head fitted on all of them (traffic_head.pt); experiments/traffic_head_val.py scores that head, unchanged, on run 299's validation links (val/summary.md), where the raw-measurement classifier fitted on those links reached 0.709. The next run takes a learned net2's beliefs about the other traffic from this head.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "v7": "release:exp-net1v6-229",
+  "data": "release:exp-competitor-info-v7-299"
+ },
+ "collect_inputs": true,
+ "prepare": "N=\"$IN/v7/$(cat \"$IN/v7/chosen.txt\")/net1.pt\"; test -f \"$N\"; uv run python experiments/rule_export.py \"$OUT/rule7\" \"$N\" --u 0.25; P=(--policy \"rule-v7=$OUT/rule7/rule-u0.25.onnx\"); uv run python experiments/heldout.py \"$OUT/spec-new\" --split train --family new --duration-ms 30000 --seed 1 --stock \"\" \"${P[@]}\"; uv run expliccit campaign plan \"$OUT/spec-new/campaign.json\" \"$OUT/c-new\"; uv run python experiments/copies.py \"$OUT/copies\" --split train --duration-ms 30000 --seed 1 --n 1 2 4 --stock \"\" \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"",
+ "shards": 20,
+ "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done",
+ "collect": "N=\"$IN/v7/$(cat \"$IN/v7/chosen.txt\")/net1.pt\"; uv run python experiments/traffic_head.py \"$OUT\" \"$N\"; mkdir -p \"$OUT/val\"; uv run python experiments/traffic_head_val.py \"$OUT/val\" \"$IN/data\" \"$N\" \"$OUT/traffic_head.pt\"; rm -f \"$OUT/rule7/rule-u0.25-actor.pt\"",
+ "timeout_minutes": 150
+}
