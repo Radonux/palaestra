@@ -511,8 +511,10 @@ every table in the report,
 On the old guest, alarms computed without ground truth caught the wrong
 beliefs that the flow's own measurements contradict and missed the ones
 the measurements are consistent with, and a capacity fault was repaired
-by retraining net1 alone, with net2 unchanged. On the current guest the
-same kind of repair did not fix net1 v7's capacity error.
+by retraining net1 alone, with net2 unchanged. On the current guest a
+learned net2 trained on a net1 that never saw another TCP flow did as
+well run unchanged on net1 v7 as one trained there, but retraining
+net1 v7 on a new capacity label did not fix its own capacity error.
 
 - Each alarm is a statistic of one step from net1's beliefs and the
   sender's own measurements (physical invariants among the beliefs, each
@@ -565,3 +567,22 @@ same kind of repair did not fix net1 v7's capacity error.
   by time since the step down), lost 0.04 to 0.08 beside Cubic and gained
   0.27 to 0.31 among copies. The new label moved net1's error between
   conditions the flow cannot tell apart instead of removing it.
+- A learned net2 keeps working when its net1 is repaired. net1 x is
+  net1 v7's recipe, its scalers and bins kept, trained on no episode with
+  a TCP cross flow: beside one, its capacity has R^2 0.61 and 90%
+  intervals that hold 63% of the time, against 0.83 and 90% without
+  ([`exp-net2-r30-notcp-292`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-r30-notcp-292),
+  which also trained round 29's recipe on it, three seeds). Each student,
+  at the iteration fixed before the results, ran unchanged on net1 x and
+  on net1 v7
+  ([`exp-notcp-swap-val-293`](https://github.com/Radonux/palaestra/releases/tag/exp-notcp-swap-val-293)).
+  On the validation five-family mean minus BBRv3 it went from -0.028 on
+  net1 x to +0.165 on net1 v7 (seeds +0.163 to +0.168), against +0.154
+  (+0.146 to +0.158) for round 29's net2 trained on net1 v7: it won back
+  106% of the gap where the criterion set beforehand asked for half, and
+  gained in every family, from +0.04 in deep buffers to +0.61 with Cubic
+  first. It stayed ahead of the fixed rule on the same net1 (+0.031 on
+  net1 v7, +0.007 on net1 x), so it had not learned to make up for
+  net1 x's low capacity (H4). Among copies, outside the mean, it scored
+  -0.178 against -0.107 for round 29's net2, lower on every seed; there
+  net1 x's low belief had helped (+0.450, the rule +0.441).

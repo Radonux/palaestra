@@ -56,7 +56,16 @@ the claims and defines every term used below.
    distributions does no better than reading their means, and lowering
    the window where net1 is unsure helps among copies but costs beside a
    buffer-filling flow and on the five-family mean.
-5. None of expliCCit's three checked results reproduced as stated: R^2
+5. A fault in net1 can be repaired in net1 alone. A learned net2 trained
+   on a net1 that never saw another TCP flow, and so believed too little
+   capacity beside one, ran unchanged on the net1 trained on all the
+   data at +0.165 minus BBRv3 on the validation five-family mean,
+   against -0.028 on its own net1 and +0.154 for the same recipe trained
+   on the full net1
+   ([`exp-notcp-swap-val-293`](https://github.com/Radonux/palaestra/releases/tag/exp-notcp-swap-val-293)).
+   Not every error can be repaired this way: relabelling capacity moved
+   net1's costly error between conditions a flow cannot tell apart.
+6. None of expliCCit's three checked results reproduced as stated: R^2
    above 0.9 for every LCF, the split's cost against Sage, and its
    case-study diagnosis.
 
