@@ -57,6 +57,20 @@ def _same_outputs(a: fit.Net1, b: fit.Net1) -> bool:
     )
 
 
+def _specs(runs: list[Path], traffic: Path | None) -> list[ppo.PPOSpec]:
+    """Each run's spec, an actor on net1's traffic head reading the head the
+    run kept beside its net1.pt."""
+    specs = [ppo.PPOSpec.parse((r / "ppo_spec.json").read_text()) for r in runs]
+    if specs[0].inputs != "net1+traffic":
+        return specs
+    if traffic is not None:
+        raise SystemExit("--traffic replaces beliefs the actor learned; this actor reads the head")
+    return [
+        s.model_copy(update={"traffic_head": r / "traffic_head.pt"})
+        for s, r in zip(specs, runs, strict=True)
+    ]
+
+
 def main() -> None:
     a = argparse.ArgumentParser()
     a.add_argument("out", type=Path)
@@ -75,8 +89,8 @@ def main() -> None:
     a.add_argument("--s0", type=float, default=0.15)
     a.add_argument("--spread-gate", choices=["no_stock", "copies"], default="no_stock")
     args = a.parse_args()
-    specs = [ppo.PPOSpec.parse((r / "ppo_spec.json").read_text()) for r in args.runs]
-    free = {"seed": 0, "init_actor": None, "init_critic": None}
+    specs = _specs(args.runs, args.traffic)
+    free = {"seed": 0, "init_actor": None, "init_critic": None, "traffic_head": None}
     same = {s.model_copy(update=free).model_dump_json() for s in specs}
     if len(same) != 1:
         raise SystemExit("the runs must be of one setting, differing only in seed and start")

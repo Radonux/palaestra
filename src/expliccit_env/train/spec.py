@@ -411,7 +411,12 @@ class PPOSpec(BaseModel):
     # last 2 s times the minimum RTT) instead of net1's. net1 then serves
     # only as that scaler and the evaluation's rule. "net1+raw": both, net1's
     # view first, the window on net1's believed BDP (what the LCFs leave out).
-    inputs: Inputs = "net1"
+    # "net1+traffic": net1's view, then the probabilities of net1's traffic
+    # head (train/traffic.py, ``traffic_head``) that no other flow, copies of
+    # the policy or a stock TCP flow share the link, which net1's LCFs keep
+    # little of (exp-competitor-info-v7-299).
+    inputs: Inputs | Literal["net1+traffic"] = "net1"
+    traffic_head: Path | None = None  # a traffic_head.pt on net1's scaler
     share_k: Annotated[float, Field(ge=0)] = 0.5
     alpha: Annotated[float, Field(gt=0)] = 20.0
     updates_per_iteration: PositiveInt = 200
@@ -451,6 +456,8 @@ class PPOSpec(BaseModel):
             )
         if self.inputs == "raw" and self.student.kind != "u":
             raise ValueError('a gate student mixes rules on net1\'s beliefs: not for "raw"')
+        if (self.inputs == "net1+traffic") != (self.traffic_head is not None):
+            raise ValueError('traffic_head is read by inputs "net1+traffic", which needs it')
         return self
 
     def with_gate(

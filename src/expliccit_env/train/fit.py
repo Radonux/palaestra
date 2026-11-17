@@ -814,13 +814,15 @@ def front(
     faults: dict[str, tuple[str, float]] | None = None,
     deployed: tuple[bool, ...] | None = None,
     traffic: nn.Module | None = None,
+    reads_traffic: bool = False,
 ) -> Front:
     """net2's front end on net1 (graph.Front): the one module both the
     exported graph and training read net2's input through. ``inputs``
     "truth" takes every LCF from the truth, ``truth`` names some to
     take (a patched net1); ``faults`` (parse_faults) makes beliefs wrong on
     purpose; ``deployed`` names the LCFs expliCCit's deployed controller
-    rounds."""
+    rounds; ``reads_traffic`` gives net2 the ``traffic`` head's
+    probabilities after net1's view."""
     if inputs == "truth":
         truth = frozenset(net1.lcfs)
     if inputs in ("raw", "net1+raw") and truth:
@@ -849,6 +851,7 @@ def front(
         fault=fault,
         deployed=None if deployed is None else Deployed(net1.kind, deployed),
         traffic=traffic,
+        reads_traffic=reads_traffic,
     ).eval()
 
 

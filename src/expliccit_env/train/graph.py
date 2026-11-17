@@ -57,7 +57,8 @@ class Front(nn.Module):
     output first ("both"). ``take``: which LCFs come from y when it is
     given. ``fault``: a wrong belief injected after that. ``deployed``:
     expliCCit's deployed rounding of a point net1's beliefs. ``traffic``: a
-    head on the scaled measurements stating the other traffic's class."""
+    head on the scaled measurements stating the other traffic's class;
+    ``reads_traffic`` puts its probabilities after net2's input too."""
 
     take: torch.Tensor | None
 
@@ -73,11 +74,15 @@ class Front(nn.Module):
         fault: nn.Module | None = None,
         deployed: nn.Module | None = None,
         traffic: nn.Module | None = None,
+        reads_traffic: bool = False,
     ) -> None:
         super().__init__()
+        if reads_traffic and (traffic is None or reads == "measurements"):
+            raise ValueError("net2 reads the traffic head beside net1's beliefs: give the head")
         self.scaler, self.net1, self.kind, self.view = scaler, net1, kind, view
         self.reads: Reads = reads
         self.fault, self.deployed, self.traffic = fault, deployed, traffic
+        self.reads_traffic = reads_traffic
         if take is not None and not any(take):
             take = None
         self.register_buffer("take", None if take is None else torch.tensor(take, dtype=torch.bool))
@@ -107,7 +112,10 @@ class Front(nn.Module):
         x = z if self.view is None else self.view(z)
         if self.reads == "both":
             x = torch.cat([x, m], dim=1)
-        return z, x, None if self.traffic is None else self.traffic(m)
+        traffic = None if self.traffic is None else self.traffic(m)
+        if self.reads_traffic and traffic is not None:
+            x = torch.cat([x, traffic], dim=1)
+        return z, x, traffic
 
 
 class Deployed(nn.Module):

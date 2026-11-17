@@ -129,6 +129,16 @@ def _paired(
     }
 
 
+def _keep_net1(spec: PPOSpec, out: Path) -> fit.Net1:
+    """The frozen net1, saved in the run as net1.pt, with the traffic head
+    the actor reads (inputs "net1+traffic") beside it as traffic_head.pt."""
+    net1, net1_spec = fit.load_net1(spec.net1_from)
+    fit.save_net1(net1, net1_spec, out / "net1.pt")
+    if spec.traffic_head is not None:
+        shutil.copyfile(spec.traffic_head, out / "traffic_head.pt")
+    return net1
+
+
 def run_ppo(
     spec: PPOSpec, out: Path, build: UmlBuild, *, workers: int, scratch: Path | None = None
 ) -> dict[str, Any]:
@@ -136,8 +146,7 @@ def run_ppo(
     (out / "ppo_spec.json").write_text(spec.model_dump_json(indent=2))
     torch.manual_seed(spec.seed)
     rng = np.random.default_rng(spec.seed)
-    net1, net1_spec = fit.load_net1(spec.net1_from)
-    fit.save_net1(net1, net1_spec, out / "net1.pt")
+    net1 = _keep_net1(spec, out)
     width = actor_width(net1, spec)
     critic_width = (
         width

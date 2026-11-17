@@ -20,6 +20,7 @@ from expliccit_env.train.traffic import (  # noqa: E402
     save_head,
 )
 
+from .test_e2e import _onnx_matches  # noqa: E402
 from .test_ppo import _bdp_net1  # noqa: E402
 
 
@@ -97,3 +98,40 @@ def test_a_spread_head_lowers_u_by_the_spread_where_no_stock_flow_is_believed() 
         assert torch.allclose(got, want, atol=1e-6)
     with pytest.raises(ValueError, match="gate3"):
         actors.SpreadHead(plain, net1, spec.model_copy(update={"student": U()}), -0.8, 0.1)
+
+
+def test_a_net2_on_net1_and_its_traffic_head_reads_both_in_training_and_in_the_graph(
+    tmp_path: Path,
+) -> None:
+    torch.manual_seed(0)
+    _, net1 = _bdp_net1()
+    path = tmp_path / "head.pt"
+    save_head(TrafficHead(net1.scaler.cols.numel()), path)
+    plain = ppo.PPOSpec(
+        paths_from=Path("x"),
+        net1_from=Path("x"),
+        algo="dagger",
+        student=Gate3(),
+        u_rule=0.25,
+        view="means",
+    )
+    spec = plain.model_validate(
+        plain.model_dump() | {"inputs": "net1+traffic", "traffic_head": path}
+    )
+    with pytest.raises(ValueError, match="traffic_head"):  # the input without its head
+        plain.model_validate(plain.model_dump() | {"inputs": "net1+traffic"})
+    with pytest.raises(ValueError, match="traffic_head"):  # a head nothing reads
+        plain.model_validate(plain.model_dump() | {"traffic_head": path})
+    obs = torch.randn(5, 78)
+    _, x, traffic = actors.front(net1, spec)(obs)
+    _, x0, _ = actors.front(net1, plain)(obs)
+    assert traffic is not None
+    with torch.no_grad():  # net1's view first, then the head's probabilities
+        assert torch.allclose(x, torch.cat([x0, traffic], dim=1))
+    assert actors.width(net1, spec) == actors.width(net1, plain) + len(CLASSES)
+    with pytest.raises(ValueError, match="traffic_head"):  # one head, the spec's
+        actors.front(net1, spec, traffic=load_head(path))
+    actor = actors.new_actor(actors.width(net1, spec), spec)
+    graph = ppo.policy_graph(net1, actor, spec)
+    rng = np.random.default_rng(0)
+    _onnx_matches(graph, rng.normal(size=(40, 78)).astype(np.float32) + 20)

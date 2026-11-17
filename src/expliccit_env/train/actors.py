@@ -27,7 +27,7 @@ from expliccit_env.train.recurrent import ConcatActor, EnsembleActor, Held, Recu
 from expliccit_env.train.share import ACTION_MAX as SHARE_ACTION_MAX
 from expliccit_env.train.share import CoopRule, ShareRule
 from expliccit_env.train.spec import Gate, Gate3, PPOSpec, U
-from expliccit_env.train.traffic import CLASSES
+from expliccit_env.train.traffic import CLASSES, load_head
 
 type F32 = npt.NDArray[np.float32]
 
@@ -204,13 +204,21 @@ def teacher_u(share_u: F32, counts: F32, u_rule: float) -> F32:
 def front(net1: fit.Net1, spec: PPOSpec, *, traffic: nn.Module | None = None) -> Front:
     """The actor's front end (graph.Front), shared by training and the
     exported graph: net1's beliefs ("net1"), the truth's ("truth", an
-    oracle), or the measurements alone ("raw", the black box)."""
+    oracle), the measurements alone ("raw", the black box), or net1's
+    beliefs and its traffic head's probabilities ("net1+traffic", the head
+    from ``spec.traffic_head``)."""
+    reads_traffic = spec.inputs == "net1+traffic"
+    if reads_traffic:
+        if traffic is not None or spec.traffic_head is None:
+            raise ValueError('inputs "net1+traffic" read the spec\'s own traffic_head')
+        traffic = load_head(spec.traffic_head)
     return fit.front(
         net1,
-        inputs=spec.inputs,
+        inputs="net1" if spec.inputs == "net1+traffic" else spec.inputs,
         view=spec.view,
         input_bins=spec.input_bins if spec.view == "bins" else None,
         traffic=traffic,
+        reads_traffic=reads_traffic,
     )
 
 
