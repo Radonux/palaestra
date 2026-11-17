@@ -220,11 +220,20 @@ so on shared links the true LCFs are no upper bound. Told the number of
 flows, a rule on the truth handled both copies and Cubic (an oracle
 bound, old guest,
 [`exp-fairshare-used-val-23`](https://github.com/Radonux/palaestra/releases/tag/exp-fairshare-used-val-23)).
-The raw measurements tell copies from a stock TCP flow better than net1
-v6's beliefs (balanced accuracy 0.753 against 0.496, chance 0.333;
-[`exp-net2-competitor-info-177`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-competitor-info-177)),
-and a traffic head on net1 learns it (0.909;
+The raw measurements tell copies from a stock TCP flow better than
+net1's beliefs. Per step on held-out validation links, with the rule on
+net1 v7 as the observed flow, a classifier of the other traffic (none,
+copies, a stock flow; chance 0.333) reached a balanced accuracy of 0.709
+from the raw measurements, 0.472 from net1 v7's beliefs and 0.609 from
+net1 v10's 32
+([`exp-competitor-info-v7-299`](https://github.com/Radonux/palaestra/releases/tag/exp-competitor-info-v7-299)).
+On the old guest a traffic head on net1 learned it (0.909;
 [`exp-net1-traffic-head-val-180`](https://github.com/Radonux/palaestra/releases/tag/exp-net1-traffic-head-val-180)).
+Yet the learned net2 given the raw measurements beside net1 v7's means
+gained only 0.032 among copies and 0.004 on the five-family mean
+([`exp-blackbox-val-295`](https://github.com/Radonux/palaestra/releases/tag/exp-blackbox-val-295)):
+the information was there and the learner, at that budget, did not use
+it.
 
 ## Learned net2
 

@@ -1,9 +1,9 @@
 """The other traffic on the link, estimated from the measurements.
 
 net1's seven LCFs leave out what tells copies of the flow from a stock TCP
-competitor: per step, a classifier of the other traffic reaches 0.753
-balanced accuracy on held-out links from the raw measurements and 0.496
-from net1 v6's beliefs (exp-net2-competitor-info-177). A TrafficHead is
+competitor: per step, a classifier of the other traffic reaches 0.709
+balanced accuracy on held-out links from the raw measurements and 0.472
+from net1 v7's beliefs (exp-competitor-info-v7-299). A TrafficHead is
 that classifier as a part of net1: it reads the measurements through
 net1's input scaler and states the probability of each class. A policy
 graph takes it in its front end (graph.Front ``traffic``); a gate3 head
