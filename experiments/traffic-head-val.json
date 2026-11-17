@@ -1,0 +1,15 @@
+{
+ "title": "A learned net2 that takes its beliefs about the other traffic from net1 v7's traffic head, validation links",
+ "description": "Round 29's learned net2 on net1 v7 (gate3 students, three training seeds; model-truth-patch-src) mixes the fixed rule, the share rule and the cooperative window by its own beliefs p (a stock TCP flow shares the link) and q (copies of itself do), learned from net1's means, which keep little of that information (exp-competitor-info-v7-299). Here those beliefs come from net1 instead: net1 v7's traffic head (exp-traffic-head-v7-300), trained against ground truth on the training links, replaces q (net2-v7h, --traffic) or both p and q (net2-v7hp, --traffic --traffic-p, so net2 is the three rules switched by net1's estimate), each seed's actor otherwise unchanged and both thresholds at 0.5 as in exp-blackbox-val-295. They run beside the same students with their own beliefs (net2-v7) and the fixed rule at u = 0.25 (rule-v7) on the validation links at campaign seed 21 (the five families) and among 2 and 4 copies. Reading, stated before the results: the head moves the information into net1 usefully if an arm with it gains at least 0.05 over net2-v7 among copies and loses no more than 0.02 on the five-family mean, both over three seeds.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "t": "release:model-truth-patch-src",
+  "h": "release:exp-traffic-head-v7-300"
+ },
+ "prepare": "(cd \"$IN/t\" && sha256sum -c SHA256SUMS); H=\"$IN/h/traffic_head.pt\"; test -f \"$H\"; mkdir -p \"$OUT/p\"; uv run python experiments/rule_export.py \"$OUT/rule-v7\" \"$IN/t/net1-v7.pt\" --u 0.25; P=(--policy \"rule-v7=$OUT/rule-v7/rule-u0.25.onnx\"); for s in 1 2 3; do d=\"$OUT/runs/r29-s$s\"; mkdir -p \"$d\"; cp \"$IN/t/net1-v7.pt\" \"$d/net1.pt\"; cp \"$IN/t/r29-s$s.actor.pt\" \"$d/actor.pt\"; cp \"$IN/t/r29-s$s.ppo_spec.json\" \"$d/ppo_spec.json\"; uv run python experiments/gate_ensemble_export.py \"$OUT/p\" \"net2-v7-s$s\" \"$d\" --t 0.5; uv run python experiments/gate_ensemble_export.py \"$OUT/p\" \"net2-v7h-s$s\" \"$d\" --t 0.5 --traffic \"$H\"; uv run python experiments/gate_ensemble_export.py \"$OUT/p\" \"net2-v7hp-s$s\" \"$d\" --t 0.5 --traffic \"$H\" --traffic-p; for a in v7 v7h v7hp; do P+=(--policy \"net2-$a-s$s=$OUT/p/net2-$a-s$s.onnx\"); done; done; [ \"${#P[@]}\" -eq 20 ]; experiments/rule_eval.sh \"$OUT\" val 21 21 bbr3 \"${P[@]}\"; uv run python experiments/copies.py \"$OUT/copies\" --split val --duration-ms 30000 --seed 21 --n 2 4 --stock bbr3 \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"; jq -s add \"$OUT/aliases.json\" \"$OUT/copies/aliases.json\" > \"$OUT/a.json\"; mv \"$OUT/a.json\" \"$OUT/aliases.json\"; rm -rf \"$OUT/runs\"",
+ "shards": 50,
+ "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+ "collect": "uv run python experiments/rule_report.py \"$OUT\" --apart copies-30s",
+ "timeout_minutes": 350
+}
