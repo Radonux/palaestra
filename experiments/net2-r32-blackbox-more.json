@@ -1,0 +1,26 @@
+{
+ "title": "Round 32: the black box of round 31 given more, 120 more iterations at hidden 256 and a fresh net at hidden 512",
+ "description": "Round 31 (exp-net2-r31-blackbox-294, exp-blackbox-val-295) found the black box on the raw measurements +0.087 below the split on the validation five-family mean at the same DAgger learner, teacher, links and 60-iteration budget, with hidden size 256 better than 64 by 0.042 and still improving slowly in training. This round gives the black box more, so that the H6 result does not rest on an under-searched black box: cont256 continues each round 31 raw256 actor (init_actor, same seed) for 120 more iterations, 180 in all, and w512 trains a fresh black box at hidden size 512 for 60 iterations, the split's budget. Everything else is round 31's raw arm. A validation run then compares the final policies with round 31's split and black box. Stated now: if neither arm comes within 0.02 of the split's +0.152 on the validation five-family mean (three seeds), the split's lead holds against a larger and a longer-trained black box; if cont256 does, the lead is the split's sample efficiency, not a ceiling.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "t": "release:model-truth-patch-src",
+  "models": "release:model-net1v3",
+  "r": "release:exp-net2-r31-blackbox-294"
+ },
+ "prepare": "(cd \"$IN/t\" && sha256sum -c SHA256SUMS) && uv run python experiments/net2_ppo_setup.py \"$OUT/setup\" --net1 \"$IN/t/net1-v7.pt\" --models \"$IN/models\" --u 0.25",
+ "matrix": {
+  "arm": [
+   "cont256",
+   "w512"
+  ],
+  "seed": [
+   1,
+   2,
+   3
+  ]
+ },
+ "run": "case \"$ARM\" in cont256) H=256; N=120; A=\"$IN/r/ppo-r31-raw256-s$SEED/actor.pt\"; test -f \"$A\";; w512) H=512; N=60; A=\"\";; *) exit 1;; esac; S=\"$OUT/spec-r32-$ARM-s$SEED.json\"; jq --argjson hidden \"$H\" --argjson n \"$N\" --arg a \"$A\" --argjson seed \"$SEED\" '.algo = \"dagger\" | .student = {\"kind\": \"u\"} | .inputs = \"raw\" | .hidden = $hidden | .view = \"means\" | .share_k = 0.5 | .critic_warmup = 0 | .lr = 0.001 | .updates_per_iteration = 50 | .replay_iterations = 16 | .tau_s = 1 | .noise_sigma = 0.05 | .group = 1 | .links_per_iteration = 32 | .compete = 0.8 | .copies = [2, 4] | .seed = $seed | .iterations = $n | .eval_every = 20 | if $a == \"\" then . else .init_actor = $a end' \"$OUT/setup/ppo-base.json\" > \"$S\"; uv run expliccit train ppo \"$S\" \"$OUT/ppo-r32-$ARM-s$SEED\" --build \"$UML\" --workers \"$WORKERS\"",
+ "collect": "uv run python experiments/net2_ppo_report.py \"$OUT\" \"$OUT\"/ppo-*",
+ "timeout_minutes": 360
+}
