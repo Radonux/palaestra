@@ -1,0 +1,16 @@
+{
+ "title": "H1 on the current guest: do net1 v7's and v10's beliefs tell copies from a stock competitor?",
+ "description": "On the old guest a per-step classifier of the other traffic (none, copies of the flow, a stock TCP flow) reached 0.753 balanced accuracy on held-out links from the raw measurements net1 reads and 0.496 from net1 v6's beliefs (exp-net2-competitor-info-177): the LCFs dropped what tells copies from a buffer-filling flow. This repeats it on the fixed guest. The fixed rule on net1 v7 (u = 0.25; exp-net1v6-229, its chosen run) runs as the observed flow on the validation links (campaign seed 11, 30 s) alone, under random loss, against stock competitors (the new family; the held-out competitors BBRv3 and Westwood) and as 2 and 4 copies, steps kept. experiments/competitor_info.py then fits the classifier on the raw measurements and on net1 v7's beliefs (summary.md), and on net1 v10's 32 beliefs (exp-net1v10-266, its chosen run; v10/summary.md), 3 folds by link. Reading, stated before the results: if the classifier on net1 v7's beliefs comes within 0.05 of the one on the raw measurements, the seven LCFs keep this information on the current guest and the old guest's H1 clause is withdrawn; if it trails by more, the clause stands for net1 v7. The same test on net1 v10 says whether the 25 heads chosen from data carry it.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "v7": "release:exp-net1v6-229",
+  "v10": "release:exp-net1v10-266"
+ },
+ "collect_inputs": true,
+ "prepare": "N=\"$IN/v7/$(cat \"$IN/v7/chosen.txt\")/net1.pt\"; test -f \"$N\"; uv run python experiments/rule_export.py \"$OUT/rule7\" \"$N\" --u 0.25; P=(--policy \"rule-v7=$OUT/rule7/rule-u0.25.onnx\"); for f in new held-competitors; do uv run python experiments/heldout.py \"$OUT/spec-$f\" --split val --family \"$f\" --duration-ms 30000 --seed 11 --stock \"\" \"${P[@]}\"; uv run expliccit campaign plan \"$OUT/spec-$f/campaign.json\" \"$OUT/c-$f\"; done; uv run python experiments/copies.py \"$OUT/copies\" --split val --duration-ms 30000 --seed 11 --n 1 2 4 --stock \"\" \"${P[@]}\"; mv \"$OUT/copies/c-copies-30s\" \"$OUT/\"",
+ "shards": 10,
+ "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done",
+ "collect": "N7=\"$IN/v7/$(cat \"$IN/v7/chosen.txt\")/net1.pt\"; N10=\"$IN/v10/$(cat \"$IN/v10/chosen.txt\")/net1.pt\"; uv run python experiments/competitor_info.py \"$OUT\" \"$N7\"; mkdir -p \"$OUT/v10\"; for c in \"$OUT\"/c-*; do ln -s \"../$(basename \"$c\")\" \"$OUT/v10/\"; done; uv run python experiments/competitor_info.py \"$OUT/v10\" \"$N10\"; rm \"$OUT\"/v10/c-*; rm -f \"$OUT/rule7/rule-u0.25-actor.pt\"",
+ "timeout_minutes": 150
+}
