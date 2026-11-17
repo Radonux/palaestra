@@ -1,0 +1,17 @@
+{
+ "title": "Alarms on the current guest: injected faults and held-out families on net1 v7",
+ "description": "The alarms of experiments/r2_alarms.py were measured only on the old guest's net1 v6 (exp-r2-faults-210, exp-r2-alarms-81). This repeats both on net1 v7 (exp-net1v6-229, its chosen run) and the fixed guest. Faults: the fixed rule at u = 0.25 on net1 v7 with one of the seven LCFs' beliefs halved or doubled (rule_export.py --fault), fourteen policies and the rule unfaulted, each on the 21 validation links of the training family under its three conditions for 30 s (experiments/heldout.py, campaign seed 31), every 6th step kept. Held-out families: net1 v7's four held-out test sets (exp-data-net1-broad-ood-220: BBRv3 and Westwood competitors, 3% to 6% loss, 61 to 90 ms one-way delay, 8 to 16 BDP buffers). Thresholds at the 95th percentile on the validation links of net1 v7's 30 s training data (exp-data-net1-broad-30s-218, the same link split as net1 v7), false alarms on its test links. Reading, stated before the results: the old guest's claim carries over if, at those thresholds, every fault release 210 caught in 97% to 100% of the episodes wrong about it is caught in at least 90% here, and the ones it missed are named as misses again. alarms/summary.md has detection per alarm and LCF; impact/baselines.md what each fault does to the closed loop.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "n": "release:exp-net1v6-229",
+  "d30": "release:exp-data-net1-broad-30s-218",
+  "ood": "release:exp-data-net1-broad-ood-220"
+ },
+ "collect_inputs": true,
+ "prepare": "N1=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; test -f \"$N1\"; camp() { uv run python experiments/heldout.py \"$OUT/spec-$1\" --split val --family training --duration-ms 30000 --seed 31 --stock \"\" --policy \"rule-$1=$OUT/policies/$1/rule-u0.25.onnx\"; uv run expliccit campaign plan \"$OUT/spec-$1/campaign.json\" \"$OUT/c-$1\"; }; uv run python experiments/rule_export.py \"$OUT/policies/none\" \"$N1\" --u 0.25; camp none; for f in queue_delay_mean_ns:qdelay queue_pkts:queue capacity_bps:capacity free_buffer_pkts:freebuf busy_fraction:busy one_way_delay_ns:owd receive_rate_bps:receive; do l=${f%:*}; n=${f#*:}; for k in 0.5 2; do uv run python experiments/rule_export.py \"$OUT/policies/$n-x$k\" \"$N1\" --u 0.25 --fault \"$l*$k\"; camp \"$n-x$k\"; done; done; jq -s add \"$OUT\"/spec-*/aliases.json > \"$OUT/aliases.json\"",
+ "shards": 16,
+ "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps --steps-stride 6; done",
+ "collect": "N1=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; A=(--positives \"none=$OUT/c-none\"); for f in queue_delay_mean_ns:qdelay queue_pkts:queue capacity_bps:capacity free_buffer_pkts:freebuf busy_fraction:busy one_way_delay_ns:owd receive_rate_bps:receive; do l=${f%:*}; n=${f#*:}; for k in 0.5 2; do A+=(--positives \"$n-x$k=$OUT/c-$n-x$k\" --fault \"$n-x$k=$l*$k\"); done; done; for s in competitors loss rtt buffer; do A+=(--positives \"ood-$s=$IN/ood/campaign-ood-$s\"); done; uv run python experiments/r2_alarms.py \"$OUT/alarms\" --net1 v7=\"$N1\" --calib \"$IN/d30/campaign-train30\" --negatives \"$IN/d30/campaign-train30\" \"${A[@]}\"; uv run python experiments/baselines_report.py \"$OUT/impact\" \"$OUT\"; rm -rf \"$OUT/policies\"/*/rule-u0.25-actor.pt",
+ "timeout_minutes": 240
+}
