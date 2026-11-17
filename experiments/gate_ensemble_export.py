@@ -19,6 +19,11 @@ LCF's estimation error costs this net2.
 a gate3 student's q from the head's P(copies) instead of the students;
 --traffic-p takes p from its P(stock) too, so that net2 is the rules alone.
 
+--spread K --s0 S0 adds K times net1's stated spread of capacity past S0
+to a gate3 student's u, in proportion to its belief that no stock TCP flow
+is active (actors.SpreadHead); K < 0 lowers the window where net1 is unsure
+and the flow is alone or among copies.
+
 --net1 NET1.pt runs the actors on another net1 than the one they were
 trained on, unchanged (no leakage, H4; repair without retraining net2,
 H5). It must give the same outputs in the same bins: the same LCFs, bin
@@ -66,6 +71,8 @@ def main() -> None:
         "--traffic", type=Path, help="net1's traffic head (traffic_head.pt): q from it, for gate3"
     )
     a.add_argument("--traffic-p", action="store_true", help="with --traffic, p from the head too")
+    a.add_argument("--spread", type=float, help="K: u + K relu(sd - S0) (1 - p), for gate3")
+    a.add_argument("--s0", type=float, default=0.15)
     args = a.parse_args()
     specs = [ppo.PPOSpec.parse((r / "ppo_spec.json").read_text()) for r in args.runs]
     free = {"seed": 0, "init_actor": None, "init_critic": None}
@@ -96,15 +103,14 @@ def main() -> None:
     if args.traffic is not None and spec.student.kind != "gate3":
         raise SystemExit("--traffic replaces a gate3 student's q")
     head = None if args.traffic is None else load_head(args.traffic)
+    decide = (
+        None if head is None else actors.Head(net1, spec, traffic_q=True, traffic_p=args.traffic_p)
+    )
+    if args.spread is not None:
+        base = decide if decide is not None else actors.Head(net1, spec)
+        decide = actors.SpreadHead(base, net1, spec, args.spread, args.s0)
     graph = ppo.policy_graph(
-        net1,
-        EnsembleActor(members),
-        spec,
-        frozenset(args.truth),
-        traffic=head,
-        head=None
-        if head is None
-        else actors.Head(net1, spec, traffic_q=True, traffic_p=args.traffic_p),
+        net1, EnsembleActor(members), spec, frozenset(args.truth), traffic=head, head=decide
     )
     (args.out / f"{args.name}.onnx").write_bytes(to_onnx(graph))
     print(f"{args.name}.onnx")

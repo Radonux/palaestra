@@ -73,3 +73,22 @@ def test_a_saved_head_loads_unchanged(tmp_path: Path) -> None:
         assert torch.equal(
             load_head(tmp_path / "head.pt")(torch.from_numpy(x)), head(torch.from_numpy(x))
         )
+
+
+def test_a_spread_head_lowers_u_by_the_spread_where_no_stock_flow_is_believed() -> None:
+    _, net1 = _bdp_net1()
+    spec = ppo.PPOSpec(
+        paths_from=Path("x"), net1_from=Path("x"), algo="dagger", student=Gate3(), u_rule=0.25
+    )
+    plain = actors.Head(net1, spec)
+    z = torch.from_numpy(
+        net1.beliefs(np.random.default_rng(0).normal(size=(4, 78)).astype(np.float32))
+    )
+    sd = actors.SpreadHead(plain, net1, spec, 1.0, 0.0).spread.spread(z)
+    for p, scale in ((1.0, 0.0), (0.0, 1.0), (0.5, 0.5)):
+        a = torch.tensor([[2 * p - 1, 0.0]]).repeat(4, 1)
+        got = actors.SpreadHead(plain, net1, spec, -0.8, 0.1)(a, z, None)
+        want = plain(a, z, None) - 0.8 * torch.relu(sd - 0.1) * scale
+        assert torch.allclose(got, want, atol=1e-6)
+    with pytest.raises(ValueError, match="gate3"):
+        actors.SpreadHead(plain, net1, spec.model_copy(update={"student": U()}), -0.8, 0.1)

@@ -226,13 +226,16 @@ class SpreadTarget(nn.Module):
         mid = self.kind.mid[base.capacity]
         self.register_buffer("log_mid", torch.log2(torch.clamp(mid, min=1e-3)))
 
+    def spread(self, z: torch.Tensor) -> torch.Tensor:
+        """[n] the standard deviation of log2 capacity under net1's belief."""
+        p = self.kind.probs(z)[:, self.base.capacity, :]
+        mean = (p * self.log_mid).sum(dim=1, keepdim=True)
+        return torch.sqrt(torch.clamp((p * (self.log_mid - mean) ** 2).sum(dim=1), min=0.0))
+
     def forward(
         self, obs: torch.Tensor, z: torch.Tensor, traffic: torch.Tensor | None = None
     ) -> torch.Tensor:
-        p = self.kind.probs(z)[:, self.base.capacity, :]
-        mean = (p * self.log_mid).sum(dim=1, keepdim=True)
-        sd = torch.sqrt(torch.clamp((p * (self.log_mid - mean) ** 2).sum(dim=1), min=0.0))
-        lift = self.k * torch.relu(sd - self.s0)
+        lift = self.k * torch.relu(self.spread(z) - self.s0)
         if self.copies_gated:
             if traffic is None:
                 raise ValueError("a copies-gated target needs the traffic head")

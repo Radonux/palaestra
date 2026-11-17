@@ -22,7 +22,7 @@ import torch
 from torch import nn
 
 from expliccit_env.train import fit
-from expliccit_env.train.graph import Front, MeasuredBdp, PolicyGraph
+from expliccit_env.train.graph import Front, MeasuredBdp, PolicyGraph, SpreadTarget
 from expliccit_env.train.recurrent import ConcatActor, EnsembleActor, Held, RecurrentActor
 from expliccit_env.train.share import ACTION_MAX as SHARE_ACTION_MAX
 from expliccit_env.train.share import CoopRule, ShareRule
@@ -145,6 +145,30 @@ class Head(nn.Module):
         if self.spec.student.kind == "u":  # base "share": a residual on the share rule
             return policy_u(self.spec, a, base=r[:, 0])
         return policy_u(self.spec, a, r[:, 0], r[:, 1])
+
+
+class SpreadHead(nn.Module):
+    """A "gate3" student's Head plus k relu(sd - s0) (1 - p): net1's stated
+    spread of capacity (graph.SpreadTarget.spread) past s0, times k, in
+    proportion to the student's belief 1 - p that no stock TCP flow is
+    active. With k < 0 a wide belief lowers the window when the flow is
+    alone, where it means capacity is overstated, or among copies, where it
+    means a shared link; beside a buffer-filling flow, where it does
+    neither, p keeps the window (exp-rule-spread-v7-val-287)."""
+
+    def __init__(self, head: Head, net1: fit.Net1, spec: PPOSpec, k: float, s0: float) -> None:
+        super().__init__()
+        if not isinstance(spec.student, Gate3) or head.traffic_p:
+            raise ValueError('the spread is scaled by a "gate3" student\'s own belief p')
+        self.head, self.k, self.threshold = head, k, spec.student.threshold
+        self.spread = SpreadTarget(fit.window_target(net1), 1.0, s0)
+
+    def forward(
+        self, a: torch.Tensor, z: torch.Tensor, traffic: torch.Tensor | None
+    ) -> torch.Tensor:
+        no_stock = 1 - sharpen((a[:, 0] + 1) / 2, self.threshold)
+        wide = torch.relu(self.spread.spread(z) - self.spread.s0)
+        return self.head(a, z, traffic) + self.k * wide * no_stock
 
 
 def teacher3_u(share_u: F32, coop_u: F32, counts: F32, u_rule: float) -> F32:
