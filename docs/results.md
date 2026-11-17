@@ -364,6 +364,21 @@ the same windows as the guest (median gap 0.002 to 0.004 in log2).
 - The decision therefore rests on net1's estimate of the BDP, with a
   small learned correction.
 
+### On a sibling net1
+
+Each seven-LCF net2 ran unchanged on the two siblings of its net1
+(training seeds 0 and 1 of net1 v7's run: the same LCFs, bins and input
+scaler, other errors), beside the fixed rule on all three
+([`exp-h4-sibling-net1-val-285`](https://github.com/Radonux/palaestra/releases/tag/exp-h4-sibling-net1-val-285),
+validation links). Had net2 learned the quirks of its own net1 rather
+than its beliefs (H4), it would lose more than the rule on a sibling. It
+did not. Its five-family mean moved by +0.007 and -0.005 from +0.164
+(three training seeds), the rule's by +0.015 and -0.001, and in every
+family net2's paired change followed the rule's: with Cubic first +0.02
+to +0.04 against +0.05 on seed 0, and among copies -0.15 to -0.18
+against -0.19 on seed 0 and +0.01 to +0.09 against 0.00 on seed 1. Among
+copies the net1 seed alone moved both by up to 0.19.
+
 ## Stated uncertainty has not helped net2 yet
 
 On the validation links, net2 did no better on net1's full distributions
