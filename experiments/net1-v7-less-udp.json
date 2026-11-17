@@ -1,0 +1,18 @@
+{
+ "title": "H5 repair: net1 v7 retrained with capacity less constant-rate UDP",
+ "description": "net1's cost to the learned net2 traces to its capacity belief, too high when the flow is alone (runs 283, 286). Beside constant-rate UDP the belief was a little low, and a flow cannot tell a slower link from one that constant-rate traffic shares, so with UDP in its training data net1 hedges between the two and its mean overstates the capacity when the flow is alone. This retrains net1 v7 (net1-v6-s2 of exp-net1v6-229: experiments/specs/net1v4.json, dropout 0.05, width 512, seed 2, every 24th step of the same four datasets) keeping its scalers and bins (--like), in two cells: the capacity label as before (capacity, a control for retraining alone) and the capacity less the constant-rate UDP traffic active at each step, at least 1/16 of the capacity (less_udp, data.less_udp). Each cell then reads its net1's capacity belief on the held-out links of the 30 s set against the capacity less UDP (experiments/capacity_belief.py --less-udp; on links without UDP that is the capacity), and the control cell does the same for net1 v7 itself. The step clock is now the step's trace time (data.Steps.t_ms), not 10 ms per step: steps last until an ACK arrives, and the old clock ran a median 0.5 s and up to 28 s behind. Next, the learned net2 v7 runs unchanged on each net1 (H5: a fault fixed in net1 alone).",
+ "train": true,
+ "inputs": {
+  "t": "release:model-truth-patch-src",
+  "d30": "release:exp-data-net1-broad-30s-218",
+  "d60": "release:exp-data-net1-broad-60s-219",
+  "w": "release:exp-data-net1-v6-221"
+ },
+ "matrix": {
+  "label": ["capacity", "less_udp"]
+ },
+ "run": "(cd \"$IN/t\" && sha256sum -c SHA256SUMS) && F=() && if [ \"$LABEL\" = less_udp ]; then F=(--less-udp); fi && uv run python experiments/net1_train.py \"$OUT/net1-v7-$LABEL\" --spec experiments/specs/net1v4.json --set dropout=0.05 --set width=512 --seed 2 --stride 24 --like \"$IN/t/net1-v7.pt\" \"${F[@]}\" --data \"$IN/d30/campaign-train30\" \"$IN/d60/campaign-train60\" \"$IN/w/campaign-wide30\" \"$IN/w/campaign-wide120\" && uv run python experiments/capacity_belief.py \"$OUT/belief-$LABEL\" \"$OUT/net1-v7-$LABEL/net1.pt\" \"$IN/d30\" --less-udp && if [ \"$LABEL\" = capacity ]; then uv run python experiments/capacity_belief.py \"$OUT/belief-v7\" \"$IN/t/net1-v7.pt\" \"$IN/d30\" --less-udp; fi",
+ "collect": "for b in v7 capacity less_udp; do echo \"## Capacity belief: $b\"; echo; cat \"$OUT/belief-$b/summary.md\"; echo; done > \"$OUT/summary.md\" && for c in capacity less_udp; do echo \"## net1 trained on $c\"; echo; cat \"$OUT/net1-v7-$c/summary.md\"; echo; done >> \"$OUT/summary.md\"",
+ "collect_inputs": false,
+ "timeout_minutes": 240
+}

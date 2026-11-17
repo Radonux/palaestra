@@ -56,6 +56,7 @@ def synthetic(n_episodes: int = 40, steps: int = 200, seed: int = 0) -> data.Ste
         cwnd=rng.integers(4, 400, n).astype(np.float32),
         episode=episode.astype(np.int64),
         step=np.tile(np.arange(steps), n_episodes).astype(np.int64),
+        t_ms=np.tile(np.arange(steps) * 10.0, n_episodes).astype(np.float32),
         episode_ids=tuple(str(i) for i in range(n_episodes)),
         split=split,
     )
@@ -199,6 +200,7 @@ def test_load_keeps_only_the_named_controllers(tmp_path: Path) -> None:
                 "status": ["ok"] * 3,
                 "spec_json": [json.dumps({"path": {"bw": i}}) for i in range(3)],
                 "controller": [c for _, c, _ in eps],
+                "base_ns": [0] * 3,
             }
         ),
         shard / "episodes.parquet",
@@ -212,6 +214,7 @@ def test_load_keeps_only_the_named_controllers(tmp_path: Path) -> None:
             {
                 "episode_id": ids,
                 "step": [k for _, _, n in eps for k in range(n)],
+                "t_ns": [10_000_000 * k for _, _, n in eps for k in range(n)],
                 "obs": obs,
                 "action": np.zeros(len(ids), np.float32),
                 "reward": np.zeros(len(ids), np.float32),
@@ -247,6 +250,7 @@ def test_load_orders_rows_whatever_the_shard_order(tmp_path: Path) -> None:
                     "status": ["ok"] * len(eps),
                     "spec_json": [json.dumps({"path": {"bw": i}}) for i in range(len(eps))],
                     "controller": ["bbr"] * len(eps),
+                    "base_ns": [10**9 * (i + 1) for i in range(len(eps))],
                 }
             ),
             d / "episodes.parquet",
@@ -257,6 +261,9 @@ def test_load_orders_rows_whatever_the_shard_order(tmp_path: Path) -> None:
                 {
                     "episode_id": [e for e, _ in rows],
                     "step": [k for _, k in rows],
+                    # Each episode's trace starts at its own base_ns; a step
+                    # lasts 10 ms or until an ACK arrives, here 12 ms.
+                    "t_ns": [10**9 * (eps.index(e) + 1) + 12_000_000 * k for e, k in rows],
                     "obs": pa.FixedSizeListArray.from_arrays(pa.array(obs.ravel()), OBS_DIM),
                     "action": np.zeros(len(rows), np.float32),
                     "reward": np.zeros(len(rows), np.float32),
@@ -272,6 +279,7 @@ def test_load_orders_rows_whatever_the_shard_order(tmp_path: Path) -> None:
     assert x.episode_ids == y.episode_ids == ("a", "b", "c")
     assert np.array_equal(x.obs, y.obs) and np.array_equal(x.split, y.split)
     assert x.step.tolist() == [0, 1, 2, 3] * 3 and x.episode.tolist() == [0] * 4 + [1] * 4 + [2] * 4
+    assert x.t_ms.tolist() == [0.0, 12.0, 24.0, 36.0] * 3
 
 
 def test_as_deployed_rounds_beliefs_and_actions() -> None:
@@ -768,3 +776,38 @@ def test_net1_without_validation_rows_keeps_its_last_epoch_not_its_first() -> No
         )
     )
     assert changed
+
+
+def test_less_udp_takes_the_active_udp_rate_off_capacity_and_keeps_a_floor() -> None:
+    steps = synthetic(n_episodes=3, steps=100)  # t_ms 0 to 990
+    cap = np.full(steps.obs.shape[0], 48e6, np.float32)
+    steps = dataclasses.replace(
+        steps, labels=lcfs.Labels(dict(steps.labels) | {"capacity_bps": cap})
+    )
+    udp = {"kind": "udp_cbr", "start_ms": 500, "stop_ms": None}
+    spec_of = {
+        "0": {"cross": [udp | {"rate_mbps": 12.0}, {"kind": "tcp", "cc": "cubic"}]},
+        "1": {"cross": [udp | {"rate_mbps": 60.0}]},  # more than the link: the floor
+        "2": {"cross": []},
+    }
+    left = data.less_udp(steps, spec_of).labels["capacity_bps"]
+    late = steps.t_ms >= 500
+    ep = steps.episode
+    assert np.all(left[(ep == 0) & late] == np.float32(48e6 - 12e6 * 1504 / 1500))
+    assert np.all(left[(ep == 1) & late] == np.float32(48e6 / 16))
+    assert np.all(left[~late | (ep == 2)] == np.float32(48e6))
+
+
+def test_net1_fit_like_another_keeps_its_scalers_and_bins() -> None:
+    steps = _noisy(n_episodes=10)
+    spec = Net1Spec(width=32, epochs=1, batch_size=256, lcfs=("capacity_bps",), output=Bins(bins=8))
+    first, _ = fit.fit_net1(spec, steps, seed=0)
+    half = steps.labels["capacity_bps"] / 2
+    other = dataclasses.replace(
+        steps, labels=lcfs.Labels(dict(steps.labels) | {"capacity_bps": half})
+    )
+    kept, _ = fit.fit_net1(spec, other, seed=0, like=first)
+    fresh, _ = fit.fit_net1(spec, other, seed=0)
+    assert torch.equal(kept.net.bounds, first.net.bounds)
+    assert not torch.equal(fresh.net.bounds, first.net.bounds)
+    assert kept.scaler is first.scaler and kept.lcf_scaler is first.lcf_scaler

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from dataclasses import dataclass
@@ -14,7 +15,9 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
+from expliccit_env.mahimahi import PACKET_SIZE
 from expliccit_env.policy import OBS_DIM
+from expliccit_env.spec import UdpCross
 from expliccit_env.train.lcfs import Labels
 
 type F32 = npt.NDArray[np.float32]
@@ -39,6 +42,7 @@ class Steps:
     cwnd: F32  # [n], the sender's window (packets) when the step was read
     episode: npt.NDArray[np.int64]  # [n], index into episode_ids
     step: npt.NDArray[np.int64]  # [n], the step's number in its episode
+    t_ms: F32  # [n], the step's trace time: a step lasts 10 ms or until an ACK arrives
     episode_ids: tuple[str, ...]
     split: npt.NDArray[np.str_]  # [n], "train" | "val" | "test"
 
@@ -46,7 +50,7 @@ class Steps:
         return self.split == split
 
 
-_COLUMNS = frozenset({"episode_id", "step", "obs", "action", "reward", "cwnd"})
+_COLUMNS = frozenset({"episode_id", "step", "t_ns", "obs", "action", "reward", "cwnd"})
 
 
 def _path_key(spec_json: str, by: SplitBy = "spec") -> str:
@@ -91,19 +95,21 @@ def load(
     if not shards:
         raise FileNotFoundError(f"no steps.parquet under {[str(d) for d in dirs]}")
     split_of: dict[str, Split] = {}
+    base_ns: dict[str, int] = {}  # episode id -> its trace's ms 0
     parts: list[dict[str, npt.NDArray[Any]]] = []
     index: dict[str, int] = {}  # episode id -> its index, in order of appearance
     for shard in shards:
         # pyarrow-stubs leave read_table partly untyped.
         eps = pq.read_table(  # pyright: ignore[reportUnknownMemberType]
             shard / "episodes.parquet",
-            columns=["episode_id", "status", "spec_json", "controller"],
+            columns=["episode_id", "status", "spec_json", "controller", "base_ns"],
         )
-        for eid, status, spec_json, ctl in zip(
+        for eid, status, spec_json, ctl, base in zip(
             *(eps[c].to_pylist() for c in eps.column_names), strict=True
         ):
             if status == "ok" and (controllers is None or ctl in controllers):
                 split_of[str(eid)] = _split_of(_path_key(str(spec_json), split_by), seed, val, test)
+                base_ns[str(eid)] = int(base)
         # One row group at a time, keeping only the rows and columns used and
         # turning them into float32 arrays at once: a campaign's full table
         # (float64 observations) can exceed memory.
@@ -132,6 +138,8 @@ def load(
     order = np.lexsort((cat["step"], rank[cat["episode"]]))
     cat = {k: v[order] for k, v in cat.items()}
     episode = rank[cat.pop("episode")]
+    base = np.array([base_ns[e] for e in episode_ids], np.int64)[episode]
+    t_ms = ((cat.pop("t_ns") - base) / 1e6).astype(np.float32)
     split = (
         _row_split(seed, val, test, episode.size)
         if split_by == "row"
@@ -144,6 +152,7 @@ def load(
         cwnd=cat.pop("cwnd"),
         episode=episode,
         step=cat.pop("step"),
+        t_ms=t_ms,
         episode_ids=episode_ids,
         split=split,
         labels=Labels({k.removeprefix("label_"): v for k, v in cat.items()}),
@@ -169,5 +178,41 @@ def _arrays(t: pa.Table, index: dict[str, int]) -> dict[str, npt.NDArray[Any]]:
         "reward": f32("reward"),
         "cwnd": f32("cwnd"),
         "step": np.asarray(t["step"].to_numpy(zero_copy_only=False), np.int64),
+        "t_ns": np.asarray(t["t_ns"].to_numpy(zero_copy_only=False), np.int64),
         "episode": np.array([index.setdefault(e, len(index)) for e in eids], np.int64),
     } | {c: f32(c) for c in t.column_names if c.startswith("label_")}
+
+
+def specs(dirs: list[Path]) -> dict[str, dict[str, Any]]:
+    """Each episode's spec, by episode id."""
+    out: dict[str, dict[str, Any]] = {}
+    for f in sorted({p for d in dirs for p in d.rglob("episodes.parquet")}):
+        t = pq.read_table(f, columns=["episode_id", "spec_json"])  # pyright: ignore[reportUnknownMemberType]
+        ids, js = t["episode_id"].to_pylist(), t["spec_json"].to_pylist()
+        out |= {str(e): json.loads(str(j)) for e, j in zip(ids, js, strict=True)}
+    return out
+
+
+def less_udp(steps: Steps, spec_of: dict[str, dict[str, Any]], floor: float = 1 / 16) -> Steps:
+    """``steps`` whose capacity label is the capacity less the constant bit
+    rate UDP traffic active at each step, and at least ``floor`` times the
+    capacity. Beside a constant rate a flow cannot tell a slower link from
+    a busy one, so this is the part of the capacity its measurements can
+    show. ponytail: the label's first window only, the only one net1 reads."""
+    cap = steps.labels["capacity_bps"].astype(np.float64)
+    udp = np.zeros_like(cap)
+    order = np.argsort(steps.episode, kind="stable")
+    cuts = np.searchsorted(steps.episode[order], np.arange(len(steps.episode_ids) + 1))
+    for i, e in enumerate(steps.episode_ids):
+        cross: list[dict[str, Any]] = spec_of[e].get("cross") or []
+        flows = [UdpCross.model_validate(c) for c in cross if c.get("kind") == "udp_cbr"]
+        if not flows:
+            continue
+        rows = order[cuts[i] : cuts[i + 1]]
+        t = steps.t_ms[rows]
+        for c in flows:
+            on = (t >= c.start_ms) & (t < (c.stop_ms or np.inf))
+            # A 1500-byte IP packet takes one 1504-byte delivery opportunity.
+            udp[rows[on]] += c.rate_mbps * 1e6 * PACKET_SIZE / 1500
+    left = np.maximum(cap - udp, floor * cap).astype(np.float32)
+    return dataclasses.replace(steps, labels=Labels(dict(steps.labels) | {"capacity_bps": left}))

@@ -7,6 +7,9 @@ net1's capacity belief with the truth. The mean is what the window target
 reads (graph.WindowTarget); the stated spread is the standard deviation of
 log2 capacity under the belief (graph.SpreadTarget).
 
+With --less-udp the truth is the capacity less the constant-rate UDP
+traffic (data.less_udp), what a net1 trained with that label states.
+
 Writes OUT/summary.md with three tables:
 - on clean links (no cross traffic, no random loss), by trace shape and,
   for a link that steps between two levels, the level it is at: the
@@ -17,19 +20,17 @@ Writes OUT/summary.md with three tables:
   step down and whether the link was busy (busy fraction at least 0.95);
 - for every condition, log2(mean / truth) by stated spread.
 
-Usage: python experiments/capacity_belief.py OUT NET1.pt DATA... [--stride 12]
+Usage: python experiments/capacity_belief.py OUT NET1.pt DATA... [--stride 12] [--less-udp]
 """
 
 import argparse
 import itertools
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
-import pyarrow.parquet as pq
 
 from expliccit_env.train import data, fit
 
@@ -69,15 +70,13 @@ def condition(spec: dict[str, Any]) -> str:
     return "random loss" if loss["downlink"] or loss["uplink"] else "clean"
 
 
-def load(net1_path: Path, dirs: list[Path], stride: int) -> Rows:
+def load(net1_path: Path, dirs: list[Path], stride: int, less_udp: bool) -> Rows:
     net1, _ = fit.load_net1(net1_path)
     steps = data.load(dirs, seed=1, val=0.15, test=0.15, stride=stride, split_by="link")
-    spec: dict[str, dict[str, Any]] = {}
-    for d in dirs:
-        for f in d.rglob("episodes.parquet"):
-            t = pq.read_table(f, columns=["episode_id", "spec_json"]).to_pylist()
-            spec |= {str(r["episode_id"]): json.loads(r["spec_json"]) for r in t}
-    idx = np.flatnonzero(np.isin(steps.split, ["val", "test"]) & (steps.step >= 300))
+    spec = data.specs(dirs)
+    if less_udp:
+        steps = data.less_udp(steps, spec)
+    idx = np.flatnonzero(np.isin(steps.split, ["val", "test"]) & (steps.t_ms >= 3000))
     eid = np.array(steps.episode_ids)[steps.episode[idx]]
     k = net1.lcfs.index("capacity_bps")
     truth = steps.labels["capacity_bps"][idx].astype(np.float64) / 1e6
@@ -97,7 +96,7 @@ def load(net1_path: Path, dirs: list[Path], stride: int) -> Rows:
             continue
         lo, hi = min(levels), max(levels)
         shape[j] = "lower level" if abs(truth[j] - lo) < abs(truth[j] - hi) else "higher level"
-        t = int(steps.step[idx[j]]) * 10
+        t = float(steps.t_ms[idx[j]])
         if t >= trace["level_ms"]:
             since[j] = (t % trace["level_ms"]) / 1000
     return Rows(
@@ -155,9 +154,14 @@ def main() -> None:
     p.add_argument("net1", type=Path)
     p.add_argument("data", type=Path, nargs="+")
     p.add_argument("--stride", type=int, default=12)
+    p.add_argument("--less-udp", action="store_true", help="truth: capacity less constant-rate UDP")
     a = p.parse_args()
-    lines = [f"net1 `{a.net1.name}`, held-out links, after 3 s, every {a.stride}th step.", ""]
-    lines += report(load(a.net1, a.data, a.stride))
+    truth = "capacity less constant-rate UDP" if a.less_udp else "capacity"
+    lines = [
+        f"net1 `{a.net1}` against the {truth}, held-out links, after 3 s, every {a.stride}th step.",
+        "",
+    ]
+    lines += report(load(a.net1, a.data, a.stride, a.less_udp))
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "summary.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))

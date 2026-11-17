@@ -420,14 +420,28 @@ def _calibrate(
     net.widen.copy_(widen)
 
 
-def fit_net1(spec: Net1Spec, steps: Steps, seed: int) -> tuple[Net1, dict[str, Any]]:
+def fit_net1(
+    spec: Net1Spec, steps: Steps, seed: int, like: Net1 | None = None
+) -> tuple[Net1, dict[str, Any]]:
+    """Fit net1 on the training rows, stopping on the validation rows. With
+    ``like``, a bins net1 of the same LCFs, its input scaler, LCF scaler
+    and bin boundaries are kept, so the result's output means what its
+    does and a net2 trained on it runs on the result unchanged."""
     torch.manual_seed(seed)
     tr, va = steps.rows("train"), steps.rows("val")
     y = targets(steps, spec.lcfs)
     cols = list(spec.obs_cols)
-    scaler = Scaler.fit(spec.obs_cols, steps.obs[np.ix_(np.flatnonzero(tr), cols)], spec.scaling)
     lcf_kind = "minmax" if spec.scaling == "minmax" else "standard"
-    lcf_scaler = Scaler.fit(tuple(range(len(spec.lcfs))), y[tr], lcf_kind)
+    pinned: torch.Tensor | None = None  # like's bin boundaries
+    if like is None:
+        scaler = Scaler.fit(
+            spec.obs_cols, steps.obs[np.ix_(np.flatnonzero(tr), cols)], spec.scaling
+        )
+        lcf_scaler = Scaler.fit(tuple(range(len(spec.lcfs))), y[tr], lcf_kind)
+    elif like.lcfs != tuple(spec.lcfs) or not isinstance(like.net, BinNet1):
+        raise ValueError("like: a bins net1 of the same LCFs")
+    else:
+        scaler, lcf_scaler, pinned = like.scaler, like.lcf_scaler, like.net.bounds
 
     def tensors(rows: npt.NDArray[np.bool_]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # Scaled in batches into one tensor: memory for the inputs, not for
@@ -446,7 +460,7 @@ def fit_net1(spec: Net1Spec, steps: Steps, seed: int) -> tuple[Net1, dict[str, A
     net = _net1_module(spec)
     log: dict[str, Any]
     if isinstance(net, BinNet1):  # spec.output.kind == "bins"
-        net.bounds.copy_(torch.from_numpy(_bin_bounds(y[tr], net.b)))
+        net.bounds.copy_(torch.from_numpy(_bin_bounds(y[tr], net.b)) if pinned is None else pinned)
         with torch.no_grad():  # targets become bin indices
             yt = net.bin_of(torch.from_numpy(np.nan_to_num(y[tr]))).float()
             yv = net.bin_of(torch.from_numpy(np.nan_to_num(y[va]))).float()
