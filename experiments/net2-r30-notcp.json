@@ -1,0 +1,27 @@
+{
+ "title": "H5 with a learned net2: round 29's DAgger net2 trained on a net1 that never saw another TCP flow",
+ "description": "A fault repairable in net1 alone, to test H5 with a learned net2: net1 v7 retrained (experiments/specs/net1v4.json, dropout 0.05, width 512, seed 2, every 24th step of its four datasets, scalers and bins kept from net1 v7) on no episode with a TCP cross flow (net1_train.py --without-cross-tcp), so it never saw a competitor that responds to the queue, as net1 v3 had not on the old guest. Its report gives test rows with and without a TCP cross flow apart. Round 29's recipe unchanged (experiments/net2-r29-v7.json: DAgger gate3 students, teacher gain 0.5, the rule at u = 0.25 on this net1, 60 iterations, validation every 20, seeds 1 to 3, reading the means) then trains a net2 on it. Next, each student at iteration 39 (round 29's chosen iteration, fixed before the results) runs unchanged on this net1 and on net1 v7, the repaired net1. Criterion for that run, stated now: H5 holds if on net1 v7 the students recover at least half of the gap, on the validation five-family mean over three seeds, between themselves on this net1 and round 29's students on net1 v7, with no family worse than on this net1 by more than 0.02. If they lose instead, the students learned to make up for this net1's errors (H4 fails).",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "t": "release:model-truth-patch-src",
+  "d30": "release:exp-data-net1-broad-30s-218",
+  "d60": "release:exp-data-net1-broad-60s-219",
+  "w": "release:exp-data-net1-v6-221",
+  "models": "release:model-net1v3"
+ },
+ "matrix": {
+  "view": [
+   "means"
+  ],
+  "seed": [
+   1,
+   2,
+   3
+  ]
+ },
+ "prepare": "(cd \"$IN/t\" && sha256sum -c SHA256SUMS) && uv run python experiments/net1_train.py \"$OUT/net1-notcp\" --spec experiments/specs/net1v4.json --set dropout=0.05 --set width=512 --seed 2 --stride 24 --like \"$IN/t/net1-v7.pt\" --without-cross-tcp --data \"$IN/d30/campaign-train30\" \"$IN/d60/campaign-train60\" \"$IN/w/campaign-wide30\" \"$IN/w/campaign-wide120\" && uv run python experiments/net2_ppo_setup.py \"$OUT/setup\" --net1 \"$OUT/net1-notcp/net1.pt\" --models \"$IN/models\" --u 0.25",
+ "run": "S=\"$OUT/spec-r30-$VIEW-s$SEED.json\"; jq --arg view \"$VIEW\" --argjson seed \"$SEED\" '.algo = \"dagger\" | .student = {\"kind\": \"gate3\", \"threshold\": 0.5} | .view = $view | .share_k = 0.5 | .critic_warmup = 0 | .lr = 0.001 | .updates_per_iteration = 50 | .replay_iterations = 16 | .tau_s = 1 | .noise_sigma = 0.05 | .group = 1 | .links_per_iteration = 32 | .compete = 0.8 | .copies = [2, 4] | .seed = $seed | .iterations = 60 | .eval_every = 20' \"$OUT/setup/ppo-base.json\" > \"$S\"; uv run expliccit train ppo \"$S\" \"$OUT/ppo-r30-$VIEW-s$SEED\" --build \"$UML\" --workers \"$WORKERS\"",
+ "collect": "cat \"$OUT/net1-notcp/summary.md\" > \"$OUT/net1-notcp.md\" && uv run python experiments/net2_ppo_report.py \"$OUT\" \"$OUT\"/ppo-*",
+ "timeout_minutes": 360
+}

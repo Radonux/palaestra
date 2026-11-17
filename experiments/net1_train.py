@@ -3,7 +3,7 @@
 Usage: python experiments/net1_train.py OUT --spec SPEC.json --data DIR... \
            [--set KEY=VALUE ...] [--ood NAME=DIR ...] [--compare NET1.pt] [--seed 0]
            [--stride 12] [--eval NET1.pt] [--compare-expliccit MODELS_DIR]
-           [--like NET1.pt] [--less-udp]
+           [--like NET1.pt] [--less-udp] [--without-cross-tcp]
 
 Rows are every 12th step (--stride; the stored data keeps every 6th, and
 a runner's 16 GB held net1 v5's 7.2 million rows but not net1 v6's 12.6
@@ -15,7 +15,10 @@ before and after, and --compare-expliccit does the same for expliCCit's
 released net1 (third_party/expliccit-models). --eval reports a trained net1 instead of training one
 (net1 v6 against v5 on v5's own data). --like keeps another net1's
 scalers and bins (fit.fit_net1), and --less-udp trains capacity on the
-capacity less the constant-rate UDP traffic (data.less_udp). Writes
+capacity less the constant-rate UDP traffic (data.less_udp).
+--without-cross-tcp trains and stops on no episode with a TCP cross flow,
+a net1 that never saw another TCP flow; the test views then report rows
+with and without one apart. Writes
 OUT/net1.pt, OUT/report.json and OUT/summary.md
 (R^2 and absolute error per LCF and view, and for a distribution net1
 its 90% coverage, CRPS skill and log loss; selection on the validation
@@ -94,12 +97,20 @@ def train(
     freed when this returns, before the held-out sets load."""
     t0 = time.time()
     steps = data.load(a.data, seed=1, val=0.15, test=0.15, stride=a.stride, split_by="link")
+    spec_of = data.specs(a.data)
     if a.less_udp:
-        steps = data.less_udp(steps, data.specs(a.data))
+        steps = data.less_udp(steps, spec_of)
+    tcp_of = [
+        any(c.get("kind") == "tcp" for c in spec_of[e].get("cross") or [])
+        for e in steps.episode_ids
+    ]
+    cross_tcp = np.array(tcp_of, bool)[steps.episode]
     ctl = controllers(a.data, steps)
     hold = held()
     is_held = np.isin(ctl, list(hold))
     base = np.where(is_held, "hold", steps.split)
+    if a.without_cross_tcp:
+        base = np.where(cross_tcp & (base != "test"), "out", base)
     keep = np.where(base == "train", "train", "other")
 
     def view(rows: np.ndarray[Any, np.dtype[np.bool_]], split: str) -> data.Steps:
@@ -109,6 +120,8 @@ def train(
 
     views = {"val": (~is_held, "val"), "test": (~is_held, "test"), "test_held": (is_held, "test")}
     views |= {f"test_{name}": (ctl == c, "test") for c, name in hold.items()}
+    if a.without_cross_tcp:
+        views |= {"test_cross_tcp": (cross_tcp, "test"), "test_no_cross_tcp": (~cross_tcp, "test")}
     load_s = time.time() - t0
     note(f"loaded {steps.obs.shape[0]} rows")
     if a.eval:
@@ -167,6 +180,7 @@ def main() -> None:
     p.add_argument("--eval", type=Path, help="a trained net1.pt to report instead of training")
     p.add_argument("--like", type=Path, help="a net1.pt whose scalers and bins to keep")
     p.add_argument("--less-udp", action="store_true", help="capacity less constant-rate UDP")
+    p.add_argument("--without-cross-tcp", action="store_true", help="train on no TCP cross flow")
     a = p.parse_args()
     raw = json.loads(a.spec.read_text())
     raw |= {k: json.loads(v) for k, v in (x.split("=", 1) for x in a.set)}
@@ -182,6 +196,7 @@ def main() -> None:
     if not a.eval:
         fit.save_net1(net1, spec, a.out / "net1.pt")
     rep |= {"spec": spec.model_dump(mode="json"), "seed": a.seed, "less_udp": a.less_udp}
+    rep["without_cross_tcp"] = a.without_cross_tcp
     for name, d in (x.split("=", 1) for x in a.ood):
         o = data.load([Path(d)], seed=1, val=0.0, test=1.0, stride=a.stride, split_by="link")
         rep["views"][f"ood_{name}"] = {"net1": summary(fit.report_net1(net1, o, "test"))}
