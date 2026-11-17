@@ -21,8 +21,8 @@ a gate3 student's q from the head's P(copies) instead of the students;
 
 --spread K --s0 S0 adds K times net1's stated spread of capacity past S0
 to a gate3 student's u, in proportion to its belief that no stock TCP flow
-is active (actors.SpreadHead); K < 0 lowers the window where net1 is unsure
-and the flow is alone or among copies.
+is active, or with --spread-gate copies to its belief in copies
+(actors.SpreadHead); K < 0 lowers the window where net1 is unsure.
 
 --net1 NET1.pt runs the actors on another net1 than the one they were
 trained on, unchanged (no leakage, H4; repair without retraining net2,
@@ -73,6 +73,7 @@ def main() -> None:
     a.add_argument("--traffic-p", action="store_true", help="with --traffic, p from the head too")
     a.add_argument("--spread", type=float, help="K: u + K relu(sd - S0) (1 - p), for gate3")
     a.add_argument("--s0", type=float, default=0.15)
+    a.add_argument("--spread-gate", choices=["no_stock", "copies"], default="no_stock")
     args = a.parse_args()
     specs = [ppo.PPOSpec.parse((r / "ppo_spec.json").read_text()) for r in args.runs]
     free = {"seed": 0, "init_actor": None, "init_critic": None}
@@ -108,7 +109,7 @@ def main() -> None:
     )
     if args.spread is not None:
         base = decide if decide is not None else actors.Head(net1, spec)
-        decide = actors.SpreadHead(base, net1, spec, args.spread, args.s0)
+        decide = actors.SpreadHead(base, net1, spec, args.spread, args.s0, gate=args.spread_gate)
     graph = ppo.policy_graph(
         net1, EnsembleActor(members), spec, frozenset(args.truth), traffic=head, head=decide
     )

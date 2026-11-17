@@ -148,27 +148,42 @@ class Head(nn.Module):
 
 
 class SpreadHead(nn.Module):
-    """A "gate3" student's Head plus k relu(sd - s0) (1 - p): net1's stated
+    """A "gate3" student's Head plus k relu(sd - s0) w: net1's stated
     spread of capacity (graph.SpreadTarget.spread) past s0, times k, in
-    proportion to the student's belief 1 - p that no stock TCP flow is
-    active. With k < 0 a wide belief lowers the window when the flow is
-    alone, where it means capacity is overstated, or among copies, where it
-    means a shared link; beside a buffer-filling flow, where it does
-    neither, p keeps the window (exp-rule-spread-v7-val-287)."""
+    proportion to w, the student's belief 1 - p that no stock TCP flow is
+    active (``gate`` "no_stock") or its belief q in copies ("copies"). With
+    k < 0 a wide belief lowers the window when the flow is alone, where it
+    means capacity is overstated, or among copies, where it means a shared
+    link, and should not beside a buffer-filling flow, where it means
+    neither (exp-rule-spread-v7-val-287)."""
 
-    def __init__(self, head: Head, net1: fit.Net1, spec: PPOSpec, k: float, s0: float) -> None:
+    def __init__(
+        self,
+        head: Head,
+        net1: fit.Net1,
+        spec: PPOSpec,
+        k: float,
+        s0: float,
+        *,
+        gate: Literal["no_stock", "copies"] = "no_stock",
+    ) -> None:
         super().__init__()
-        if not isinstance(spec.student, Gate3) or head.traffic_p:
-            raise ValueError('the spread is scaled by a "gate3" student\'s own belief p')
-        self.head, self.k, self.threshold = head, k, spec.student.threshold
+        if not isinstance(spec.student, Gate3) or head.traffic_p or head.traffic_q:
+            raise ValueError('the spread is scaled by a "gate3" student\'s own beliefs')
+        t = spec.student.threshold
+        tq = t if spec.student.threshold_q is None else spec.student.threshold_q
+        self.head, self.k, self.gate, self.t, self.tq = head, k, gate, t, tq
         self.spread = SpreadTarget(fit.window_target(net1), 1.0, s0)
 
     def forward(
         self, a: torch.Tensor, z: torch.Tensor, traffic: torch.Tensor | None
     ) -> torch.Tensor:
-        no_stock = 1 - sharpen((a[:, 0] + 1) / 2, self.threshold)
+        if self.gate == "copies":
+            w = sharpen((a[:, 1] + 1) / 2, self.tq)
+        else:
+            w = 1 - sharpen((a[:, 0] + 1) / 2, self.t)
         wide = torch.relu(self.spread.spread(z) - self.spread.s0)
-        return self.head(a, z, traffic) + self.k * wide * no_stock
+        return self.head(a, z, traffic) + self.k * wide * w
 
 
 def teacher3_u(share_u: F32, coop_u: F32, counts: F32, u_rule: float) -> F32:

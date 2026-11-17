@@ -90,5 +90,10 @@ def test_a_spread_head_lowers_u_by_the_spread_where_no_stock_flow_is_believed() 
         got = actors.SpreadHead(plain, net1, spec, -0.8, 0.1)(a, z, None)
         want = plain(a, z, None) - 0.8 * torch.relu(sd - 0.1) * scale
         assert torch.allclose(got, want, atol=1e-6)
+    for q in (0.0, 0.5, 1.0):  # gated by q, the belief in copies, instead
+        a = torch.tensor([[1.0, 2 * q - 1]]).repeat(4, 1)
+        got = actors.SpreadHead(plain, net1, spec, -0.8, 0.1, gate="copies")(a, z, None)
+        want = plain(a, z, None) - 0.8 * torch.relu(sd - 0.1) * q
+        assert torch.allclose(got, want, atol=1e-6)
     with pytest.raises(ValueError, match="gate3"):
         actors.SpreadHead(plain, net1, spec.model_copy(update={"student": U()}), -0.8, 0.1)
