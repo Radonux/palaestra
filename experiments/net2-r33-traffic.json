@@ -1,0 +1,18 @@
+{
+ "title": "Round 33: round 29's DAgger net2 on net1 v7's means and its traffic head, three seeds",
+ "description": "Round 29's recipe unchanged (experiments/net2-r29-v7.json: DAgger gate3 students on net1 v7's means, teacher gain 0.5, the rule at u = 0.25, 60 iterations, validation every 20, seeds 1 to 3), with inputs \"net1+traffic\": the actor also reads the probabilities of net1 v7's traffic head (release model-net1v7-traffic-head, from exp-traffic-head-v7-300) that no other flow, copies of the policy or a stock TCP flow share the link. net1 v7's means keep little of that (exp-competitor-info-v7-299); the head states it at 0.893 balanced accuracy on unseen links. Taken into round 29's actors untrained, the head gained 0.38 to 0.52 among copies and lost 0.13 to 0.18 with Cubic first (exp-traffic-head-val-301); here net2 learns how far to trust it, its recurrent state free to pool the head's per-step calls. The validation run that follows reads iteration 39, the iteration round 29 was chosen at.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "n": "release:exp-net1v6-229",
+  "models": "release:model-net1v3",
+  "h": "release:model-net1v7-traffic-head"
+ },
+ "prepare": "echo \"62043107ace9c7c3c913124f42d26023474ec6108cc59d959475da6bd57820be  $IN/h/traffic_head.pt\" | sha256sum -c; N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; uv run python experiments/net2_ppo_setup.py \"$OUT/setup\" --net1 \"$N\" --models \"$IN/models\" --u 0.25",
+ "matrix": {
+  "seed": [1, 2, 3]
+ },
+ "run": "S=\"$OUT/spec-r33-s$SEED.json\"; jq --arg h \"$IN/h/traffic_head.pt\" --argjson seed \"$SEED\" '.algo = \"dagger\" | .student = {\"kind\": \"gate3\", \"threshold\": 0.5} | .view = \"means\" | .inputs = \"net1+traffic\" | .traffic_head = $h | .share_k = 0.5 | .critic_warmup = 0 | .lr = 0.001 | .updates_per_iteration = 50 | .replay_iterations = 16 | .tau_s = 1 | .noise_sigma = 0.05 | .group = 1 | .links_per_iteration = 32 | .compete = 0.8 | .copies = [2, 4] | .seed = $seed | .iterations = 60 | .eval_every = 20' \"$OUT/setup/ppo-base.json\" > \"$S\"; uv run expliccit train ppo \"$S\" \"$OUT/ppo-r33-s$SEED\" --build \"$UML\" --workers \"$WORKERS\"",
+ "collect": "uv run python experiments/net2_ppo_report.py \"$OUT\" \"$OUT\"/ppo-*",
+ "timeout_minutes": 360
+}
