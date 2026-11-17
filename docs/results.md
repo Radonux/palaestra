@@ -117,14 +117,27 @@ the seven LCFs (three training seeds) and from +0.157 to +0.186 on the
 - Among copies the truth is far worse; see
   [What limits a rule is the other flows](#what-limits-a-rule-is-the-other-flows).
 
-On the old guest, a black box with the same learner and budget on the
-raw measurements stayed 0.2 to 0.4 below net1 v6's fixed rule from its
-own start
-([`exp-net2-r19b-bbr-165`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-r19b-bbr-165))
-and ended about 0.05 below the same learner on net1 v6 when started from
-a clone of the rule
-([`exp-net2-r20b-bb-ppo-171`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-r20b-bb-ppo-171)),
-so the split's lead was its start (old guest).
+A black box with the same learner, teacher, links and budget does
+worse. Round 31 trained round 29's DAgger recipe, with a student that
+learns u directly, on net1 v7's means, on them plus the raw measurements
+net1 reads, and on those measurements alone with the window aimed at
+BBR's measured BDP (hidden size 64 or 256), 60 iterations and three
+seeds each
+([`exp-net2-r31-blackbox-294`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-r31-blackbox-294)).
+At iteration 59, on the validation five-family mean minus BBRv3
+([`exp-blackbox-val-295`](https://github.com/Radonux/palaestra/releases/tag/exp-blackbox-val-295)),
+the student on net1's means scored +0.152 (seeds +0.143 to +0.157) and
+the black box +0.065 at hidden size 256 (+0.058 to +0.072) and +0.023 at
+64; the criterion set beforehand asked only that the split be no more
+than 0.02 below the better black box. The black box lost most in deep
+buffers (+0.088 against +0.244) and with Cubic first (-0.099 against
++0.019), and did better among copies (+0.081 against -0.144). It started
+0.55 below the fixed rule and, in training, climbed to 0.05 below it by
+iteration 19 and 0.03 by iteration 59, while the split's student started
+at the rule. Adding the raw measurements to net1's means gained +0.004
+(+0.156), inside the 0.02 margin set beforehand: at this budget the LCFs
+left out nothing the learned net2 could use. Only the black box's hidden
+size was searched; a larger net or a longer budget is UNRUN.
 
 On ccBench's suites, run unchanged on links outside the train,
 validation and test sets (690 single-flow links of 12 to 192 Mbit/s, 5

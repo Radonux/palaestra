@@ -52,11 +52,16 @@ the claims and defines every term used below.
 3. The simplest net2, a fixed multiple of net1's believed bandwidth-delay
    product, already beats BBRv3 by 0.136 on the test links; what limits
    it is the other flows, above all copies of itself.
-4. net2 gains nothing from net1's stated uncertainty: reading the
+4. The split costs nothing against a black box. With the same learner,
+   teacher, links and budget, a net2 on net1's means scored +0.152
+   minus BBRv3 on the validation five-family mean, one on the raw
+   measurements alone +0.065, and one on both +0.156
+   ([`exp-blackbox-val-295`](https://github.com/Radonux/palaestra/releases/tag/exp-blackbox-val-295)).
+5. net2 gains nothing from net1's stated uncertainty: reading the
    distributions does no better than reading their means, and lowering
    the window where net1 is unsure helps among copies but costs beside a
    buffer-filling flow and on the five-family mean.
-5. A fault in net1 can be repaired in net1 alone. A learned net2 trained
+6. A fault in net1 can be repaired in net1 alone. A learned net2 trained
    on a net1 that never saw another TCP flow, and so believed too little
    capacity beside one, ran unchanged on the net1 trained on all the
    data at +0.165 minus BBRv3 on the validation five-family mean,
@@ -65,7 +70,7 @@ the claims and defines every term used below.
    ([`exp-notcp-swap-val-293`](https://github.com/Radonux/palaestra/releases/tag/exp-notcp-swap-val-293)).
    Not every error can be repaired this way: relabelling capacity moved
    net1's costly error between conditions a flow cannot tell apart.
-6. None of expliCCit's three checked results reproduced as stated: R^2
+7. None of expliCCit's three checked results reproduced as stated: R^2
    above 0.9 for every LCF, the split's cost against Sage, and its
    case-study diagnosis.
 
