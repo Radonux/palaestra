@@ -393,6 +393,31 @@ each pair). Online (DAgger,
 the student on net1 v9's distributions scored +0.119 against +0.143 on
 its means (+0.121 against +0.144 in release 253).
 
+Nor did lowering the window where net1 is unsure. Alone on a link, net1
+v7's capacity overestimate grows with its stated spread s, the standard
+deviation of log2 capacity under its belief
+([The split costs little](#the-split-costs-little)), so the window target
+was lowered by k relu(s - 0.15), on validation at campaign seed 21. On
+the fixed rule
+([`exp-rule-spread-v7-val-287`](https://github.com/Radonux/palaestra/releases/tag/exp-rule-spread-v7-val-287))
+the five-family mean fell from +0.134 to +0.106 (k = 0.4) and +0.069
+(k = 0.8): among copies it gained (+0.110 and +0.279 against -0.059),
+and with Cubic first it lost (-0.166 and -0.292 against -0.060). On
+the learned net2, scaled by one minus its own belief that a
+buffer-filling flow shares the link
+([`exp-spread-head-v7-val-288`](https://github.com/Radonux/palaestra/releases/tag/exp-spread-head-v7-val-288),
+three training seeds), the five-family mean fell from +0.148 to +0.133
+and +0.104: among copies +0.021 and +0.147 against -0.092, with Cubic
+first -0.050 and -0.129 against +0.011. Scaled instead by its belief
+that copies of itself share the link
+([`exp-spread-copies-v7-val-289`](https://github.com/Radonux/palaestra/releases/tag/exp-spread-copies-v7-val-289)),
+it changed the five-family mean by less than the seed range (+0.151 and
++0.149 against +0.148) and copies not for the better (-0.108 and -0.105
+against -0.090). On net1's held-out links a wide belief came more often
+beside a TCP flow, where its mean was right, than alone, where it was too
+high (release 286), and neither of net2's beliefs about the other flow
+told the two apart (H1).
+
 ## Reproduction of expliCCit
 
 Three of expliCCit's results were checked here, and none reproduced as

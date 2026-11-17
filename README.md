@@ -53,7 +53,9 @@ the claims and defines every term used below.
    product, already beats BBRv3 by 0.136 on the test links; what limits
    it is the other flows, above all copies of itself.
 4. net2 gains nothing from net1's stated uncertainty: reading the
-   distributions does no better than reading their means.
+   distributions does no better than reading their means, and lowering
+   the window where net1 is unsure helps among copies but costs beside a
+   buffer-filling flow and on the five-family mean.
 5. None of expliCCit's three checked results reproduced as stated: R^2
    above 0.9 for every LCF, the split's cost against Sage, and its
    case-study diagnosis.
