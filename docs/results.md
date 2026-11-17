@@ -511,7 +511,8 @@ every table in the report,
 On the old guest, alarms computed without ground truth caught the wrong
 beliefs that the flow's own measurements contradict and missed the ones
 the measurements are consistent with, and a capacity fault was repaired
-by retraining net1 alone, with net2 unchanged.
+by retraining net1 alone, with net2 unchanged. On the current guest the
+same kind of repair did not fix net1 v7's capacity error.
 
 - Each alarm is a statistic of one step from net1's beliefs and the
   sender's own measurements (physical invariants among the beliefs, each
@@ -545,3 +546,22 @@ by retraining net1 alone, with net2 unchanged.
   keeps copies safe, so copies fed the true LCFs collapse, the fixed rule
   as well as the learned net2
   ([What limits a rule is the other flows](#what-limits-a-rule-is-the-other-flows)).
+- On the current guest, retraining net1 alone did not repair its costly
+  capacity error, the overestimate at the lower level of stepping links
+  ([The split costs little](#the-split-costs-little)). A flow cannot tell
+  a slower link from one that UDP at a constant rate shares, and net1 v7
+  hedges between the two, so it was retrained on the capacity less that
+  traffic, its scalers and bins kept (retrained on the old label it came
+  out byte for byte the same;
+  [`exp-net1-v7-less-udp-290`](https://github.com/Radonux/palaestra/releases/tag/exp-net1-v7-less-udp-290)).
+  Offline its mean at the lower level was above 1.1 times the truth in
+  29% of rows against 45%, and beside a TCP flow its median log2 error
+  went from +0.01 to +0.11 to -0.03 to +0.01 (spreads below 0.7). Run
+  unchanged on it
+  ([`exp-capacity-repair-v7-val-291`](https://github.com/Radonux/palaestra/releases/tag/exp-capacity-repair-v7-val-291),
+  three training seeds), the learned net2 fell from +0.165 to +0.144 on
+  the five-family mean. It gained on constant clean links as much as the
+  true capacity had (+0.015) but not at the lower level (-0.03 to +0.02
+  by time since the step down), lost 0.04 to 0.08 beside Cubic and gained
+  0.27 to 0.31 among copies. The new label moved net1's error between
+  conditions the flow cannot tell apart instead of removing it.
