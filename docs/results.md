@@ -136,8 +136,26 @@ buffers (+0.088 against +0.244) and with Cubic first (-0.099 against
 iteration 19 and 0.03 by iteration 59, while the split's student started
 at the rule. Adding the raw measurements to net1's means gained +0.004
 (+0.156), inside the 0.02 margin set beforehand: at this budget the LCFs
-left out nothing the learned net2 could use. Only the black box's hidden
-size was searched; a larger net or a longer budget is UNRUN.
+left out nothing the learned net2 could use.
+
+More training narrows the gap but does not close it. Round 32 trained
+each hidden-256 black box for 120 more iterations (180 in all) and a
+fresh one at hidden size 512 for 60 (seed 1 reached the time budget
+after 50)
+([`exp-net2-r32-blackbox-more-296`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-r32-blackbox-more-296)).
+Beside round 31's policies on the validation links
+([`exp-blackbox-more-val-297`](https://github.com/Radonux/palaestra/releases/tag/exp-blackbox-more-val-297)),
+the longer-trained black box scored +0.093 (+0.082 to +0.105) and the
+wider one +0.061 (+0.039 to +0.103), against +0.158 (+0.150 to +0.163)
+for the split and +0.069 for round 31's black box. Neither came within
+0.02 of the split, so the split's lead holds. Three times the training
+gained 0.024, the most in deep buffers (+0.089 to +0.141; the split +0.250),
+and cost ground among copies (+0.084 to -0.004, still above the split's
+-0.151); width gained nothing. On its training links the longer-trained
+black box was still rising at the end (mean over seeds -0.018 against
+the rule after 160 iterations, -0.002 after 180), so more training may
+narrow the gap further; the split reached in 60 iterations what the
+black box did not reach in 180.
 
 On ccBench's suites, run unchanged on links outside the train,
 validation and test sets (690 single-flow links of 12 to 192 Mbit/s, 5

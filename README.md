@@ -57,6 +57,9 @@ the claims and defines every term used below.
    minus BBRv3 on the validation five-family mean, one on the raw
    measurements alone +0.065, and one on both +0.156
    ([`exp-blackbox-val-295`](https://github.com/Radonux/palaestra/releases/tag/exp-blackbox-val-295)).
+   Trained three times as long, the black box reached +0.093, against
+   +0.158 for the split in the same run
+   ([`exp-blackbox-more-val-297`](https://github.com/Radonux/palaestra/releases/tag/exp-blackbox-more-val-297)).
 5. net2 gains nothing from net1's stated uncertainty: reading the
    distributions does no better than reading their means, and lowering
    the window where net1 is unsure helps among copies but costs beside a
