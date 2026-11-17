@@ -227,13 +227,19 @@ copies, a stock flow; chance 0.333) reached a balanced accuracy of 0.709
 from the raw measurements, 0.472 from net1 v7's beliefs and 0.609 from
 net1 v10's 32
 ([`exp-competitor-info-v7-299`](https://github.com/Radonux/palaestra/releases/tag/exp-competitor-info-v7-299)).
-On the old guest a traffic head on net1 learned it (0.909;
-[`exp-net1-traffic-head-val-180`](https://github.com/Radonux/palaestra/releases/tag/exp-net1-traffic-head-val-180)).
+A traffic head on net1 v7 (a small network on net1's scaled input,
+fitted to the true class on the training links) reached 0.893 on the
+same validation links
+([`exp-traffic-head-v7-300`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-v7-300)).
 Yet the learned net2 given the raw measurements beside net1 v7's means
 gained only 0.032 among copies and 0.004 on the five-family mean
 ([`exp-blackbox-val-295`](https://github.com/Radonux/palaestra/releases/tag/exp-blackbox-val-295)):
 the information was there and the learner, at that budget, did not use
-it.
+it. Given the head's call in place of its own beliefs about the other
+traffic, round 29's net2 gained 0.38 to 0.52 among copies but lost 0.045
+to 0.055 on the five-family mean, two thirds of it beside a Cubic flow
+that started first
+([`exp-traffic-head-val-301`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-val-301)).
 
 ## Learned net2
 
