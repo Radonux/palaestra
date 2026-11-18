@@ -18,6 +18,8 @@ LCF's estimation error costs this net2.
 --traffic HEAD.pt gives net1 its traffic head (train/traffic.py) and takes
 a gate3 student's q from the head's P(copies) instead of the students;
 --traffic-p takes p from its P(stock) too, so that net2 is the rules alone.
+For actors that already read a head (inputs "net1+traffic"), HEAD.pt must
+be the head they read.
 
 --spread K --s0 S0 adds K times net1's stated spread of capacity past S0
 to a gate3 student's u, in proportion to its belief that no stock TCP flow
@@ -63,8 +65,10 @@ def _specs(runs: list[Path], traffic: Path | None) -> list[ppo.PPOSpec]:
     specs = [ppo.PPOSpec.parse((r / "ppo_spec.json").read_text()) for r in runs]
     if specs[0].inputs != "net1+traffic":
         return specs
-    if traffic is not None:
-        raise SystemExit("--traffic replaces beliefs the actor learned; this actor reads the head")
+    if traffic is not None and any(
+        traffic.read_bytes() != (r / "traffic_head.pt").read_bytes() for r in runs
+    ):
+        raise SystemExit("--traffic: these actors read their own head; give that one")
     return [
         s.model_copy(update={"traffic_head": r / "traffic_head.pt"})
         for s, r in zip(specs, runs, strict=True)
@@ -117,9 +121,14 @@ def main() -> None:
         raise SystemExit("--traffic-p takes p from the head given by --traffic")
     if args.traffic is not None and spec.student.kind != "gate3":
         raise SystemExit("--traffic replaces a gate3 student's q")
-    head = None if args.traffic is None else load_head(args.traffic)
+    # an actor on "net1+traffic" has the head in its front end already
+    head = (
+        None if args.traffic is None or spec.inputs == "net1+traffic" else load_head(args.traffic)
+    )
     decide = (
-        None if head is None else actors.Head(net1, spec, traffic_q=True, traffic_p=args.traffic_p)
+        None
+        if args.traffic is None
+        else actors.Head(net1, spec, traffic_q=True, traffic_p=args.traffic_p)
     )
     if args.spread is not None:
         base = decide if decide is not None else actors.Head(net1, spec)

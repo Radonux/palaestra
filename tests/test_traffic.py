@@ -135,3 +135,7 @@ def test_a_net2_on_net1_and_its_traffic_head_reads_both_in_training_and_in_the_g
     graph = ppo.policy_graph(net1, actor, spec)
     rng = np.random.default_rng(0)
     _onnx_matches(graph, rng.normal(size=(40, 78)).astype(np.float32) + 20)
+    # its belief in copies taken from the head it reads (gate_ensemble_export --traffic)
+    q_from_head = actors.Head(net1, spec, traffic_q=True)
+    graph = ppo.policy_graph(net1, actor, spec, head=q_from_head)
+    _onnx_matches(graph, rng.normal(size=(40, 78)).astype(np.float32) + 20)
