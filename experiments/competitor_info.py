@@ -63,7 +63,8 @@ def load(
     first step (s)."""
     raw, bel, cls, link, who, age = [], [], [], [], [], []
     links: dict[str, int] = {}
-    for shard in sorted(out.glob("c-*/shards/*")):
+    # a shard planned no episodes writes no tables (more shards than episodes)
+    for shard in sorted(e.parent for e in out.glob("c-*/shards/*/episodes.parquet")):
         eps = pq.read_table(
             shard / "episodes.parquet", columns=["episode_id", "spec_json", "status"]
         )
