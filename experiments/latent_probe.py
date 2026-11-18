@@ -1,5 +1,5 @@
-"""How much of net1's LCFs can a linear map read from the seven numbers a
-net2's actor reads?
+"""How much of net1's LCFs can a map read from the seven numbers a net2's
+actor reads?
 
 Usage: python experiments/latent_probe.py OUT DATA NET1.pt NAME=DIR...
 
@@ -10,8 +10,9 @@ weights (seed 0) with its batch norms' statistics taken from the data. For
 each LCF, a least-squares map with a bias from the latents to the LCF in
 net1's target space (its LCF scaler; rows where the label is undefined are
 left out) is fitted on the training links of DIR's split and scored by R^2
-on its validation links, on every 10th step of each episode. Writes
-OUT/probe.json and OUT/probe.md.
+on its validation links, on every 10th step of each episode; so is a small
+network (two hidden layers of 128) fitted to all seven at once, which also
+finds what a linear map cannot. Writes OUT/probe.json and OUT/probe.md.
 """
 
 import json
@@ -29,6 +30,8 @@ from expliccit_env.train.spec import TrainSpec
 type F32 = npt.NDArray[np.float32]
 STRIDE = 10
 BATCH = 65536
+MLP_STEPS = 3000
+BATCH_MLP = 4096
 
 
 @torch.no_grad()
@@ -58,7 +61,52 @@ def r2(z: F32, y: F32, tr: npt.NDArray[np.bool_], va: npt.NDArray[np.bool_]) -> 
 
     w, *_ = np.linalg.lstsq(design(tr), y[tr].astype(np.float64), rcond=None)
     t = y[va].astype(np.float64)
-    return float(1 - ((design(va) @ w - t) ** 2).sum() / ((t - t.mean()) ** 2).sum())
+    return _r2(design(va) @ w, t)
+
+
+def _r2(p: npt.NDArray[np.float64], t: npt.NDArray[np.float64]) -> float:
+    """NaN where the truth does not vary (or is missing) on validation rows."""
+    sst = ((t - t.mean()) ** 2).sum() if t.size else 0.0
+    return float(1 - ((p - t) ** 2).sum() / sst) if sst > 0 else float("nan")
+
+
+@torch.enable_grad()
+def mlp_r2(
+    z: F32,
+    y: F32,
+    defined: npt.NDArray[np.bool_],
+    tr: npt.NDArray[np.bool_],
+    va: npt.NDArray[np.bool_],
+) -> list[float]:
+    """Validation R^2 per LCF of a network from the latents to all LCFs."""
+    torch.manual_seed(0)
+    rng = np.random.default_rng(0)
+    mu, sd = z[tr].mean(0), z[tr].std(0) + 1e-6
+    x = torch.from_numpy((z - mu) / sd)
+    t, m = torch.from_numpy(np.where(defined, y, 0.0).astype(np.float32)), torch.from_numpy(defined)
+    net = nn.Sequential(
+        nn.Linear(z.shape[1], 128),
+        nn.ReLU(),
+        nn.Linear(128, 128),
+        nn.ReLU(),
+        nn.Linear(128, y.shape[1]),
+    )
+    opt = torch.optim.Adam(net.parameters(), lr=1e-3)
+    rows = np.flatnonzero(tr)
+    for _ in range(MLP_STEPS):
+        b = torch.from_numpy(rng.choice(rows, BATCH_MLP))
+        err = (net(x[b]) - t[b]) ** 2 * m[b]
+        loss = err.sum() / m[b].sum().clamp(min=1)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+    with torch.no_grad():
+        p = np.concatenate([net(x[i : i + BATCH]).numpy() for i in range(0, len(x), BATCH)])
+    out = []
+    for k in range(y.shape[1]):
+        v = va & defined[:, k]
+        out.append(_r2(p[v, k].astype(np.float64), y[v, k].astype(np.float64)))
+    return out
 
 
 def main() -> None:
@@ -74,7 +122,7 @@ def main() -> None:
     if len({(t.val_fraction, t.test_fraction, t.split_by) for t in specs.values()}) > 1:
         raise SystemExit("the runs split the data differently beyond their seeds")
     seed_of = {n: specs[n].seed if d != "random" else 0 for n, d in named}
-    result: dict[str, dict[str, float]] = {}
+    result: dict[str, dict[str, dict[str, float]]] = {}
     for seed in sorted(set(seed_of.values())):
         steps = data.load(
             [Path(data_dir)],
@@ -102,22 +150,30 @@ def main() -> None:
                 f = net1.net.eval()
             z = latents(f, net1, steps.obs)
             result[name] = {
-                lcf: r2(z, y[:, k], tr & defined[:, k], va & defined[:, k])
-                for k, lcf in enumerate(net1.lcfs)
+                "linear": {
+                    lcf: r2(z, y[:, k], tr & defined[:, k], va & defined[:, k])
+                    for k, lcf in enumerate(net1.lcfs)
+                },
+                "network": dict(zip(net1.lcfs, mlp_r2(z, y, defined, tr, va), strict=True)),
             }
     o = Path(out)
     o.mkdir(parents=True, exist_ok=True)
     (o / "probe.json").write_text(json.dumps(result, indent=1) + "\n")
     lines = [
-        "Validation R^2 of a linear map (with a bias) from the actor's seven inputs to each"
-        " LCF in net1's target space, fitted on training links, every 10th step.",
-        "",
-        "| latents | " + " | ".join(net1.lcfs) + " | mean |",
-        "|" + "---|" * (len(net1.lcfs) + 2),
+        "Validation R^2 of a map from the actor's seven inputs to each LCF in net1's target"
+        " space, fitted on training links, every 10th step: a linear map with a bias, and a"
+        " network with two hidden layers of 128.",
     ]
-    for name, r in result.items():
-        v = list(r.values())
-        lines.append(f"| {name} | " + " | ".join(f"{x:.3f}" for x in v) + f" | {np.mean(v):.3f} |")
+    for kind in ("linear", "network"):
+        lines += [
+            "",
+            f"| latents ({kind}) | " + " | ".join(net1.lcfs) + " | mean |",
+            "|" + "---|" * (len(net1.lcfs) + 2),
+        ]
+        for name, r in result.items():
+            v = list(r[kind].values())
+            cells = " | ".join(f"{x:.3f}" for x in v)
+            lines.append(f"| {name} | {cells} | {np.mean(v):.3f} |")
     (o / "probe.md").write_text("\n".join(lines) + "\n")
 
 
