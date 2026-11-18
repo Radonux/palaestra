@@ -1,0 +1,17 @@
+{
+  "title": "Cost of the LCFs' meaning with the flow alone, as in expliCCit's experiments",
+  "description": "The 20 policies of exp-lcf-cost-report-322 (lcft-paper-none, lcft-freefix-none, lcf-paper-c0.1-lr1e-4-n60k and lcf-free-c0.01-lr1e-4-n60k, each on training seeds 0 to 4) and BBRv3, unchanged, with no cross traffic: experiments/comfort.py --alone keeps the 27 of the pool's 64 conditions that have none (some with random loss), so each flow is alone on a link of set capacity, minimum RTT, buffer and loss, as in expliCCit's own experiments. Two campaigns, each link under 2 such conditions, 30 s: links 100 to 399 of net2-train, the links of release 322, with campaign seed 34 (c-train-alone), and links 0 to 299 of net2-train-xl, the links of release 323, which the training data never had, with campaign seed 35 (c-unseen-alone). It checks whether the two comparisons of 322 and 323, free minus paper under expliCCit's CQL and under cloning BBRv3, hold on this easier test. Nothing is chosen here. summary.md opens with free minus paper per pair (experiments/arm_versus.py); metrics-CAMPAIGN.json holds each controller's utilization, queueing delay and drops (expliccit campaign summary), the measures expliCCit reports.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "t": "release:exp-lcf-cost-teacher-317",
+    "u": "release:exp-lcf-cost-teacher-seeds-321",
+    "p": "release:exp-lcf-cost-315",
+    "s": "release:exp-lcf-cost-seeds-320"
+  },
+  "prepare": "P=(); for s in 0 1 2 3 4; do T=\"$IN/t\"; F=\"$IN/p\"; [ \"$s\" -ge 2 ] && { T=\"$IN/u\"; F=\"$IN/s\"; }; for c in lcft-paper-none lcft-freefix-none; do P+=(--policy \"$c-s$s=$T/$c-s$s/policy.onnx\"); done; for c in lcf-paper-c0.1-lr1e-4-n60k lcf-free-c0.01-lr1e-4-n60k; do P+=(--policy \"$c-s$s=$F/$c-s$s/policy.onnx\"); done; done; [ \"${#P[@]}\" -eq 40 ]; for x in \"${P[@]}\"; do [ \"$x\" = --policy ] || [ -f \"${x#*=}\" ]; done; uv run python experiments/comfort.py \"$OUT/spec-train\" --links 100:400 --seed 34 --alone --stock bbr3 \"${P[@]}\"; uv run expliccit campaign plan \"$OUT/spec-train/campaign.json\" \"$OUT/c-train-alone\"; uv run python experiments/comfort.py \"$OUT/spec-unseen\" --links 0:300 --seed 35 --set net2-train-xl --alone --stock bbr3 \"${P[@]}\"; uv run expliccit campaign plan \"$OUT/spec-unseen/campaign.json\" \"$OUT/c-unseen-alone\"; cmp \"$OUT/spec-train/aliases.json\" \"$OUT/spec-unseen/aliases.json\"; cp \"$OUT/spec-train/aliases.json\" \"$OUT/aliases.json\"",
+  "shards": 200,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+  "collect": "uv run python experiments/rule_report.py \"$OUT\" --over-seeds; uv run python experiments/arm_versus.py \"$OUT\" lcft-freefix-none:lcft-paper-none lcf-free-c0.01-lr1e-4-n60k:lcf-paper-c0.1-lr1e-4-n60k lcft-freefix-none:bbr3 lcft-paper-none:bbr3 lcf-free-c0.01-lr1e-4-n60k:bbr3 lcf-paper-c0.1-lr1e-4-n60k:bbr3; { cat \"$OUT/versus.md\"; echo; cat \"$OUT/summary.md\"; } > \"$OUT/summary.tmp\"; mv \"$OUT/summary.tmp\" \"$OUT/summary.md\"; for c in \"$OUT\"/c-*; do uv run expliccit campaign summary \"$c\" > \"$OUT/metrics-${c##*/c-}.json\"; done",
+  "timeout_minutes": 350
+}

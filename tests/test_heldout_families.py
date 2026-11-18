@@ -124,8 +124,18 @@ def test_comfort_runs_net2s_training_links_under_its_conditions() -> None:
 
 def test_comfort_can_draw_links_and_conditions_the_data_never_had() -> None:
     train_links, train_conditions = comfort.draw("net2-train")
-    spec = comfort.campaign(0, 10, 33, [{"kind": "stock", "name": "bbr3"}], "net2-train-xl")
+    spec = comfort.campaign(0, 10, 33, [{"kind": "stock", "name": "bbr3"}], set_="net2-train-xl")
     assert spec["name"] == "net2-train-xl-0-10" and len(spec["conditions"]) == 64
     assert not any(p in train_links for p in spec["sweep"]["paths"])
     # A new draw of conditions; the simplest (the flow alone) recur by chance.
     assert sum(c in train_conditions for c in spec["conditions"]) < 32
+
+
+def test_comfort_alone_keeps_only_the_conditions_without_cross_traffic() -> None:
+    _, conditions = comfort.draw("net2-train")
+    spec = comfort.campaign(100, 110, 34, [{"kind": "stock", "name": "bbr3"}], alone=True)
+    assert spec["name"] == "comfort-100-110-alone"
+    assert spec["conditions"] == [c for c in conditions if not c["cross"]]
+    assert len(spec["conditions"]) == 27
+    episodes = CampaignSpec.model_validate(spec).episodes()
+    assert len(episodes) == 10 * 2 and not any(e.cross for e in episodes)
