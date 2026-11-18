@@ -240,6 +240,17 @@ traffic, round 29's net2 gained 0.38 to 0.52 among copies but lost 0.045
 to 0.055 on the five-family mean, two thirds of it beside a Cubic flow
 that started first
 ([`exp-traffic-head-val-301`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-val-301)).
+Trained with the head's probabilities as input (round 33,
+[`exp-net2-r33-traffic-302`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-r33-traffic-302)),
+net2 gained there instead (+0.055 against -0.002 for round 29's, every
+seed) and held the five-family mean (+0.158 against +0.157), but gained
+nothing among copies (-0.115 against -0.081)
+([`exp-traffic-r33-val-303`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-r33-val-303)).
+With its belief in copies taken from the head, the same net2 gained 0.40
+among copies and lost 0.30 with Cubic first
+([`exp-traffic-r33h-val-304`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-r33h-val-304)).
+net2 learned to discount the head beside Cubic but not to follow it among
+copies.
 
 ## Learned net2
 
