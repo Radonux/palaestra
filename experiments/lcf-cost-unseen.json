@@ -1,0 +1,17 @@
+{
+  "title": "Cost of the LCFs' meaning: the four reported configurations on 300 links the training data never had",
+  "description": "The 20 policies of exp-lcf-cost-report-322 (lcft-paper-none, lcft-freefix-none, lcf-paper-c0.1-lr1e-4-n60k and lcf-free-c0.01-lr1e-4-n60k, each on training seeds 0 to 4) and BBRv3, unchanged, on links 0 to 299 of examples/net1_broad.py's net2-train-xl set: links and a pool of 64 conditions drawn anew from the training ranges, none of the links in the training data (only the simplest conditions, such as the flow alone, recur), each link under 2 conditions drawn with campaign seed 33, 30 s (experiments/comfort.py --set net2-train-xl). Release 322 scored them, as a one-off, on their own training links; this checks whether its two comparisons, free minus paper under expliCCit's CQL and under cloning BBRv3, hold where the policies were not trained. Nothing is chosen here. summary.md opens with free minus paper per pair (experiments/arm_versus.py).",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "t": "release:exp-lcf-cost-teacher-317",
+    "u": "release:exp-lcf-cost-teacher-seeds-321",
+    "p": "release:exp-lcf-cost-315",
+    "s": "release:exp-lcf-cost-seeds-320"
+  },
+  "prepare": "P=(); for s in 0 1 2 3 4; do T=\"$IN/t\"; F=\"$IN/p\"; [ \"$s\" -ge 2 ] && { T=\"$IN/u\"; F=\"$IN/s\"; }; for c in lcft-paper-none lcft-freefix-none; do P+=(--policy \"$c-s$s=$T/$c-s$s/policy.onnx\"); done; for c in lcf-paper-c0.1-lr1e-4-n60k lcf-free-c0.01-lr1e-4-n60k; do P+=(--policy \"$c-s$s=$F/$c-s$s/policy.onnx\"); done; done; [ \"${#P[@]}\" -eq 40 ]; for x in \"${P[@]}\"; do [ \"$x\" = --policy ] || [ -f \"${x#*=}\" ]; done; uv run python experiments/comfort.py \"$OUT/spec\" --links 0:300 --seed 33 --set net2-train-xl --stock bbr3 \"${P[@]}\"; uv run expliccit campaign plan \"$OUT/spec/campaign.json\" \"$OUT/c-unseen\"; cp \"$OUT/spec/aliases.json\" \"$OUT/aliases.json\"",
+  "shards": 200,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+  "collect": "uv run python experiments/rule_report.py \"$OUT\" --over-seeds; uv run python experiments/arm_versus.py \"$OUT\" lcft-freefix-none:lcft-paper-none lcf-free-c0.01-lr1e-4-n60k:lcf-paper-c0.1-lr1e-4-n60k lcft-freefix-none:bbr3 lcft-paper-none:bbr3 lcf-free-c0.01-lr1e-4-n60k:bbr3 lcf-paper-c0.1-lr1e-4-n60k:bbr3; { cat \"$OUT/versus.md\"; echo; cat \"$OUT/summary.md\"; } > \"$OUT/summary.tmp\"; mv \"$OUT/summary.tmp\" \"$OUT/summary.md\"",
+  "timeout_minutes": 350
+}

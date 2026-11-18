@@ -120,3 +120,12 @@ def test_comfort_runs_net2s_training_links_under_its_conditions() -> None:
     assert len(episodes) == 10 * 2 and all(e.duration_ms == 30000 for e in episodes)
     with pytest.raises(ValueError, match="within"):
         comfort.campaign(590, 601, 32, [])
+
+
+def test_comfort_can_draw_links_and_conditions_the_data_never_had() -> None:
+    train_links, train_conditions = comfort.draw("net2-train")
+    spec = comfort.campaign(0, 10, 33, [{"kind": "stock", "name": "bbr3"}], "net2-train-xl")
+    assert spec["name"] == "net2-train-xl-0-10" and len(spec["conditions"]) == 64
+    assert not any(p in train_links for p in spec["sweep"]["paths"])
+    # A new draw of conditions; the simplest (the flow alone) recur by chance.
+    assert sum(c in train_conditions for c in spec["conditions"]) < 32
