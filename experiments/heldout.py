@@ -15,7 +15,8 @@ had: "new" (a Cubic flow from 0 s, a BBRv1 flow from 4 s, Cubic flows from
 conditions on the same links with a 2.5 times longer one-way delay, at most
 80 ms, and a buffer of 4 to 16 BDP drawn with seed 31), and
 "held-competitors" (a BBRv3 flow from 0 s, a Westwood flow from 0 s: the
-competitors net1 v4's training data held out), and "dynamic", for 120 s
+competitors net1 v4's training data held out), "stock-all" (one flow from
+0 s of each other stock controller, STOCK_ALL), and "dynamic", for 120 s
 episodes, where competitors arrive and leave mid-episode (DYNAMIC), so that
 a controller must notice each change and the others' reaction to it.
 Two families hold links where the flow cannot keep the link busy, so that
@@ -69,6 +70,14 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "examples/campaign-net1-varied.json"
 HELD_COMPETITORS: list[dict[str, Any]] = [
     {"cross": [{"kind": "tcp", "cc": cc, "start_ms": 0}]} for cc in ("bbr3", "westwood")
+]
+# One flow from 0 s of each stock controller the held-out family does not
+# hold: the variety a classifier of "another TCP flow" needs to learn the
+# class rather than two of its members (train/traffic.py).
+STOCK_ALL: list[dict[str, Any]] = [
+    {"cross": [{"kind": "tcp", "cc": cc, "start_ms": 0}]}
+    for cc in STOCK_NAMES
+    if cc not in {c["cross"][0]["cc"] for c in HELD_COMPETITORS}
 ]
 NEW: list[dict[str, Any]] = [
     {"cross": [{"kind": "tcp", "cc": "cubic", "start_ms": 0}]},
@@ -327,6 +336,7 @@ def main() -> None:
             "cubic-first",
             "deep-long",
             "held-competitors",
+            "stock-all",
             "dynamic",
             "info",
             "rise",
@@ -353,6 +363,8 @@ def main() -> None:
         links = deep_long(links)
     elif family == "held-competitors":
         conditions = HELD_COMPETITORS
+    elif family == "stock-all":
+        conditions = STOCK_ALL
     elif family == "dynamic":
         conditions = DYNAMIC
     elif family == "info":
