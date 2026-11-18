@@ -269,7 +269,19 @@ both lost about 0.11 (+0.012 and +0.015 against +0.126): the head does
 not carry over to stock flows it never saw, and validation, which had
 no such family, did not catch it
 ([`exp-traffic-head-test-309`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-test-309)).
-What the head believes beside them is UNRUN.
+On validation links, round 29's rules lost 0.112 beside them with both
+beliefs from the head, 0.126 with only its belief in copies and 0.031
+with only its belief in a stock flow: the cost is net2 yielding to a
+flow it takes for a copy
+([`exp-traffic-head-decompose-val-313`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-decompose-val-313)).
+Refitted beside one flow of each of the 15 other stock controllers, the
+head still called BBRv3 copies in 13% to 15% of steps beside the fixed
+rule, though Westwood fell from 16% to 8%
+([`exp-traffic-head-v7-stock-312`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-v7-stock-312));
+in the same rules it cut the loss beside them to 0.030 but also the gain
+among copies, to +0.218 from +0.445 (313). Our reading: from the flow's own
+measurements, a copy and a stock flow that does not fill the buffer look
+alike, and the head trades one error for the other.
 
 ## Learned net2
 
