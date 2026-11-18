@@ -57,10 +57,11 @@ def senders(condition: str) -> str:
 
 def load(
     out: Path, net1: fit.Net1
-) -> tuple[F32, F32, npt.NDArray[np.int64], npt.NDArray[np.int64], npt.NDArray[np.str_]]:
+) -> tuple[F32, F32, npt.NDArray[np.int64], npt.NDArray[np.int64], npt.NDArray[np.str_], F32]:
     """Per kept step: the scaled measurements, net1's beliefs, the class,
-    the link (an index) and the other senders."""
-    raw, bel, cls, link, who = [], [], [], [], []
+    the link (an index), the other senders and the time since the flow's
+    first step (s)."""
+    raw, bel, cls, link, who, age = [], [], [], [], [], []
     links: dict[str, int] = {}
     for shard in sorted(out.glob("c-*/shards/*")):
         eps = pq.read_table(
@@ -91,12 +92,14 @@ def load(
             cls.append(np.full(rows.size, traffic(meta[eid][0])))
             link.append(np.full(rows.size, meta[eid][1]))
             who.append(np.full(rows.size, senders(meta[eid][0])))
+            age.append((ts[rows] - ts[ids == eid].min()).astype(np.float32))
     return (
         np.concatenate(raw),
         np.concatenate(bel),
         np.concatenate(cls).astype(np.int64),
         np.concatenate(link).astype(np.int64),
         np.concatenate(who),
+        np.concatenate(age),
     )
 
 
@@ -136,7 +139,7 @@ def _share(hits: npt.NDArray[np.bool_]) -> float:
 
 def main(out: Path, net1_path: Path) -> None:
     net1, _ = fit.load_net1(net1_path)
-    raw, bel, y, link, _ = load(out, net1)
+    raw, bel, y, link, _, _ = load(out, net1)
     counts = defaultdict(int)
     for c in y.tolist():
         counts[CLASSES[c]] += 1

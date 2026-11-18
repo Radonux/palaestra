@@ -22,7 +22,7 @@ from expliccit_env.train.traffic import CLASSES, fit_head, save_head
 
 def main(out: Path, net1_path: Path) -> None:
     net1, _ = fit.load_net1(net1_path)
-    raw, _, y, link, _ = load(out, net1)
+    raw, _, y, link, _, _ = load(out, net1)
     m = held_out(raw, y, link)
     head = fit_head(raw, y)
     save_head(head, out / "traffic_head.pt")
