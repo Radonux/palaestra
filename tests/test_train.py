@@ -814,8 +814,21 @@ def test_a_free_arm_trains_and_its_graph_reads_the_measurements() -> None:
     assert [i.name for i in model.graph.input] == ["obs"]
 
 
+def test_the_free_encoder_can_learn_at_its_own_rate() -> None:
+    spec = _FREE.model_copy(update={"encoder_lr": 1e-5})
+    learner = fit.Learner(spec, 7, fit.free_encoder(_net1(), 0))
+    assert learner.opt_c is not None and learner.encoder is not None
+    critic, encoder = learner.opt_c.param_groups
+    assert (critic["lr"], encoder["lr"]) == (spec.expliccit_lrs[1], 1e-5)
+    assert encoder["params"] == list(learner.encoder.parameters())
+    default = fit.Learner(_FREE, 7, fit.free_encoder(_net1(), 0)).opt_c
+    assert default is not None and default.param_groups[1]["lr"] == _FREE.expliccit_lrs[1]
+
+
 def test_a_free_encoder_is_expliccits_objective_on_the_measurements() -> None:
     Net2Spec(algo="expliccit-v1", inputs="raw", encoder="free")
+    with pytest.raises(ValueError, match="encoder_lr"):
+        Net2Spec(algo="expliccit-v1", inputs="raw", encoder_lr=1e-5)
     for bad in [{"inputs": "net1"}, {"algo": "td3bc"}]:
         with pytest.raises(ValueError, match="free"):
             Net2Spec.model_validate(

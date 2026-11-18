@@ -177,6 +177,8 @@ class Net2Spec(_Frozen):
     # reads the latents without moving them, as with a shared encoder in
     # actor-critic learning from pixels (SAC-AE, Yarats et al., 2021).
     encoder: Literal["free"] | None = None
+    # encoder "free" only: the encoder's learning rate (none: the critic's).
+    encoder_lr: Annotated[float, Field(gt=0)] | None = None
     # iql only: the expectile V(s) fits to Q(s, a) over the logged actions,
     # the advantage temperature, and the cap on an action's weight.
     expectile: Annotated[float, Field(ge=0.5, lt=1)] = 0.7
@@ -195,6 +197,8 @@ class Net2Spec(_Frozen):
         # the other algos' update paths would each need the encoder.
         if self.encoder is not None and (self.inputs != "raw" or self.algo != "expliccit-v1"):
             raise ValueError('encoder "free" is algo "expliccit-v1" on inputs "raw"')
+        if self.encoder_lr is not None and self.encoder is None:
+            raise ValueError('encoder_lr is the learning rate of encoder "free"')
         return self
 
 

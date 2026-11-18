@@ -150,7 +150,7 @@ net2 on net1 v7 and v9, with its two best arms (TD3+BC, alpha 5 and 10,
 | `discount`, `n_step` | 0.95, 1 | multi-step returns let a target's effect over an RTT reach the critic |
 | `action_max`, `action_decimals` | 1.0, none | a = action_max tanh(...), rounded in the exported graph |
 | `cql_alpha`, `expliccit_lrs` | 1.0, (1e-4, 1e-3) | `expliccit-v1`: the weight of its penalty on random actions, and the actor's and critic's learning rates |
-| `encoder` | none | `free` (with `expliccit-v1` and `raw`): a network of net1's architecture, from random weights, maps the measurements to as many unnamed latents as net1 has LCFs, and the critic's loss trains it with the critic; the actor reads the latents and does not move them |
+| `encoder` | none | `free` (with `expliccit-v1` and `raw`): a network of net1's architecture, from random weights, maps the measurements to as many unnamed latents as net1 has LCFs, and the critic's loss trains it with the critic; the actor reads the latents and does not move them; `encoder_lr` is its learning rate (none: the critic's) |
 
 Every learner update reports diagnostics in `report.json` and
 `history.json`:

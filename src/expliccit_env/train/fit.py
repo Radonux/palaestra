@@ -666,8 +666,10 @@ class Learner:
         self.opt_a = torch.optim.Adam(self.actor.parameters(), lr=lr_a)
         critic_params = [p for c in self.critics for p in c.parameters()]
         critic_params += list(self.value.parameters()) if self.value is not None else []
-        critic_params += list(encoder.parameters()) if encoder is not None else []
-        self.opt_c = torch.optim.Adam(critic_params, lr=lr_c) if critic_params else None
+        groups: list[dict[str, Any]] = [{"params": critic_params}] if critic_params else []
+        if encoder is not None:
+            groups.append({"params": list(encoder.parameters()), "lr": spec.encoder_lr or lr_c})
+        self.opt_c = torch.optim.Adam(groups, lr=lr_c) if groups else None
 
     def _critic_loss(self, s: torch.Tensor, a: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         qs = [c(s, a) for c in self.critics]
