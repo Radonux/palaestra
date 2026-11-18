@@ -177,8 +177,9 @@ class Net2Spec(_Frozen):
     # reads the latents without moving them, as with a shared encoder in
     # actor-critic learning from pixels (SAC-AE, Yarats et al., 2021).
     encoder: Literal["free"] | None = None
-    # encoder "free" only: the encoder's learning rate (none: the critic's).
-    encoder_lr: Annotated[float, Field(gt=0)] | None = None
+    # encoder "free" only: the encoder's learning rate (none: the critic's,
+    # or the actor's for bc; 0 holds it fixed, in eval mode).
+    encoder_lr: Annotated[float, Field(ge=0)] | None = None
     # iql only: the expectile V(s) fits to Q(s, a) over the logged actions,
     # the advantage temperature, and the cap on an action's weight.
     expectile: Annotated[float, Field(ge=0.5, lt=1)] = 0.7
@@ -193,10 +194,11 @@ class Net2Spec(_Frozen):
 
     @model_validator(mode="after")
     def _end_to_end(self) -> Net2Spec:
-        # ponytail: expliCCit's objective only, the comparison it serves;
-        # the other algos' update paths would each need the encoder.
-        if self.encoder is not None and (self.inputs != "raw" or self.algo != "expliccit-v1"):
-            raise ValueError('encoder "free" is algo "expliccit-v1" on inputs "raw"')
+        # ponytail: the algos of the comparison it serves; iql's update path
+        # would need the encoder too.
+        algos = ("expliccit-v1", "bc", "td3bc")
+        if self.encoder is not None and (self.inputs != "raw" or self.algo not in algos):
+            raise ValueError(f'encoder "free" is one of the algos {algos} on inputs "raw"')
         if self.encoder_lr is not None and self.encoder is None:
             raise ValueError('encoder_lr is the learning rate of encoder "free"')
         return self
@@ -228,6 +230,9 @@ class TrainSpec(_Frozen):
     # A trained net1 to reuse (a run's net1.pt): net1 is then not trained, and
     # its saved spec replaces the "net1" field.
     net1_from: Path | None = None
+    # An earlier run's net2.pt to start net2 from (its actor, and its encoder
+    # with encoder "free"); the critics start fresh.
+    net2_from: Path | None = None
     net2: Net2Spec = Net2Spec()
 
     @model_validator(mode="after")

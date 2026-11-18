@@ -43,7 +43,7 @@ def train(spec: TrainSpec, out: Path) -> dict[str, Any]:
     net1_log["seconds"] = time.perf_counter() - started  # wall time, this host
     fit.save_net1(net1, net1_spec, out / "net1.pt")
     started = time.perf_counter()
-    actor, net2_log = fit.fit_net2(spec.net2, steps, net1, spec.seed)
+    actor, net2_log = fit.fit_net2(spec.net2, steps, net1, spec.seed, spec.net2_from)
     net2_log["seconds"] = time.perf_counter() - started
     torch.save(actor.state_dict(), out / "net2.pt")
     report: dict[str, Any] = {

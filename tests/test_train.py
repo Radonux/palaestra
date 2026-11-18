@@ -825,11 +825,40 @@ def test_the_free_encoder_can_learn_at_its_own_rate() -> None:
     assert default is not None and default.param_groups[1]["lr"] == _FREE.expliccit_lrs[1]
 
 
+def test_a_free_arm_starts_from_its_teacher_and_can_hold_the_encoder_fixed(
+    tmp_path: Path,
+) -> None:
+    net1 = _net1()
+    steps = synthetic(n_episodes=10, steps=50)
+    teacher = _FREE.model_copy(update={"algo": "bc", "steps": 10})
+    taught, _ = fit.fit_net2(teacher, steps, net1, 0)
+    assert isinstance(taught, torch.nn.Sequential)
+    torch.save(taught.state_dict(), tmp_path / "net2.pt")
+    for algo in ["expliccit-v1", "td3bc"]:
+        rl = _FREE.model_copy(update={"algo": algo, "steps": 10, "encoder_lr": 0.0})
+        policy, log = fit.fit_net2(rl, steps, net1, 0, tmp_path / "net2.pt")
+        assert np.isfinite(log["final"]["critic"])
+        assert isinstance(policy, torch.nn.Sequential)
+        for p, q in zip(policy[0].parameters(), taught[0].parameters(), strict=True):
+            assert torch.equal(p, q)  # held fixed
+        assert not _unchanged(policy[1], list(taught[1].parameters()))  # the actor moved
+
+
+def test_a_cloning_free_arm_trains_its_encoder_with_the_actor() -> None:
+    torch.manual_seed(0)
+    spec = _FREE.model_copy(update={"algo": "bc"})
+    learner = fit.Learner(spec, 7, fit.free_encoder(_net1(), 0))
+    assert learner.opt_c is None and learner.encoder is not None
+    before = [p.detach().clone() for p in learner.encoder.parameters()]
+    learner.update(_raw_batch(), 0)
+    assert not _unchanged(learner.encoder, before)
+
+
 def test_a_free_encoder_is_expliccits_objective_on_the_measurements() -> None:
     Net2Spec(algo="expliccit-v1", inputs="raw", encoder="free")
     with pytest.raises(ValueError, match="encoder_lr"):
         Net2Spec(algo="expliccit-v1", inputs="raw", encoder_lr=1e-5)
-    for bad in [{"inputs": "net1"}, {"algo": "td3bc"}]:
+    for bad in [{"inputs": "net1"}, {"algo": "iql"}]:
         with pytest.raises(ValueError, match="free"):
             Net2Spec.model_validate(
                 {"algo": "expliccit-v1", "inputs": "raw", "encoder": "free"} | bad

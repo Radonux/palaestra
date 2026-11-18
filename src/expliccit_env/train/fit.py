@@ -663,13 +663,31 @@ class Learner:
         self.encoder = encoder
         self.encoder_t = None if encoder is None else copy.deepcopy(encoder).eval()
         lr_a, lr_c = spec.expliccit_lrs if spec.algo == "expliccit-v1" else (spec.lr, spec.lr)
-        self.opt_a = torch.optim.Adam(self.actor.parameters(), lr=lr_a)
+        # An encoder learns with the critic, or with the actor when only the
+        # actor learns (bc); encoder_lr 0 holds it fixed.
+        bc = spec.algo == "bc"
+        enc: list[dict[str, Any]] = []
+        if encoder is not None and spec.encoder_lr == 0:
+            encoder.eval().requires_grad_(False)
+        elif encoder is not None:
+            lr_e = spec.encoder_lr or (lr_a if bc else lr_c)
+            enc = [{"params": list(encoder.parameters()), "lr": lr_e}]
+        actor_params: list[dict[str, Any]] = [{"params": list(self.actor.parameters())}]
+        self.opt_a = torch.optim.Adam(actor_params + (enc if bc else []), lr=lr_a)
         critic_params = [p for c in self.critics for p in c.parameters()]
         critic_params += list(self.value.parameters()) if self.value is not None else []
-        groups: list[dict[str, Any]] = [{"params": critic_params}] if critic_params else []
-        if encoder is not None:
-            groups.append({"params": list(encoder.parameters()), "lr": spec.encoder_lr or lr_c})
+        groups = ([{"params": critic_params}] if critic_params else []) + ([] if bc else enc)
         self.opt_c = torch.optim.Adam(groups, lr=lr_c) if groups else None
+
+    def start_from(self, state: dict[str, torch.Tensor]) -> None:
+        """Weights of a policy fit_net2 returned (the actor, or the encoder
+        and the actor), for the actor, the encoder and their targets; the
+        critics start fresh."""
+        policy = self.actor if self.encoder is None else nn.Sequential(self.encoder, self.actor)
+        policy.load_state_dict(state)
+        self.actor_t.load_state_dict(self.actor.state_dict())
+        if self.encoder is not None and self.encoder_t is not None:
+            self.encoder_t.load_state_dict(self.encoder.state_dict())
 
     def _critic_loss(self, s: torch.Tensor, a: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         qs = [c(s, a) for c in self.critics]
@@ -683,7 +701,9 @@ class Learner:
         """One gradient step on the critics and (every policy_delay steps,
         unless ``actor`` is False) on the actor."""
         spec, (s, a, r, s2) = self.spec, (t.s, t.a, t.r, t.s2)
-        if self.opt_c is None:  # bc
+        if self.encoder is not None:
+            s = self.encoder(s)  # in train mode, as net1 is trained, unless held fixed
+        if spec.algo == "bc":
             pi = self.actor(s)
             bc = ((pi - a) ** 2).mean()
             self.opt_a.zero_grad()
@@ -694,8 +714,8 @@ class Learner:
             )
         if spec.algo == "iql":
             return self._iql(t, actor=actor)
-        if self.encoder is not None and self.encoder_t is not None:
-            s = self.encoder(s)  # in train mode, as net1 is trained
+        assert self.opt_c is not None  # every algo but bc has critics
+        if self.encoder_t is not None:
             with torch.no_grad():
                 s2 = self.encoder_t(s2)
         with torch.no_grad():
@@ -969,10 +989,11 @@ def free_encoder(net1: Net1, seed: int) -> nn.Module:
 
 
 def fit_net2(
-    spec: Net2Spec, steps: Steps, net1: Net1, seed: int
+    spec: Net2Spec, steps: Steps, net1: Net1, seed: int, start: Path | None = None
 ) -> tuple[nn.Module, dict[str, Any]]:
-    """net2 trained offline on the logged steps; returns the policy that
-    maps net2's input (or, with an encoder, the scaled measurements) to the
+    """net2 trained offline on the logged steps, from the weights of an
+    earlier run's net2.pt (``start``) if given; returns the policy that maps
+    net2's input (or, with an encoder, the scaled measurements) to the
     action, and the training log."""
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
@@ -986,6 +1007,8 @@ def fit_net2(
         raise ValueError("no training transitions")
     encoder = free_encoder(net1, seed) if spec.encoder == "free" else None
     learner = Learner(spec, width if encoder is None else net1.kind.k, encoder)
+    if start is not None:
+        learner.start_from(torch.load(start, map_location="cpu", weights_only=True))
     log: dict[str, list[float]] = {}
     for step in range(spec.steps):
         b = torch.from_numpy(rng.integers(0, len(data), spec.batch_size))
