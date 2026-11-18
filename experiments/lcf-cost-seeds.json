@@ -1,0 +1,23 @@
+{
+  "title": "Cost of the LCFs' meaning: each faithful arm's chosen CQL configuration on training seeds 2 to 4",
+  "description": "The configurations exp-lcf-cost-search-316 chose by the mean over training seeds 0 and 1, trained exactly as in exp-lcf-cost-315 on training seeds 2, 3 and 4: paper (neto1 v1's seven values) with CQL weight 0.1, free (seven free latents) with CQL weight 0.01, both at actor learning rate 1e-4 (critic 1e-3) for 60,000 updates. The policies (lcf-ARM-cCQL-lr1e-4-n60k-sSEED) join seeds 0 and 1 in the report run on links the search did not touch.",
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1-point-228",
+    "d": "release:exp-data-net2-steps-222"
+  },
+  "matrix": {
+    "arm": [
+      "paper",
+      "free"
+    ],
+    "seed": [
+      2,
+      3,
+      4
+    ]
+  },
+  "run": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; LR=1e-4; UPDATES=60000; CQL=0.1; [ \"$ARM\" = free ] && CQL=0.01; O=\"$OUT/lcf-$ARM-c$CQL-lr$LR-n$((UPDATES / 1000))k-s$SEED\"; mkdir -p \"$O\"; jq -n --arg d \"$IN/d\" --arg n \"$N\" --arg arm \"$ARM\" --argjson cql \"$CQL\" --argjson lr \"$LR\" --argjson updates \"$UPDATES\" --argjson seed \"$SEED\" '{data: [$d], split_by: \"link\", seed: $seed, net1_from: $n, net2: ({algo: \"expliccit-v1\", action: \"multiplier\", reward: \"sage\", reward_alignment: \"same\", action_max: 1.0, action_decimals: 3, cql_alpha: $cql, expliccit_lrs: [$lr, (10 * $lr)], steps: $updates} + (if $arm == \"free\" then {inputs: \"raw\", encoder: \"free\"} else {} end))}' > \"$O/train.json\"; uv run expliccit train run \"$O/train.json\" \"$O\"; rm -f \"$O/net1.pt\"",
+  "collect": "{ echo \"| policy | transitions | validation BC error | seconds | final diagnostics |\"; echo \"|---|---|---|---|---|\"; for r in \"$OUT\"/lcf-*/report.json; do echo \"| $(basename \"$(dirname \"$r\")\") | $(jq -r '[.net2.transitions, .net2.val_bc_mse, (.net2.seconds | floor), (.net2.final | to_entries | map(\"\\(.key) \\(.value | tostring | .[0:7])\") | join(\", \"))] | join(\" | \")' \"$r\") |\"; done; } > \"$OUT/summary.md\"",
+  "timeout_minutes": 240
+}
