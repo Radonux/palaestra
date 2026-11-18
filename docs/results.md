@@ -279,9 +279,20 @@ head still called BBRv3 copies in 13% to 15% of steps beside the fixed
 rule, though Westwood fell from 16% to 8%
 ([`exp-traffic-head-v7-stock-312`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-v7-stock-312));
 in the same rules it cut the loss beside them to 0.030 but also the gain
-among copies, to +0.218 from +0.445 (313). Our reading: from the flow's own
-measurements, a copy and a stock flow that does not fill the buffer look
-alike, and the head trades one error for the other.
+among copies, to +0.218 from +0.445 (313). Round 33's learned net2 makes
+the same trade on validation links beside one flow of each of the 15
+other stock controllers, a family no earlier choice used. With the
+tested head and threshold it gained 0.528 over round 29's net2 among
+copies and lost 0.005 on the five-family mean, but 0.146 beside the
+stock flows. The rule set before the run picks the head and copies
+threshold (0.3 to 0.9) by the mean of the three families; it kept the
+tested pair, which failed beside the stock flows, so the test links were
+not run again
+([`exp-traffic-head-tq-val-314`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-tq-val-314)).
+Read after the fact, the refitted head at 0.9 lost 0.017 there and
+gained 0.184 among copies. Our reading: from the flow's own measurements,
+a copy and a stock flow that does not fill the buffer look alike, and
+the head trades one error for the other.
 
 ## Learned net2
 

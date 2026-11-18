@@ -57,7 +57,9 @@ the claims and defines every term used below.
    learned net2 scored +0.613 among copies on the test links against
    +0.109 without it, at a cost of 0.009 on the five-family mean; beside
    BBRv3 and Westwood, competitors no training data had, it lost 0.11
-   ([`exp-traffic-head-test-309`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-test-309)).
+   ([`exp-traffic-head-test-309`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-test-309)),
+   and on validation beside each of the 15 other stock controllers 0.146
+   ([`exp-traffic-head-tq-val-314`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-tq-val-314)).
 4. The split costs nothing against a black box. With the same learner,
    teacher, links and budget, a net2 on net1's means scored +0.152
    minus BBRv3 on the validation five-family mean, one on the raw
