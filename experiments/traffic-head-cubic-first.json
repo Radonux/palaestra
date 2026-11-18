@@ -1,0 +1,17 @@
+{
+ "title": "Where net1 v7's traffic head misfires beside a Cubic flow that started first: by time, open and closed loop",
+ "description": "Taking the belief in copies from net1 v7's traffic head (exp-traffic-head-v7-300) gains 0.30 to 0.42 among copies but loses 0.14 to 0.25 beside a Cubic flow that started first, the validation family whose episodes last 60 s, where round 33's own students gain (exp-traffic-r33h-val-304). The head was trained on 30 s episodes with the fixed rule as the observed flow. This runs, on the validation links at campaign seed 21 for 60 s, alone with a Cubic flow from 0 s (cubic-first) and under the training family's three conditions (one of them a Cubic flow from 8 s), two observed flows with every step kept: the fixed rule on net1 v7 at u = 0.25 (rule-v7, the head's training-time flow) and round 33's seed 1 at iteration 59 with its belief in copies from the head (net2-r33h-s1, the closed loop). experiments/traffic_head_val.py scores the head on each (val-NAME/summary.md), with the share of steps called copies and the mean P(copies) by time since the flow started. What would follow, stated before the results: if the head calls a Cubic flow copies mostly after 30 s, it needs longer training episodes; if it does so under the closed loop but not beside the fixed rule, its training data must come from the policies that read it.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "t": "release:model-truth-patch-src",
+  "r": "release:exp-net2-r33-traffic-302",
+  "h": "release:model-net1v7-traffic-head"
+ },
+ "collect_inputs": true,
+ "prepare": "(cd \"$IN/t\" && sha256sum -c SHA256SUMS); H=\"$IN/h/traffic_head.pt\"; echo \"62043107ace9c7c3c913124f42d26023474ec6108cc59d959475da6bd57820be  $H\" | sha256sum -c; uv run python experiments/rule_export.py \"$OUT/rule-v7\" \"$IN/t/net1-v7.pt\" --u 0.25; r=\"$IN/r/ppo-r33-s1\"; e=\"$OUT/runs/r33-s1\"; mkdir -p \"$e\"; cp \"$r/net1.pt\" \"$r/traffic_head.pt\" \"$r/ppo_spec.json\" \"$e/\"; cp \"$r/iter059/actor.pt\" \"$e/actor.pt\"; cmp \"$e/traffic_head.pt\" \"$H\"; uv run python experiments/gate_ensemble_export.py \"$OUT/p\" net2-r33h-s1 \"$e\" --t 0.5 --traffic \"$H\"; for n in \"rule-v7=$OUT/rule-v7/rule-u0.25.onnx\" \"net2-r33h-s1=$OUT/p/net2-r33h-s1.onnx\"; do a=${n%%=*}; for f in cubic-first training; do uv run python experiments/heldout.py \"$OUT/spec-$a-$f\" --split val --family \"$f\" --duration-ms 60000 --seed 21 --stock \"\" --policy \"$n\"; uv run expliccit campaign plan \"$OUT/spec-$a-$f/campaign.json\" \"$OUT/obs-$a/c-$f\"; done; done; rm -rf \"$OUT/runs\"",
+ "shards": 12,
+ "run": "for c in \"$OUT\"/obs-*/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done",
+ "collect": "for a in rule-v7 net2-r33h-s1; do mkdir -p \"$OUT/val-$a\"; uv run python experiments/traffic_head_val.py \"$OUT/val-$a\" \"$OUT/obs-$a\" \"$IN/t/net1-v7.pt\" \"$IN/h/traffic_head.pt\"; done; { for a in rule-v7 net2-r33h-s1; do echo \"## Observed flow $a\"; echo; cat \"$OUT/val-$a/summary.md\"; echo; done; } > \"$OUT/summary.md\"; rm -f \"$OUT/rule-v7/rule-u0.25-actor.pt\"",
+ "timeout_minutes": 150
+}
