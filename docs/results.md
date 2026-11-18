@@ -579,6 +579,13 @@ paper seeds scored -0.16 to -0.29, level with the free arm's -0.22 to
 -0.39, and two failed in closed loop (-0.99 and -1.13) at the same
 validation cloning error as the rest (0.004 to 0.007). The medians are
 -0.29 (paper) and -0.30 (free).
+The two failed seeds overfill the buffer. From the release's episode
+tables, without a TCP competitor their median episode lost 18% of its
+packets, against 0.2% for BBRv3, none for the other paper seeds and
+0.4% for the free clones; beside a TCP flow they took a median 0.77 of
+the capacity left by UDP, against 0.55 for BBRv3. A small bias in a
+window multiplier applied every 10 ms compounds, which likely explains
+why the same cloning error can end so differently in closed loop.
 
 The same 20 policies, unchanged, on 300 links the training data never
 had, under a new draw of conditions from the same ranges (campaign seed
