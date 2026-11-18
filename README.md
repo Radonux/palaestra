@@ -51,7 +51,13 @@ the claims and defines every term used below.
    ([`exp-truth-patch-val-282`](https://github.com/Radonux/palaestra/releases/tag/exp-truth-patch-val-282)).
 3. The simplest net2, a fixed multiple of net1's believed bandwidth-delay
    product, already beats BBRv3 by 0.136 on the test links; what limits
-   it is the other flows, above all copies of itself.
+   it is the other flows, above all copies of itself. net1's beliefs
+   keep little of what tells a copy from a stock TCP flow, so we gave
+   net1 a head that estimates which one shares the link. With it, a
+   learned net2 scored +0.613 among copies on the test links against
+   +0.109 without it, at a cost of 0.009 on the five-family mean; beside
+   BBRv3 and Westwood, competitors no training data had, it lost 0.11
+   ([`exp-traffic-head-test-309`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-test-309)).
 4. The split costs nothing against a black box. With the same learner,
    teacher, links and budget, a net2 on net1's means scored +0.152
    minus BBRv3 on the validation five-family mean, one on the raw

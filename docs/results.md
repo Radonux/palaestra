@@ -253,12 +253,23 @@ beside a flow that does not yield it keeps shrinking, and the starved
 flow looks like a copy: what net2 does decides what net1 can see.
 Refitted on data gathered with the policies that read it
 ([`exp-traffic-head-v7-agg-306`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-v7-agg-306)),
-the head ran in the same net2s unchanged. Round 29's with both beliefs
-from the head scored +0.470 among copies against -0.076 on its own
-beliefs, and +0.143 against +0.152 on the five-family mean; round 33's
-reading it scored +0.357 and +0.143; every seed lost less than 0.02 on
-the mean
+the head passed on validation in the same net2s unchanged
 ([`exp-traffic-head-agg-val-307`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-agg-val-307)).
+The thresholds at which net2 sharpens its beliefs were then chosen on
+validation: round 33's net2 at 0.7 for a stock flow and 0.3 for copies,
+round 29's rules at 0.5 and 0.5
+([`exp-traffic-head-threshold-val-308`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-threshold-val-308)).
+On the test links, round 33's learned net2 reading the head scored
++0.613 among copies against +0.109 for round 29's on its own beliefs,
+and +0.130 against +0.139 on the five-family mean (seed-paired losses
+0.005 to 0.011), which passed the reading stated before the run; round
+29's rules with both beliefs from the head scored +0.543 and +0.137.
+Beside the competitors that no training data had, BBRv3 and Westwood,
+both lost about 0.11 (+0.012 and +0.015 against +0.126): the head does
+not carry over to stock flows it never saw, and validation, which had
+no such family, did not catch it
+([`exp-traffic-head-test-309`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-test-309)).
+What the head believes beside them is UNRUN.
 
 ## Learned net2
 
