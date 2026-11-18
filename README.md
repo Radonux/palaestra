@@ -76,7 +76,8 @@ the claims and defines every term used below.
    was unstable. Cloning BBRv3's logged windows, the best recipe for
    both, the free latents scored 0.26 higher on average; the gap comes
    from two of five LCF seeds that failed in closed loop, and the medians
-   are level. The free latents hold little of the LCFs. Both comparisons
+   are level. The free latents hold less of the LCFs than neto1 v1's
+   output, and little of capacity or free buffer. Both comparisons
    held on net2's own training links (a one-off) and on links no training
    data had, and every policy stayed below BBRv3
    ([`exp-lcf-cost-report-322`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-report-322),

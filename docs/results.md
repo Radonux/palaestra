@@ -597,14 +597,26 @@ CQL (over seeds p = 0.07, Mann-Whitney 0.03) and +0.336 (+0.276 to
 failed (-1.43 and -1.07) and the medians are -0.30 (paper) and -0.33
 (free).
 
-The free latents do not rediscover the LCFs. A linear map from the
-seven inputs to each LCF, fitted on training links, reached a mean
-validation R^2 of 0.83 from neto1 v1's output, 0.09 and 0.14 from the
-cloned free encoders, 0.21 and 0.23 from the CQL-trained ones, and 0.08
-from an untrained encoder
-([`exp-lcf-cost-probe-319`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-probe-319)).
-What they hold is mostly queueing delay (up to 0.73) and busy fraction
-(up to 0.47), and almost nothing on capacity or free buffer.
+The free latents do not rediscover the LCFs, though a network finds
+more in them than a linear map does. Each map was fitted on training
+links and scored by R^2 on validation links, for every LCF in neto1 v1's
+target space
+([`exp-lcf-cost-probe-324`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-probe-324)).
+The mean over the seven LCFs:
+
+| Latents | linear map | network (two layers of 128) |
+|---|---|---|
+| neto1 v1's output (paper, seed 0) | 0.83 | 0.84 |
+| free, cloned (five seeds) | 0.09 to 0.14 | 0.37 to 0.55 |
+| free, CQL (five seeds) | 0.21 to 0.37 | 0.36 to 0.64 |
+| free encoder, untrained | 0.08 | 0.29 |
+
+Read by the network, the free latents hold queueing delay (0.73 to 0.88)
+and receive rate (0.56 to 0.96) nearly as well as neto1 v1 (0.98 for
+both), busy fraction in part (0.51 to 0.75, against 0.84), and capacity
+(0.33 to 0.66, against 0.78) and free buffer (0.25 at most, against
+0.37) poorly. The clones thus matched the paper arm while holding less
+about capacity and free buffer.
 
 So meaning did not cost the controller in this design. With expliCCit's
 own learner the LCFs were worth 0.91, likely because free latents let
@@ -614,8 +626,7 @@ limits: both arms were trained and searched on one family of links and
 conditions, and scored on it; neto1 v1 learned
 from net1's labelled data, while the free encoder learned from net2's
 objective alone (for the clone, from BBRv3's steps only); the learning
-method differs between the two rows; every policy stayed below BBRv3;
-and the probe is linear.
+method differs between the two rows; and every policy stayed below BBRv3.
 
 ## Reproduction of expliCCit
 
