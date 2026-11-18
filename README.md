@@ -68,11 +68,22 @@ the claims and defines every term used below.
    Trained three times as long, the black box reached +0.093, against
    +0.158 for the split in the same run
    ([`exp-blackbox-more-val-297`](https://github.com/Radonux/palaestra/releases/tag/exp-blackbox-more-val-297)).
-5. net2 gains nothing from net1's stated uncertainty: reading the
+5. In expliCCit's own design, giving the latents a meaning did not cost
+   the controller. With its offline CQL, net2 on the seven LCF values
+   of expliCCit's estimator (neto1 v1) scored 0.91 higher than the same networks behind an encoder
+   whose seven outputs were free and trained with net2 (-1.48 against
+   -2.39 minus BBRv3, five training seeds each); the free arm's critic
+   was unstable. Cloning BBRv3's logged windows, the best recipe for
+   both, the free latents scored 0.26 higher on average; the gap comes
+   from two of five LCF seeds that failed in closed loop, and the medians
+   are level. The free latents hold little of the LCFs. As a one-off, all
+   were scored on net2's own training links, and all stayed below BBRv3
+   ([`exp-lcf-cost-report-322`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-report-322)).
+6. net2 gains nothing from net1's stated uncertainty: reading the
    distributions does no better than reading their means, and lowering
    the window where net1 is unsure helps among copies but costs beside a
    buffer-filling flow and on the five-family mean.
-6. A fault in net1 can be repaired in net1 alone. A learned net2 trained
+7. A fault in net1 can be repaired in net1 alone. A learned net2 trained
    on a net1 that never saw another TCP flow, and so believed too little
    capacity beside one, ran unchanged on the net1 trained on all the
    data at +0.165 minus BBRv3 on the validation five-family mean,
@@ -81,7 +92,7 @@ the claims and defines every term used below.
    ([`exp-notcp-swap-val-293`](https://github.com/Radonux/palaestra/releases/tag/exp-notcp-swap-val-293)).
    Not every error can be repaired this way: relabelling capacity moved
    net1's costly error between conditions a flow cannot tell apart.
-7. None of expliCCit's three checked results reproduced as stated: R^2
+8. None of expliCCit's three checked results reproduced as stated: R^2
    above 0.9 for every LCF, the split's cost against Sage, and its
    case-study diagnosis.
 

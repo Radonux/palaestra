@@ -522,6 +522,83 @@ beside a TCP flow, where its mean was right, than alone, where it was too
 high (release 286), and neither of net2's beliefs about the other flow
 told the two apart (H1).
 
+## Giving the latents a meaning
+
+Does it cost the controller to fix what net2's inputs mean? This was
+tested in expliCCit's own design, as a one-off for a paper deadline:
+its memoryless actor (two layers of 256) and single critic, asked every
+10 ms, set the window to cwnd 2^a with |a| at most 1, rounded to three
+decimals, and learn from the logged steps of
+`exp-data-net2-steps-222`. In arm A2 (paper) the actor reads neto1 v1's
+seven LCF values (`exp-net1-point-228`, held fixed). In arm A5 (free)
+the same actor reads the seven outputs of an encoder with neto1 v1's
+architecture (1.27 million weights) from fresh weights, trained with
+net2 on the scaled measurements and never shown an LCF. Only what the
+seven numbers mean differs.
+
+Each arm was trained two ways. The first is expliCCit's offline CQL on
+Sage's reward, the free encoder trained by the critic's loss, searched
+over CQL weight (0.01, 0.1, 1), actor learning rate (1e-4, 3e-5) and
+20,000 or 60,000 updates
+([`exp-lcf-cost-315`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-315)).
+The free arm's critic diverged in about half its long runs at CQL weight
+0.1 or more; the paper arm's never did. Because a comparison against a
+learner that does not converge says nothing about meaning, the second
+way teaches both arms: clone BBRv3's logged windows for 10,000 updates
+(the free encoder learning with the actor), then optionally 20,000 RL
+updates with fresh critics (CQL or TD3+BC) and the encoder held fixed or
+learning slowly
+([`exp-lcf-cost-teacher-317`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-teacher-317)).
+A slowly learning free encoder broke the critic in 7 of 8 runs, and a
+fixed one at CQL 0.1 in one of two.
+
+Also as a one-off, every policy was scored where it was trained: on
+net2's own training links, each under 2 of the training data's 64
+conditions, 30 s ([`experiments/comfort.py`](../experiments/comfort.py)).
+Configurations were chosen on links 0 to 99 by their mean over training
+seeds 0 and 1
+([`exp-lcf-cost-search-316`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-search-316),
+[`exp-lcf-cost-teacher-search-318`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-teacher-search-318)).
+Under CQL the paper arm chose weight 0.1 and the free arm 0.01, both at
+learning rate 1e-4 for 60,000 updates. Taught, both arms chose the
+clone alone: every RL step after it scored lower (-1.56 to -2.91 minus
+BBRv3, against -0.28 and -0.86 for the clones). The four choices then ran
+on five training seeds on links 100 to 399
+([`exp-lcf-cost-report-322`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-report-322)),
+minus BBRv3, mean over seeds, with the range over seeds:
+
+| Learning method | paper (A2) | free (A5) | free minus paper |
+|---|---|---|---|
+| expliCCit's CQL | -1.484 (-1.11 to -2.31) | -2.394 (-1.70 to -3.26) | -0.911 (-0.996 to -0.823) |
+| clone of BBRv3 | -0.558 (-0.16 to -1.13) | -0.296 (-0.22 to -0.39) | +0.263 (+0.205 to +0.320) |
+
+The intervals in the last column are over links. Over the five seeds
+(computed here from the release's per-policy scores), the CQL gap holds
+(Welch's t-test p = 0.03) and the cloning gap does not (p = 0.28): three
+paper seeds scored -0.16 to -0.29, level with the free arm's -0.22 to
+-0.39, and two failed in closed loop (-0.99 and -1.13) at the same
+validation cloning error as the rest (0.004 to 0.007). The medians are
+-0.29 (paper) and -0.30 (free).
+
+The free latents do not rediscover the LCFs. A linear map from the
+seven inputs to each LCF, fitted on training links, reached a mean
+validation R^2 of 0.83 from neto1 v1's output, 0.09 and 0.14 from the
+cloned free encoders, 0.21 and 0.23 from the CQL-trained ones, and 0.08
+from an untrained encoder
+([`exp-lcf-cost-probe-319`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-probe-319)).
+What they hold is mostly queueing delay (up to 0.73) and busy fraction
+(up to 0.47), and almost nothing on capacity or free buffer.
+
+So meaning did not cost the controller in this design. With expliCCit's
+own learner the LCFs were worth 0.91, likely because free latents let
+the critic widen its own estimates, which diverged or drifted. With imitation,
+free latents matched the LCFs on most seeds and failed on none. The
+limits: both arms were scored in distribution only; neto1 v1 learned
+from net1's labelled data, while the free encoder learned from net2's
+objective alone (for the clone, from BBRv3's steps only); the learning
+method differs between the two rows; every policy stayed below BBRv3;
+and the probe is linear.
+
 ## Reproduction of expliCCit
 
 Three of expliCCit's results were checked here, and none reproduced as
