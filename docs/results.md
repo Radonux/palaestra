@@ -227,30 +227,38 @@ copies, a stock flow; chance 0.333) reached a balanced accuracy of 0.709
 from the raw measurements, 0.472 from net1 v7's beliefs and 0.609 from
 net1 v10's 32
 ([`exp-competitor-info-v7-299`](https://github.com/Radonux/palaestra/releases/tag/exp-competitor-info-v7-299)).
-A traffic head on net1 v7 (a small network on net1's scaled input,
-fitted to the true class on the training links) reached 0.893 on the
-same validation links
-([`exp-traffic-head-v7-300`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-v7-300)).
 Yet the learned net2 given the raw measurements beside net1 v7's means
 gained only 0.032 among copies and 0.004 on the five-family mean
 ([`exp-blackbox-val-295`](https://github.com/Radonux/palaestra/releases/tag/exp-blackbox-val-295)):
 the information was there and the learner, at that budget, did not use
-it. Given the head's call in place of its own beliefs about the other
-traffic, round 29's net2 gained 0.38 to 0.52 among copies but lost 0.045
-to 0.055 on the five-family mean, two thirds of it beside a Cubic flow
-that started first
-([`exp-traffic-head-val-301`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-val-301)).
-Trained with the head's probabilities as input (round 33,
-[`exp-net2-r33-traffic-302`](https://github.com/Radonux/palaestra/releases/tag/exp-net2-r33-traffic-302)),
-net2 gained there instead (+0.055 against -0.002 for round 29's, every
-seed) and held the five-family mean (+0.158 against +0.157), but gained
-nothing among copies (-0.115 against -0.081)
+it.
+
+So the class moved into net1. A traffic head on net1 v7 (a small network
+on net1's scaled input, fitted to the true class on the training links)
+reached 0.893 on the same validation links
+([`exp-traffic-head-v7-300`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-v7-300)).
+Taking net2's beliefs about the other traffic from it gained among copies
+but lost beside a Cubic flow that started first
+([`exp-traffic-head-val-301`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-val-301)),
+and a net2 trained to read it learned to discount it there without
+following it among copies
 ([`exp-traffic-r33-val-303`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-r33-val-303)).
-With its belief in copies taken from the head, the same net2 gained 0.40
-among copies and lost 0.30 with Cubic first
-([`exp-traffic-r33h-val-304`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-r33h-val-304)).
-net2 learned to discount the head beside Cubic but not to follow it among
-copies.
+The head misled only in the closed loop. Beside the fixed rule it called
+that Cubic flow copies in 7% to 9% of steps at every age; steering a net2
+that took its belief in copies from it, in 39% of steps 5 to 10 s in,
+and on 4 of 21 links it held P(copies) near 1 for the whole minute
+([`exp-traffic-head-cubic-first-305`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-cubic-first-305)).
+The cooperative window follows the flow's own share of the capacity, so
+beside a flow that does not yield it keeps shrinking, and the starved
+flow looks like a copy: what net2 does decides what net1 can see.
+Refitted on data gathered with the policies that read it
+([`exp-traffic-head-v7-agg-306`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-v7-agg-306)),
+the head ran in the same net2s unchanged. Round 29's with both beliefs
+from the head scored +0.470 among copies against -0.076 on its own
+beliefs, and +0.143 against +0.152 on the five-family mean; round 33's
+reading it scored +0.357 and +0.143; every seed lost less than 0.02 on
+the mean
+([`exp-traffic-head-agg-val-307`](https://github.com/Radonux/palaestra/releases/tag/exp-traffic-head-agg-val-307)).
 
 ## Learned net2
 
