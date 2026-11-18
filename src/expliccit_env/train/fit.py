@@ -23,7 +23,7 @@ from torch import nn
 
 from expliccit_env.policy import EXPLICCIT_OBS_COLS, OBS_DIM
 from expliccit_env.train import beliefs
-from expliccit_env.train.beliefs import Beliefs, Bins, Interval, MeansView, PoolBins
+from expliccit_env.train.beliefs import Beliefs, Bins, Interval, MeansView, Point, PoolBins
 from expliccit_env.train.data import Split, Steps
 from expliccit_env.train.graph import (
     Deployed,
@@ -628,9 +628,13 @@ def transitions(
 
 
 def _soft_update(target: nn.Module, source: nn.Module, tau: float) -> None:
+    """Parameters moved tau of the way; buffers (batch norm's running
+    statistics) copied."""
     with torch.no_grad():
         for t, s in zip(target.parameters(), source.parameters(), strict=True):
             t.mul_(1 - tau).add_(s, alpha=tau)
+        for t, s in zip(target.buffers(), source.buffers(), strict=True):
+            t.copy_(s)
 
 
 def _policy_stats(pi: torch.Tensor) -> dict[str, float]:
@@ -646,7 +650,9 @@ class Learner:
     """Actor, critics and their targets, updated one batch at a time. Each
     update returns its losses and diagnostics (docs/training.md)."""
 
-    def __init__(self, spec: Net2Spec, k: int) -> None:
+    def __init__(self, spec: Net2Spec, k: int, encoder: nn.Module | None = None) -> None:
+        """k is net2's input width. An ``encoder`` (spec.encoder "free") maps
+        each state to those k inputs and learns with the critic."""
         self.spec = spec
         self.actor = NET2[spec.arch](k, spec.hidden)
         n_critics = {"td3bc": 2, "expliccit-v1": 1, "bc": 0, "iql": 2}[spec.algo]
@@ -654,16 +660,14 @@ class Learner:
         self.value = Value(k, spec.hidden) if spec.algo == "iql" else None
         self.actor_t = copy.deepcopy(self.actor)
         self.critics_t = [copy.deepcopy(c) for c in self.critics]
-        # expliCCit's learning rates for its objective, the spec's otherwise.
-        theirs = spec.algo == "expliccit-v1"
-        self.opt_a = torch.optim.Adam(self.actor.parameters(), lr=1e-4 if theirs else spec.lr)
+        self.encoder = encoder
+        self.encoder_t = None if encoder is None else copy.deepcopy(encoder).eval()
+        lr_a, lr_c = spec.expliccit_lrs if spec.algo == "expliccit-v1" else (spec.lr, spec.lr)
+        self.opt_a = torch.optim.Adam(self.actor.parameters(), lr=lr_a)
         critic_params = [p for c in self.critics for p in c.parameters()]
         critic_params += list(self.value.parameters()) if self.value is not None else []
-        self.opt_c = (
-            torch.optim.Adam(critic_params, lr=1e-3 if theirs else spec.lr)
-            if critic_params
-            else None
-        )
+        critic_params += list(encoder.parameters()) if encoder is not None else []
+        self.opt_c = torch.optim.Adam(critic_params, lr=lr_c) if critic_params else None
 
     def _critic_loss(self, s: torch.Tensor, a: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         qs = [c(s, a) for c in self.critics]
@@ -688,6 +692,10 @@ class Learner:
             )
         if spec.algo == "iql":
             return self._iql(t, actor=actor)
+        if self.encoder is not None and self.encoder_t is not None:
+            s = self.encoder(s)  # in train mode, as net1 is trained
+            with torch.no_grad():
+                s2 = self.encoder_t(s2)
         with torch.no_grad():
             a2 = self.actor_t(s2)
             if spec.algo == "td3bc":
@@ -705,6 +713,7 @@ class Learner:
         self.opt_c.step()
         out = {"critic": float(critic_loss.detach()), "ood": ood}
         if actor and (spec.algo == "expliccit-v1" or step % spec.policy_delay == 0):
+            s = s.detach()  # an encoder learns from the critic's loss alone
             pi = self.actor(s)
             q = self.critics[0](s, pi)
             bc = ((pi - a) ** 2).mean()
@@ -725,6 +734,8 @@ class Learner:
             _soft_update(self.actor_t, self.actor, spec.tau)
             for c, ct in zip(self.critics, self.critics_t, strict=True):
                 _soft_update(ct, c, spec.tau)
+            if self.encoder is not None and self.encoder_t is not None:
+                _soft_update(self.encoder_t, self.encoder, spec.tau)
         return out
 
     def _iql(self, t: Transitions, *, actor: bool) -> dict[str, float]:
@@ -939,9 +950,28 @@ def _bc_mse(actor: nn.Module, t: Replay) -> float:
     return total / len(t)
 
 
+def free_encoder(net1: Net1, seed: int) -> nn.Module:
+    """A point net1's network with fresh weights, in train mode: as many
+    outputs as net1 has LCFs, none of them meaning one. Drawn from its own
+    random stream, so a net2 trained behind it starts from the same weights
+    as one trained on net1 with the same seed."""
+    if not isinstance(net1.kind, Point):
+        raise ValueError(f"a free encoder copies a point net1's network, not {net1.kind}")
+    encoder = copy.deepcopy(net1.net)
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(seed + 1)
+        for m in encoder.modules():
+            if isinstance(m, nn.Linear | nn.BatchNorm1d):
+                m.reset_parameters()
+    return encoder.train()
+
+
 def fit_net2(
     spec: Net2Spec, steps: Steps, net1: Net1, seed: int
 ) -> tuple[nn.Module, dict[str, Any]]:
+    """net2 trained offline on the logged steps; returns the policy that
+    maps net2's input (or, with an encoder, the scaled measurements) to the
+    action, and the training log."""
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     states, log2_bdp = net2_view(net1, spec, steps)
@@ -952,13 +982,14 @@ def fit_net2(
     width = states.shape[1]
     if len(data) == 0:
         raise ValueError("no training transitions")
-    learner = Learner(spec, width)
+    encoder = free_encoder(net1, seed) if spec.encoder == "free" else None
+    learner = Learner(spec, width if encoder is None else net1.kind.k, encoder)
     log: dict[str, list[float]] = {}
     for step in range(spec.steps):
         b = torch.from_numpy(rng.integers(0, len(data), spec.batch_size))
         for name, v in learner.update(data.batch(b), step).items():
             log.setdefault(name, []).append(v)
-    actor = learner.actor.eval()
+    actor = (learner.actor if encoder is None else nn.Sequential(encoder, learner.actor)).eval()
     with torch.no_grad():
         val_bc = _bc_mse(actor, val)
     tail = max(1, spec.steps // 10)

@@ -13,11 +13,15 @@ policies named GROUP-uU are candidates and each group's u is the one with
 the highest mean; a candidate with a failed episode is never chosen. The
 choice goes to OUT/chosen.json ({GROUP: U}). With --best, the policy named
 PREFIX-anything with the highest mean (never one with a failed episode) is
-chosen for each prefix ({PREFIX: NAME} in OUT/chosen.json).
+chosen for each prefix ({PREFIX: NAME} in OUT/chosen.json); with
+--over-seeds, names ending -sN are one configuration over training seeds,
+and the configuration with the highest mean over its seeds is chosen (never
+one with a failed episode in any seed).
 """
 
 import argparse
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -34,6 +38,7 @@ def main() -> None:
     p.add_argument("--select", nargs="*", default=[])
     p.add_argument("--best", nargs="*", default=[], help="prefixes of policies to pick one of")
     p.add_argument("--apart", nargs="*", default=[], help="campaigns shown but not averaged")
+    p.add_argument("--over-seeds", action="store_true", help="--best by the mean over -sN")
     a = p.parse_args()
     aliases: dict[str, str] = json.loads((a.out / "aliases.json").read_text())
     results: dict[str, dict[str, Any]] = {}
@@ -87,11 +92,23 @@ def main() -> None:
         ok = {u: n for u, n in cands.items() if n not in failed and overall(n) == overall(n)}
         if ok:
             chosen[g] = max(ok, key=lambda u: overall(ok[u]))
+    configs: dict[str, list[str]] = {}
+    for n in names:
+        configs.setdefault(re.sub(r"-s[0-9]+$", "", n) if a.over_seeds else n, []).append(n)
+    mean = {
+        k: sum(overall(n) for n in v) / len(v) for k, v in configs.items() if not failed & set(v)
+    }
     for g in a.best:
-        ok = [n for n in names if n.startswith(f"{g}-") and n not in failed]
-        ok = [n for n in ok if overall(n) == overall(n)]
+        ok = [k for k, m in mean.items() if k.startswith(f"{g}-") and not math.isnan(m)]
         if ok:
-            chosen[g] = max(ok, key=overall)
+            chosen[g] = max(ok, key=mean.__getitem__)
+    if a.over_seeds:
+        lines += ["", "| configuration | seeds | mean over seeds |", "|---|---|---|"]
+        lines += [
+            f"| {k} | {len(configs[k])} | {m:+.3f} |"
+            for k, m in sorted(mean.items(), key=lambda km: -km[1])
+            if len(configs[k]) > 1
+        ]
     if a.select or a.best:
         (a.out / "chosen.json").write_text(json.dumps(chosen, indent=1) + "\n")
         lines += [

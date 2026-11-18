@@ -1,0 +1,19 @@
+{
+  "title": "Cost of the LCFs' meaning in expliCCit's design: neto1 v1's seven values or seven free latents, one grid",
+  "description": "Does fixing what the latents mean cost the controller anything? Both arms are expliCCit's design: its memoryless actor and single critic (two layers of 256) asked every 10 ms, the window multiplier (action_max 1, rounded to three decimals), offline CQL on Sage's reward with the encoder trained first and held fixed for the paper arm. Arm paper reads neto1 v1's seven values (the run in exp-net1-point-228's chosen.txt), each a supervised estimate of one LCF. Arm free puts in front of the same actor and critic a network of neto1 v1's architecture (width 512, two residual blocks, a 256-128-64 taper, one output per LCF: seven) from random weights, reading the same scaled measurements; the critic's loss trains it with the critic and the actor reads its seven outputs without moving them (encoder free). The networks are the same in both arms, and with one seed the actor and critic start from the same weights; only how the seven latents are trained differs. Data: the step data of exp-data-net2-steps-222 (600 links no net1 trained on, 3,600 episodes of stock controllers, delay-threshold policies and the fixed rule). Each arm gets the same grid: CQL weight 0.01, 0.1 and 1, the actor's learning rate 1e-4 (expliCCit's) or 3e-5 with the critic's ten times that, 20,000 or 60,000 updates of 1,024 transitions, training seeds 0 and 1: 24 policies per arm (lcf-ARM-cCQL-lrLR-nSTEPSk-sSEED). Untuned, expliCCit's objective scored -0.93 to -2.31 minus BBRv3 on the validation five-family mean (exp-neto2-v1-val-235), so the grid looks for a regime where the paper arm works at all. Training only: a later run scores every policy in closed loop on validation links and chooses each arm's configuration by its mean over both seeds; the test links select nothing.",
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1-point-228",
+    "d": "release:exp-data-net2-steps-222"
+  },
+  "matrix": {
+    "arm": ["paper", "free"],
+    "cql": ["0.01", "0.1", "1"],
+    "lr": ["1e-4", "3e-5"],
+    "updates": [20000, 60000],
+    "seed": [0, 1]
+  },
+  "run": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; O=\"$OUT/lcf-$ARM-c$CQL-lr$LR-n$((UPDATES / 1000))k-s$SEED\"; mkdir -p \"$O\"; jq -n --arg d \"$IN/d\" --arg n \"$N\" --arg arm \"$ARM\" --argjson cql \"$CQL\" --argjson lr \"$LR\" --argjson updates \"$UPDATES\" --argjson seed \"$SEED\" '{data: [$d], split_by: \"link\", seed: $seed, net1_from: $n, net2: ({algo: \"expliccit-v1\", action: \"multiplier\", reward: \"sage\", reward_alignment: \"same\", action_max: 1.0, action_decimals: 3, cql_alpha: $cql, expliccit_lrs: [$lr, (10 * $lr)], steps: $updates} + (if $arm == \"free\" then {inputs: \"raw\", encoder: \"free\"} else {} end))}' > \"$O/train.json\"; uv run expliccit train run \"$O/train.json\" \"$O\"; rm -f \"$O/net1.pt\"",
+  "collect": "{ echo \"| policy | transitions | validation BC error | seconds | final diagnostics |\"; echo \"|---|---|---|---|---|\"; for r in \"$OUT\"/lcf-*/report.json; do echo \"| $(basename \"$(dirname \"$r\")\") | $(jq -r '[.net2.transitions, .net2.val_bc_mse, (.net2.seconds | floor), (.net2.final | to_entries | map(\"\\(.key) \\(.value | tostring | .[0:7])\") | join(\", \"))] | join(\" | \")' \"$r\") |\"; done; } > \"$OUT/summary.md\"",
+  "timeout_minutes": 240
+}

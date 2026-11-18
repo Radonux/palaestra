@@ -727,6 +727,102 @@ def test_a_net2_on_the_measurements_sees_them_in_training_and_in_the_graph(input
         assert torch.allclose(graph(obs), actor(torch.from_numpy(states[:8])), atol=1e-5)
 
 
+_FREE = Net2Spec(algo="expliccit-v1", inputs="raw", encoder="free", hidden=16, batch_size=64)
+_PAPER = Net2Spec(algo="expliccit-v1", hidden=16, batch_size=64)  # as experiments/lcf-cost.json
+
+
+def test_a_free_encoder_is_net1s_network_with_fresh_weights() -> None:
+    net1 = _net1()
+    before = {k: v.clone() for k, v in net1.net.state_dict().items()}
+    rng = torch.random.get_rng_state()
+    enc = fit.free_encoder(net1, seed=3).state_dict()
+    assert torch.equal(torch.random.get_rng_state(), rng)  # its own stream
+    assert {k: v.shape for k, v in enc.items()} == {k: v.shape for k, v in before.items()}
+    weights = [k for k, v in before.items() if k.endswith("weight") and v.dim() == 2]
+    assert weights and not any(torch.equal(enc[k], before[k]) for k in weights)
+    assert all(torch.equal(v, before[k]) for k, v in net1.net.state_dict().items())
+    again = fit.free_encoder(net1, seed=3).state_dict()
+    assert all(torch.equal(again[k], v) for k, v in enc.items())
+
+
+def test_the_two_arms_differ_only_in_what_feeds_net2() -> None:
+    net1 = _net1()
+    steps = synthetic(n_episodes=2, steps=50)
+    # The paper arm reads net1's output itself, the free arm net1's input.
+    paper, _ = fit.net2_view(net1, _PAPER, steps)
+    free, _ = fit.net2_view(net1, _FREE, steps)
+    obs = torch.from_numpy(steps.obs)
+    with torch.no_grad():
+        assert torch.allclose(torch.from_numpy(paper), net1.net(net1.scaler(obs)), atol=1e-6)
+        assert torch.allclose(torch.from_numpy(free), net1.scaler(obs))
+    # With a seed, net2 starts from the same actor and critic in both.
+    torch.manual_seed(5)
+    a = fit.Learner(_PAPER, 7)
+    torch.manual_seed(5)
+    b = fit.Learner(_FREE, 7, fit.free_encoder(net1, 5))
+    for x, y in [(a.actor, b.actor), (a.critics[0], b.critics[0])]:
+        assert _unchanged(x, list(y.parameters()))
+
+
+def _raw_batch(n: int = 64) -> fit.Transitions:
+    g = torch.Generator().manual_seed(0)
+    a = torch.rand(n, 1, generator=g) * 2 - 1
+    return fit.Transitions(
+        torch.randn(n, 70, generator=g),
+        a,
+        torch.randn(n, generator=g),
+        torch.randn(n, 70, generator=g),
+    )
+
+
+def _unchanged(module: torch.nn.Module, before: list[torch.Tensor]) -> bool:
+    return all(torch.equal(p, q) for p, q in zip(module.parameters(), before, strict=True))
+
+
+def test_the_free_encoder_learns_from_the_critics_loss_alone() -> None:
+    torch.manual_seed(0)
+    learner = fit.Learner(_FREE, 7, fit.free_encoder(_net1(), 0))
+    assert learner.encoder is not None and learner.encoder_t is not None
+    assert learner.opt_c is not None
+    params = [p.detach().clone() for p in learner.encoder.parameters()]
+    actor = [p.detach().clone() for p in learner.actor.parameters()]
+    for group in learner.opt_c.param_groups:
+        group["lr"] = 0.0  # the critic's step moves nothing
+    learner.update(_raw_batch(), 0)
+    assert not _unchanged(learner.actor, actor)
+    assert _unchanged(learner.encoder, params)
+    for group in learner.opt_c.param_groups:
+        group["lr"] = 1e-3
+    learner.update(_raw_batch(), 1)
+    assert not _unchanged(learner.encoder, params)
+    # The target follows, batch norm's running statistics copied.
+    for t, s in zip(learner.encoder_t.buffers(), learner.encoder.buffers(), strict=True):
+        assert torch.equal(t, s)
+
+
+def test_a_free_arm_trains_and_its_graph_reads_the_measurements() -> None:
+    net1 = _net1()
+    steps = synthetic(n_episodes=10, steps=50)
+    spec = _FREE.model_copy(update={"steps": 20})
+    policy, log = fit.fit_net2(spec, steps, net1, 0)
+    assert np.isfinite(log["final"]["critic"]) and np.isfinite(log["val_bc_mse"])
+    graph = fit.policy_graph(net1, policy, 1.0, inputs="raw")
+    obs = torch.from_numpy(steps.obs[:8])
+    with torch.no_grad():
+        assert torch.allclose(graph(obs), policy(net1.scaler(obs)), atol=1e-5)
+    model = onnx.load_from_string(to_onnx(graph))
+    assert [i.name for i in model.graph.input] == ["obs"]
+
+
+def test_a_free_encoder_is_expliccits_objective_on_the_measurements() -> None:
+    Net2Spec(algo="expliccit-v1", inputs="raw", encoder="free")
+    for bad in [{"inputs": "net1"}, {"algo": "td3bc"}]:
+        with pytest.raises(ValueError, match="free"):
+            Net2Spec.model_validate(
+                {"algo": "expliccit-v1", "inputs": "raw", "encoder": "free"} | bad
+            )
+
+
 @pytest.mark.parametrize("intervals", [False, True])
 def test_an_injected_fault_scales_or_pins_one_belief_in_report_units(intervals: bool) -> None:
     torch.manual_seed(0)

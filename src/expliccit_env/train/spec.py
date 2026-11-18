@@ -163,6 +163,20 @@ class Net2Spec(_Frozen):
     noise_clip: Annotated[float, Field(ge=0)] = 0.5
     policy_delay: PositiveInt = 2
     cql_alpha: Annotated[float, Field(ge=0)] = 1.0  # expliccit-v1 only
+    # expliccit-v1 only: the actor's and the critic's learning rates
+    # (expliCCit's own by default; the other algos use lr).
+    expliccit_lrs: tuple[Annotated[float, Field(gt=0)], Annotated[float, Field(gt=0)]] = (
+        1e-4,
+        1e-3,
+    )
+    # "free": the controller trained end to end, with inputs "raw". In front
+    # of net2 sits a network of net1's architecture (a point net1's: one
+    # output per LCF, the same width, depth and dropout) from random weights,
+    # so net2 reads as many latents as net1 has LCFs but nothing says what
+    # they mean. The critic's loss trains it with the critic; the actor
+    # reads the latents without moving them, as with a shared encoder in
+    # actor-critic learning from pixels (SAC-AE, Yarats et al., 2021).
+    encoder: Literal["free"] | None = None
     # iql only: the expectile V(s) fits to Q(s, a) over the logged actions,
     # the advantage temperature, and the cap on an action's weight.
     expectile: Annotated[float, Field(ge=0.5, lt=1)] = 0.7
@@ -173,6 +187,14 @@ class Net2Spec(_Frozen):
     def _view(self) -> Net2Spec:
         if self.view == "means" and self.input_bins is not None:
             raise ValueError("input_bins applies to the bins view only")
+        return self
+
+    @model_validator(mode="after")
+    def _end_to_end(self) -> Net2Spec:
+        # ponytail: expliCCit's objective only, the comparison it serves;
+        # the other algos' update paths would each need the encoder.
+        if self.encoder is not None and (self.inputs != "raw" or self.algo != "expliccit-v1"):
+            raise ValueError('encoder "free" is algo "expliccit-v1" on inputs "raw"')
         return self
 
 
