@@ -580,6 +580,16 @@ paper seeds scored -0.16 to -0.29, level with the free arm's -0.22 to
 validation cloning error as the rest (0.004 to 0.007). The medians are
 -0.29 (paper) and -0.30 (free).
 
+The same 20 policies, unchanged, on 300 links the training data never
+had, under a new draw of conditions from the same ranges (campaign seed
+33,
+[`exp-lcf-cost-unseen-323`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-unseen-323)),
+gave the same picture: free minus paper -0.754 (-0.849 to -0.655) under
+CQL (over seeds p = 0.07, Mann-Whitney 0.03) and +0.336 (+0.276 to
++0.399) cloning (over seeds p = 0.27), where the same two paper seeds
+failed (-1.43 and -1.07) and the medians are -0.30 (paper) and -0.33
+(free).
+
 The free latents do not rediscover the LCFs. A linear map from the
 seven inputs to each LCF, fitted on training links, reached a mean
 validation R^2 of 0.83 from neto1 v1's output, 0.09 and 0.14 from the
@@ -593,7 +603,8 @@ So meaning did not cost the controller in this design. With expliCCit's
 own learner the LCFs were worth 0.91, likely because free latents let
 the critic widen its own estimates, which diverged or drifted. With imitation,
 free latents matched the LCFs on most seeds and failed on none. The
-limits: both arms were scored in distribution only; neto1 v1 learned
+limits: both arms were trained and searched on one family of links and
+conditions, and scored on it; neto1 v1 learned
 from net1's labelled data, while the free encoder learned from net2's
 objective alone (for the clone, from BBRv3's steps only); the learning
 method differs between the two rows; every policy stayed below BBRv3;

@@ -76,9 +76,11 @@ the claims and defines every term used below.
    was unstable. Cloning BBRv3's logged windows, the best recipe for
    both, the free latents scored 0.26 higher on average; the gap comes
    from two of five LCF seeds that failed in closed loop, and the medians
-   are level. The free latents hold little of the LCFs. As a one-off, all
-   were scored on net2's own training links, and all stayed below BBRv3
-   ([`exp-lcf-cost-report-322`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-report-322)).
+   are level. The free latents hold little of the LCFs. Both comparisons
+   held on net2's own training links (a one-off) and on links no training
+   data had, and every policy stayed below BBRv3
+   ([`exp-lcf-cost-report-322`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-report-322),
+   [`exp-lcf-cost-unseen-323`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-unseen-323)).
 6. net2 gains nothing from net1's stated uncertainty: reading the
    distributions does no better than reading their means, and lowering
    the window where net1 is unsure helps among copies but costs beside a
