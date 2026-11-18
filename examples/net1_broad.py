@@ -159,20 +159,25 @@ def controllers(models: Path) -> list[dict[str, object]]:
     return ccs
 
 
-def campaign(name: str, models: Path) -> dict[str, object]:
+def draw(name: str) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """A set's links and its pool of conditions, as its campaign has them."""
     n_links, n_cond, seconds, seed = SETS[name]
     rng = np.random.default_rng(seed)
     delay, buffer_bdp, capacity = RANGES.get(name, ((5, 60), (0.25, 8.0), (4.0, 150.0)))
     family = name if name in ("ood-competitors", "ood-loss") else "train"
+    links = [link(rng, delay, buffer_bdp, capacity) for _ in range(n_links)]
+    return links, [condition(rng, seconds * 1000, family) for _ in range(n_cond)]
+
+
+def campaign(name: str, models: Path) -> dict[str, object]:
+    _, _, seconds, seed = SETS[name]
+    links, conditions = draw(name)
     return {
         "name": f"net1-broad-{name}",
         "ccs": controllers(models),
         "ccs_per_point": 3,
-        "sweep": {
-            "kind": "paths",
-            "paths": [link(rng, delay, buffer_bdp, capacity) for _ in range(n_links)],
-        },
-        "conditions": [condition(rng, seconds * 1000, family) for _ in range(n_cond)],
+        "sweep": {"kind": "paths", "paths": links},
+        "conditions": conditions,
         "conditions_per_point": 2,
         "duration_ms": seconds * 1000,
         "seed": seed,

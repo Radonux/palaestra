@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from expliccit_env.spec import CampaignSpec
+
 _PATH = Path(__file__).resolve().parents[1] / "experiments" / "heldout.py"
 _spec = importlib.util.spec_from_file_location("heldout", _PATH)
 assert _spec is not None and _spec.loader is not None
@@ -100,3 +102,21 @@ def test_cellular_links_keep_delay_and_buffer_in_bdps(tmp_path: Path) -> None:
     first = heldout.CELLULAR_DIR / "ATT-LTE-driving.down"
     bdp = heldout.mean_mbps(first) * 1e6 * 0.08 / 12000
     assert links[0]["buffer"]["packets"] == max(10, round(2 * bdp))
+
+
+_CPATH = Path(__file__).resolve().parents[1] / "experiments" / "comfort.py"
+_cspec = importlib.util.spec_from_file_location("comfort", _CPATH)
+assert _cspec is not None and _cspec.loader is not None
+comfort = importlib.util.module_from_spec(_cspec)
+_cspec.loader.exec_module(comfort)
+
+
+def test_comfort_runs_net2s_training_links_under_its_conditions() -> None:
+    links, conditions = comfort.draw("net2-train")
+    spec = comfort.campaign(100, 110, 32, [{"kind": "stock", "name": "bbr3"}])
+    assert spec["sweep"]["paths"] == links[100:110]
+    assert spec["conditions"] == conditions and len(conditions) == 64
+    episodes = CampaignSpec.model_validate(spec).episodes()
+    assert len(episodes) == 10 * 2 and all(e.duration_ms == 30000 for e in episodes)
+    with pytest.raises(ValueError, match="within"):
+        comfort.campaign(590, 601, 32, [])

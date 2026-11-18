@@ -1,0 +1,14 @@
+{
+  "title": "Cost of the LCFs' meaning: the 48 policies of exp-lcf-cost-315 on 100 of their own training links, beside BBRv3",
+  "description": "The hyperparameter search of the paper arm (net2 on neto1 v1's seven values) and the free arm (the same networks behind an encoder with seven free latents), trained in exp-lcf-cost-315 over one grid: CQL weight 0.01, 0.1 and 1, actor learning rate 1e-4 or 3e-5 (critic ten times that), 20,000 or 60,000 updates, training seeds 0 and 1. As a one-off for the paper deadline (user, 2026-11-18), the policies are scored where they were trained, not on held-out links: the question is only whether fixing what the latents mean costs the controller, so both arms get their comfort zone. Links 0 to 99 of net2's 600 training links (examples/net1_broad.py's net2-train set, whose step data exp-data-net2-steps-222 trained them), each under 2 of the data's 64 conditions drawn with campaign seed 31 (experiments/comfort.py), 30 s, every policy and BBRv3 on every episode. summary.md scores each policy in log utility per 10 ms step minus BBRv3, paired by link, and chooses each arm's configuration by its mean over both seeds, never one with a failed episode (chosen.json). The choice is reported on links 100 onward, which this run does not touch; nothing here supports a claim about either arm.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "p": "release:exp-lcf-cost-315"
+  },
+  "prepare": "P=(); for a in \"$IN\"/p/lcf-*; do P+=(--policy \"$(basename \"$a\")=$a/policy.onnx\"); done; [ \"${#P[@]}\" -eq 96 ]; uv run python experiments/comfort.py \"$OUT/spec\" --links 0:100 --seed 31 --stock bbr3 \"${P[@]}\"; uv run expliccit campaign plan \"$OUT/spec/campaign.json\" \"$OUT/c-comfort\"; cp \"$OUT/spec/aliases.json\" \"$OUT/aliases.json\"",
+  "shards": 150,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+  "collect": "uv run python experiments/rule_report.py \"$OUT\" --best lcf-paper lcf-free --over-seeds",
+  "timeout_minutes": 350
+}
