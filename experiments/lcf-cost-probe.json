@@ -1,0 +1,15 @@
+{
+  "title": "Cost of the LCFs' meaning: how much of the seven LCFs a linear map reads from the free latents",
+  "description": "For each free encoder of exp-lcf-cost-teacher-317 (lcft-freefix-none-sN, the clone of BBRv3 whose encoder every lcft-freefix policy of seed N keeps, and the eight lcft-freeslow policies) and the free arm's configuration chosen in exp-lcf-cost-search-316 (both seeds, exp-lcf-cost-315), a least-squares map with a bias from the seven latents to each of neto1 v1's LCFs, in neto1 v1's target space, fitted on the training links of the policy's own split of exp-data-net2-steps-222 and scored by R^2 on its validation links, every 10th step (experiments/latent_probe.py). References: neto1 v1's own output (the paper arm's latents) and the free encoder with fresh weights. probe.md has the table.",
+  "uml": false,
+  "train": true,
+  "inputs": {
+    "d": "release:exp-data-net2-steps-222",
+    "n": "release:exp-net1-point-228",
+    "t": "release:exp-lcf-cost-teacher-317",
+    "p": "release:exp-lcf-cost-315"
+  },
+  "shards": 1,
+  "run": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; A=(); for d in \"$IN\"/t/lcft-freefix-none-s* \"$IN\"/t/lcft-freeslow-*; do A+=(\"$(basename \"$d\")=$d\"); done; for c in lcf-paper-c0.1-lr1e-4-n60k-s0 lcf-free-c0.01-lr1e-4-n60k-s0 lcf-free-c0.01-lr1e-4-n60k-s1; do A+=(\"$c=$IN/p/$c\"); done; [ \"${#A[@]}\" -eq 13 ]; uv run python experiments/latent_probe.py \"$OUT\" \"$IN/d\" \"$N\" \"${A[@]}\" random=random",
+  "timeout_minutes": 180
+}
