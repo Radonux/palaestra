@@ -597,6 +597,40 @@ CQL (over seeds p = 0.07, Mann-Whitney 0.03) and +0.336 (+0.276 to
 failed (-1.43 and -1.07) and the medians are -0.30 (paper) and -0.33
 (free).
 
+With the flow alone, as in expliCCit's own experiments (a single flow on
+a link of set capacity, minimum RTT, buffer and loss: `comfort.py
+--alone` keeps the 27 of the 64 conditions without cross traffic), on
+the links of both runs above, the gaps held
+([`exp-lcf-cost-alone-325`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-alone-325),
+no failed episode). Free minus paper was -0.979 (-1.069 to -0.888) on
+training links and -0.854 (-0.954 to -0.747) on unseen links under CQL
+(over seeds p = 0.05 and 0.07), and +0.236 (+0.170 to +0.305) and +0.346
+(+0.275 to +0.418) cloning (over seeds p = 0.49 and 0.37). Alone, the
+clones' medians favour the LCFs (-0.11 against -0.30 minus BBRv3 on
+training links, -0.18 against -0.29 on unseen ones): the three working
+paper seeds scored -0.18 to +0.12, one of them above BBRv3 on both link
+sets (+0.12 and +0.10), and the five free seeds -0.12 to -0.46. In the
+measures expliCCit reports, on the training links, with the mean over
+seeds of each policy's mean over links (the unseen links agree within
+0.02 of utilization, 5 ms and 3 points of drops):
+
+| Configuration | utilization | mean queueing delay (ms) | packets dropped by the full queue |
+|---|---|---|---|
+| BBRv3 | 0.87 | 27 | 0.7% |
+| clone, paper | 0.89 | 45 | 14% |
+| clone, free | 0.82 | 51 | 1.7% |
+| CQL, paper | 0.62 | 55 | 28% |
+| CQL, free | 0.38 | 85 | 57% |
+
+The paper clone's drops are its two failed seeds (32% and 28%, at 0.96
+utilization and 71 to 88 ms); the other three dropped 1% to 7%, the
+best of them (+0.12) at 0.79 utilization and 9 ms. Under CQL each arm
+has one seed that nearly stops sending (utilization 0.07 and 0.06), and
+the rest overfill the buffer. The faithful arm on LCFs thus uses 0.62
+of the link even alone, far from expliCCit's reported 5% below Sage
+(Sage was not run here; expliCCit's released policy fell short of that
+too, see [Reproduction of expliCCit](#reproduction-of-expliccit)).
+
 The free latents do not rediscover the LCFs, though a network finds
 more in them than a linear map does. Each map was fitted on training
 links and scored by R^2 on validation links, for every LCF in neto1 v1's
@@ -621,12 +655,14 @@ about capacity and free buffer.
 So meaning did not cost the controller in this design. With expliCCit's
 own learner the LCFs were worth 0.91, likely because free latents let
 the critic widen its own estimates, which diverged or drifted. With imitation,
-free latents matched the LCFs on most seeds and failed on none. The
+free latents failed on no seed, while the working LCF seeds matched
+them with competition and mostly beat them alone. The
 limits: both arms were trained and searched on one family of links and
 conditions, and scored on it; neto1 v1 learned
 from net1's labelled data, while the free encoder learned from net2's
 objective alone (for the clone, from BBRv3's steps only); the learning
-method differs between the two rows; and every policy stayed below BBRv3.
+method differs between the two rows; and every configuration stayed
+below BBRv3 on average (one LCF clone seed beat it alone).
 
 ## Reproduction of expliCCit
 
