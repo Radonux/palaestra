@@ -1,0 +1,34 @@
+{
+ "title": "Cost of the LCFs' meaning with a stronger offline learner: TD3+BC on log utility with 10-step returns, both arms",
+ "description": "expliCCit's offline CQL proved too weak a learner to price the latents' meaning: in exp-lcf-cost-search-316 and exp-lcf-cost-teacher-search-318 both arms under it scored far below their own clones of BBRv3 (-1.20 and -1.84 minus BBRv3, against -0.86 and -0.28), and every RL stage after cloning lowered both arms. A gap between two learners that fail says little about meaning (user, 2026-11-19). Its recipe trains on Sage's reward with one-step TD; this repository's offline recipe (TD3+BC, log utility, 10-step returns) brought expliCCit's actor on neto1 v1 level with BBRv3 on validation (exp-neto2-search2-val-247, +0.04 to +0.06), though with the bdp action. Here both arms keep expliCCit's actor, critic and window multiplier (action_max 1, rounded to three decimals) and only the learner changes: TD3+BC at alpha 2.5, 5 or 10 (the Q term's weight), log utility, 10-step returns, 60,000 or 150,000 updates, training seeds 0 and 1. Arms: paper (neto1 v1's seven values, from exp-net1-point-228), free (an encoder of neto1 v1's architecture from random weights, trained by the critic's loss, on the scaled measurements), and both again from their clones of BBRv3 in exp-lcf-cost-teacher-317 (paperclone; freeclone, its encoder held fixed as in lcft-freefix): 48 policies, lcftd-ARM-aALPHA-nSTEPSk-sSEED. Training only: a later run scores every policy in closed loop on links 0 to 99 and chooses each arm's configuration by its mean over both seeds.",
+ "train": true,
+ "inputs": {
+  "n": "release:exp-net1-point-228",
+  "d": "release:exp-data-net2-steps-222",
+  "t": "release:exp-lcf-cost-teacher-317"
+ },
+ "matrix": {
+  "arm": [
+   "paper",
+   "free",
+   "paperclone",
+   "freeclone"
+  ],
+  "alpha": [
+   "2.5",
+   "5",
+   "10"
+  ],
+  "steps": [
+   60000,
+   150000
+  ],
+  "seed": [
+   0,
+   1
+  ]
+ },
+ "run": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; O=\"$OUT/lcftd-$ARM-a$ALPHA-n$((STEPS / 1000))k-s$SEED\"; mkdir -p \"$O\"; FREE='{}'; T=''; case \"$ARM\" in free) FREE='{\"inputs\": \"raw\", \"encoder\": \"free\"}';; paperclone) T=\"$IN/t/lcft-paper-none-s$SEED/net2.pt\";; freeclone) FREE='{\"inputs\": \"raw\", \"encoder\": \"free\", \"encoder_lr\": 0}'; T=\"$IN/t/lcft-freefix-none-s$SEED/net2.pt\";; esac; [ -z \"$T\" ] || [ -f \"$T\" ]; jq -n --arg d \"$IN/d\" --arg n \"$N\" --arg t \"$T\" --argjson seed \"$SEED\" --argjson alpha \"$ALPHA\" --argjson steps \"$STEPS\" --argjson free \"$FREE\" '{data: [$d], split_by: \"link\", seed: $seed, net1_from: $n, net2: ({algo: \"td3bc\", action: \"multiplier\", reward: \"log_utility\", reward_scale: 1.0, n_step: 10, action_max: 1.0, action_decimals: 3, alpha: $alpha, steps: $steps} + $free)} + (if $t == \"\" then {} else {net2_from: $t} end)' > \"$O/train.json\"; uv run expliccit train run \"$O/train.json\" \"$O\"; rm -f \"$O/net1.pt\"",
+ "collect": "{ echo \"| policy | transitions | validation BC error | seconds | final diagnostics |\"; echo \"|---|---|---|---|---|\"; for r in \"$OUT\"/lcftd-*/report.json; do echo \"| $(basename \"$(dirname \"$r\")\") | $(jq -r '[.net2.transitions, .net2.val_bc_mse, (.net2.seconds | floor), (.net2.final | to_entries | map(\"\\(.key) \\(.value | tostring | .[0:7])\") | join(\", \"))] | join(\" | \")' \"$r\") |\"; done; } > \"$OUT/summary.md\"",
+ "timeout_minutes": 350
+}
