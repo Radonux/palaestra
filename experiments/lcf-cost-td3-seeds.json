@@ -1,0 +1,23 @@
+{
+  "title": "Cost of the LCFs' meaning with TD3+BC: each arm's chosen configuration on training seeds 2 to 4",
+  "description": "The search exp-lcf-cost-td3-search-327 chose, by the mean over training seeds 0 and 1 on links 0 to 99 (log utility per 10 ms step minus BBRv3): free at alpha 2.5 with 150,000 updates (-0.176; its clone of BBRv3, lcft-freefix-none, -0.261) and paper at alpha 2.5 with 60,000 updates (-1.270; its clone lcft-paper-none -0.853). Both arms started from their clones scored below the clones on both seeds (best -1.614 and -1.752), so they are not candidates. This run trains the two chosen configurations on seeds 2, 3 and 4 with the recipe of exp-lcf-cost-td3-326 unchanged (expliCCit's actor, critic and window multiplier; TD3+BC, log utility, 10-step returns), so that a later run can score five seeds per arm on links neither search touched.",
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1-point-228",
+    "d": "release:exp-data-net2-steps-222"
+  },
+  "matrix": {
+    "arm": [
+      "paper",
+      "free"
+    ],
+    "seed": [
+      2,
+      3,
+      4
+    ]
+  },
+  "run": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; ALPHA=2.5; STEPS=60000; FREE='{}'; [ \"$ARM\" = free ] && { STEPS=150000; FREE='{\"inputs\": \"raw\", \"encoder\": \"free\"}'; }; O=\"$OUT/lcftd-$ARM-a$ALPHA-n$((STEPS / 1000))k-s$SEED\"; mkdir -p \"$O\"; jq -n --arg d \"$IN/d\" --arg n \"$N\" --argjson seed \"$SEED\" --argjson alpha \"$ALPHA\" --argjson steps \"$STEPS\" --argjson free \"$FREE\" '{data: [$d], split_by: \"link\", seed: $seed, net1_from: $n, net2: ({algo: \"td3bc\", action: \"multiplier\", reward: \"log_utility\", reward_scale: 1.0, n_step: 10, action_max: 1.0, action_decimals: 3, alpha: $alpha, steps: $steps} + $free)}' > \"$O/train.json\"; uv run expliccit train run \"$O/train.json\" \"$O\"; rm -f \"$O/net1.pt\"",
+  "collect": "{ echo \"| policy | transitions | validation BC error | seconds | final diagnostics |\"; echo \"|---|---|---|---|---|\"; for r in \"$OUT\"/lcftd-*/report.json; do echo \"| $(basename \"$(dirname \"$r\")\") | $(jq -r '[.net2.transitions, .net2.val_bc_mse, (.net2.seconds | floor), (.net2.final | to_entries | map(\"\\(.key) \\(.value | tostring | .[0:7])\") | join(\", \"))] | join(\" | \")' \"$r\") |\"; done; } > \"$OUT/summary.md\"",
+  "timeout_minutes": 350
+}
