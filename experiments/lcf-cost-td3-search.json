@@ -1,0 +1,15 @@
+{
+ "title": "Cost of the LCFs' meaning with TD3+BC: the 48 policies of exp-lcf-cost-td3-326 on 100 training links, beside the clones",
+ "description": "The search of exp-lcf-cost-td3-326, which trained both arms of the cost-of-meaning comparison with TD3+BC on log utility with 10-step returns in place of expliCCit's CQL (user, 2026-11-19: CQL proved too weak a learner to price meaning), keeping expliCCit's actor, critic and window multiplier: paper (neto1 v1's seven values), free (seven free latents from an encoder of neto1 v1's architecture, trained by the critic's loss), and both from their clones of BBRv3 (paperclone; freeclone, its encoder fixed), at alpha 2.5, 5 or 10 and 60,000 or 150,000 updates, training seeds 0 and 1. The clones themselves (lcft-paper-none and lcft-freefix-none, seeds 0 and 1, from exp-lcf-cost-teacher-317) run beside them, so each RL arm is paired with the policy it started from. As before, a one-off in distribution: links 0 to 99 of net2's 600 training links, each under 2 of the data's 64 conditions drawn with campaign seed 31 (experiments/comfort.py), 30 s, every policy and BBRv3 on every episode. summary.md scores each policy in log utility per 10 ms step minus BBRv3, paired by link, and chooses each arm's configuration by its mean over both seeds, never one with a failed episode (chosen.json). The choice is reported on links 100 onward, which this run does not touch; nothing here supports a claim about either arm.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "p": "release:exp-lcf-cost-td3-326",
+  "t": "release:exp-lcf-cost-teacher-317"
+ },
+ "prepare": "P=(); for a in \"$IN\"/p/lcftd-*; do P+=(--policy \"$(basename \"$a\")=$a/policy.onnx\"); done; for c in lcft-paper-none lcft-freefix-none; do for s in 0 1; do P+=(--policy \"$c-s$s=$IN/t/$c-s$s/policy.onnx\"); done; done; [ \"${#P[@]}\" -eq 104 ]; for x in \"${P[@]}\"; do [ \"$x\" = --policy ] || [ -f \"${x#*=}\" ]; done; uv run python experiments/comfort.py \"$OUT/spec\" --links 0:100 --seed 31 --stock bbr3 \"${P[@]}\"; uv run expliccit campaign plan \"$OUT/spec/campaign.json\" \"$OUT/c-comfort\"; cp \"$OUT/spec/aliases.json\" \"$OUT/aliases.json\"",
+ "shards": 100,
+ "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+ "collect": "uv run python experiments/rule_report.py \"$OUT\" --best lcftd-paper lcftd-free lcftd-paperclone lcftd-freeclone lcft-paper lcft-freefix --over-seeds",
+ "timeout_minutes": 350
+}
