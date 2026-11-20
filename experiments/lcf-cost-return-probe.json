@@ -1,0 +1,17 @@
+{
+ "title": "Cost of the LCFs' meaning: how well each arm's seven inputs predict the critic's 10-step return, validation links",
+ "description": "Why the free arm's critic fits the return better (experiments/return_probe.py). For each training seed 0 to 4, the inputs the three TD3+BC arms of exp-lcf-cost-truth-report-332 read, built as their training built them: paper (neto1 v1's seven estimates, lcftd-paper-a2.5-n60k from exp-lcf-cost-td3-326 and exp-lcf-cost-td3-seeds-328), truth (the true values of the seven LCFs, lcftd-truth-a2.5-n60k from exp-lcf-cost-truth-330) and free (the scaled measurements through the seed's own trained encoder, lcftd-free-a2.5-n150k), plus raw (the scaled measurements themselves) and the joins truth+free and paper+free. The target is what each critic fits before bootstrapping: the discounted log-utility return over the next 10 steps after the logged action. A map from (input, action) to it is fitted on the training links of the seed's split of exp-data-net2-steps-222 and scored by R^2 on its validation links, every 10th transition: least squares with a bias, and a network with two hidden layers of 128. If the free latents predict the return better than the true LCFs, and adding the LCFs to them adds little, the seven LCFs leave out what the return needs. The training critic losses (16 to 25 free, 73 to 79 true, 82 to 99 estimated) suggest so but were measured on training data.",
+ "uml": false,
+ "train": true,
+ "inputs": {
+  "d": "release:exp-data-net2-steps-222",
+  "n": "release:exp-net1-point-228",
+  "p": "release:exp-lcf-cost-td3-326",
+  "s": "release:exp-lcf-cost-td3-seeds-328",
+  "x": "release:exp-lcf-cost-truth-330"
+ },
+ "matrix": {"seed": [0, 1, 2, 3, 4]},
+ "run": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; F=\"$IN/p\"; [ \"$SEED\" -ge 2 ] && F=\"$IN/s\"; P=\"$F/lcftd-paper-a2.5-n60k-s$SEED\"; R=\"$F/lcftd-free-a2.5-n150k-s$SEED\"; T=\"$IN/x/lcftd-truth-a2.5-n60k-s$SEED\"; for d in \"$P\" \"$R\" \"$T\"; do [ -f \"$d/net2.pt\" ] && [ -f \"$d/train_spec.json\" ]; done; uv run python experiments/return_probe.py \"$OUT/s$SEED\" \"$IN/d\" \"$N\" paper=\"$P\" truth=\"$T\" free=\"$R\" truth+free paper+free",
+ "collect": "uv run python experiments/return_probe.py --summary \"$OUT\"",
+ "timeout_minutes": 300
+}
