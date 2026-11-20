@@ -1,0 +1,21 @@
+{
+  "title": "Cost of the LCFs' meaning: the free side's copying configuration on training seeds 5 to 9",
+  "description": "The free side's second configuration on more training seeds, in expliCCit's encoder-decoder architecture (an encoder of 1.27 million weights with seven outputs, read by an actor of two layers of 256): encoder and actor cloned together from BBRv3's logged window multipliers, the seven latents free of meaning (lcft-freefix-none, 10,000 updates, as in exp-lcf-cost-teacher-317; seeds 2 to 4 in exp-lcf-cost-teacher-seeds-321). On links 0 to 99 the free side's two configurations are level: exp-lcf-cost-deep-search-337 scored copying -0.290 and TD3+BC -0.303 against BBRv3, while the earlier searches on the same episodes scored TD3+BC -0.176 (exp-lcf-cost-td3-search-327) and copying -0.277 and -0.261 (exp-lcf-cost-teacher-search-318, exp-lcf-cost-td3-search-327). Reruns of the same free policies on the same episodes differ by up to 0.16 per seed, so the gap between the two is within rerun noise. TD3+BC stays the free side's headline configuration by the mean over all three searches (-0.240 against -0.276), and copying is reported beside it on seeds 0 to 9 (with exp-lcf-cost-best-seeds-336 for TD3+BC's seeds 5 to 9), so the answer does not hang on the choice. summary.md lists each policy's training diagnostics.",
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1-point-228",
+    "d": "release:exp-data-net2-steps-222"
+  },
+  "matrix": {
+    "seed": [
+      5,
+      6,
+      7,
+      8,
+      9
+    ]
+  },
+  "timeout_minutes": 60,
+  "run": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; O=\"$OUT/lcft-freefix-none-s$SEED\"; mkdir -p \"$O\"; jq -n --arg d \"$IN/d\" --arg n \"$N\" --argjson seed \"$SEED\" '{data: [$d], split_by: \"link\", seed: $seed, net1_from: $n, controllers: [\"bbr3\"], net2: {algo: \"bc\", action: \"multiplier\", reward: \"sage\", reward_alignment: \"same\", action_max: 1.0, action_decimals: 3, steps: 10000, inputs: \"raw\", encoder: \"free\"}}' > \"$O/train.json\"; uv run expliccit train run \"$O/train.json\" \"$O\"; rm -f \"$O/net1.pt\"",
+  "collect": "{ echo \"| policy | transitions | validation BC error | seconds | final diagnostics |\"; echo \"|---|---|---|---|---|\"; for r in \"$OUT\"/lcft*/report.json; do echo \"| $(basename \"$(dirname \"$r\")\") | $(jq -r '[.net2.transitions, .net2.val_bc_mse, (.net2.seconds | floor), (.net2.final | to_entries | map(\"\\(.key) \\(.value | tostring | .[0:7])\") | join(\", \"))] | join(\" | \")' \"$r\") |\"; done; } > \"$OUT/summary.md\""
+}
