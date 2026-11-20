@@ -1,0 +1,30 @@
+{
+  "title": "Cost of the LCFs' meaning, split: the TD3+BC actor on the true LCFs (an oracle for neto1 v1), seeds 0 to 4",
+  "description": "exp-lcf-cost-td3-report-329 found that, with TD3+BC on log utility, the actor behind seven free latents scored 0.46 to 0.78 above the same actor on neto1 v1's seven LCF values. Two causes are mixed in that cost: what the seven LCFs leave out, and neto1 v1's errors in estimating them. This arm (A1) gives the same actor the true values of the same seven LCFs, from the labels in training and from the guest's live truth when deployed, through neto1 v1's scaler, and trains it exactly as the other arms (expliCCit's actor, critic and window multiplier; TD3+BC on log utility, 10-step returns) over the same grid: alpha 2.5, 5 or 10 and 60,000 or 150,000 updates. All five training seeds are trained at once so the later runs need no further training: a search chooses the configuration by its mean over seeds 0 and 1 on links 0 to 99, as for the other arms, and the report then scores the chosen configuration's five seeds. If the truth arm matches the free arm, the cost was neto1 v1's error; if it matches the paper arm, it was what the LCFs leave out.",
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1-point-228",
+    "d": "release:exp-data-net2-steps-222"
+  },
+  "matrix": {
+    "alpha": [
+      "2.5",
+      "5",
+      "10"
+    ],
+    "steps": [
+      60000,
+      150000
+    ],
+    "seed": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "run": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; O=\"$OUT/lcftd-truth-a$ALPHA-n$((STEPS / 1000))k-s$SEED\"; mkdir -p \"$O\"; jq -n --arg d \"$IN/d\" --arg n \"$N\" --argjson seed \"$SEED\" --argjson alpha \"$ALPHA\" --argjson steps \"$STEPS\" '{data: [$d], split_by: \"link\", seed: $seed, net1_from: $n, net2: {algo: \"td3bc\", inputs: \"truth\", action: \"multiplier\", reward: \"log_utility\", reward_scale: 1.0, n_step: 10, action_max: 1.0, action_decimals: 3, alpha: $alpha, steps: $steps}}' > \"$O/train.json\"; uv run expliccit train run \"$O/train.json\" \"$O\"; rm -f \"$O/net1.pt\"",
+  "collect": "{ echo \"| policy | transitions | validation BC error | seconds | final diagnostics |\"; echo \"|---|---|---|---|---|\"; for r in \"$OUT\"/lcftd-*/report.json; do echo \"| $(basename \"$(dirname \"$r\")\") | $(jq -r '[.net2.transitions, .net2.val_bc_mse, (.net2.seconds | floor), (.net2.final | to_entries | map(\"\\(.key) \\(.value | tostring | .[0:7])\") | join(\", \"))] | join(\" | \")' \"$r\") |\"; done; } > \"$OUT/summary.md\"",
+  "timeout_minutes": 350
+}
