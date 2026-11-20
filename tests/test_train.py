@@ -31,6 +31,7 @@ from expliccit_env.train.spec import (  # noqa: E402
     Net1Spec,
     Net2Spec,
     Point,
+    TrainSpec,
 )
 
 
@@ -842,6 +843,25 @@ def test_a_free_arm_starts_from_its_teacher_and_can_hold_the_encoder_fixed(
         for p, q in zip(policy[0].parameters(), taught[0].parameters(), strict=True):
             assert torch.equal(p, q)  # held fixed
         assert not _unchanged(policy[1], list(taught[1].parameters()))  # the actor moved
+
+
+def test_a_resumed_run_equals_one_longer_run(tmp_path: Path) -> None:
+    net1 = _net1()
+    steps = synthetic(n_episodes=10, steps=50)
+    spec = _FREE.model_copy(update={"algo": "td3bc", "steps": 12})
+    whole, _ = fit.fit_net2(spec, steps, net1, 3)
+    half = spec.model_copy(update={"steps": 5})
+    fit.fit_net2(half, steps, net1, 3, checkpoint=tmp_path / "learner.pt")
+    resumed, log = fit.fit_net2(spec, steps, net1, 3, resume=tmp_path / "learner.pt")
+    assert np.isfinite(log["final"]["critic"])
+    for p, q in zip(whole.state_dict().values(), resumed.state_dict().values(), strict=True):
+        assert torch.equal(p, q)
+    with pytest.raises(ValueError, match="another spec or seed"):
+        fit.fit_net2(spec, steps, net1, 4, resume=tmp_path / "learner.pt")
+    with pytest.raises(ValueError, match="5 updates"):
+        fit.fit_net2(half, steps, net1, 3, resume=tmp_path / "learner.pt")
+    with pytest.raises(ValueError, match="not both"):
+        TrainSpec(data=[tmp_path], net2_from=tmp_path, net2_resume=tmp_path)
 
 
 def test_a_cloning_free_arm_trains_its_encoder_with_the_actor() -> None:

@@ -679,6 +679,33 @@ class Learner:
         groups = ([{"params": critic_params}] if critic_params else []) + ([] if bc else enc)
         self.opt_c = torch.optim.Adam(groups, lr=lr_c) if groups else None
 
+    def _modules(self) -> dict[str, nn.Module]:
+        named: dict[str, nn.Module | None] = {
+            "actor": self.actor,
+            "actor_t": self.actor_t,
+            "value": self.value,
+            "encoder": self.encoder,
+            "encoder_t": self.encoder_t,
+        }
+        named |= {f"critic{i}": c for i, c in enumerate(self.critics)}
+        named |= {f"critic{i}_t": c for i, c in enumerate(self.critics_t)}
+        return {k: m for k, m in named.items() if m is not None}
+
+    def state(self) -> dict[str, Any]:
+        """Every weight and optimizer moment, for ``load`` to continue from."""
+        return {
+            "modules": {k: m.state_dict() for k, m in self._modules().items()},
+            "opt_a": self.opt_a.state_dict(),
+            "opt_c": None if self.opt_c is None else self.opt_c.state_dict(),
+        }
+
+    def load(self, state: dict[str, Any]) -> None:
+        for k, m in self._modules().items():
+            m.load_state_dict(state["modules"][k])
+        self.opt_a.load_state_dict(state["opt_a"])
+        if self.opt_c is not None:
+            self.opt_c.load_state_dict(state["opt_c"])
+
     def start_from(self, state: dict[str, torch.Tensor]) -> None:
         """Weights of a policy fit_net2 returned (the actor, or the encoder
         and the actor), for the actor, the encoder and their targets; the
@@ -994,12 +1021,21 @@ def free_encoder(net1: Net1, seed: int, width: int | None = None) -> nn.Module:
 
 
 def fit_net2(
-    spec: Net2Spec, steps: Steps, net1: Net1, seed: int, start: Path | None = None
+    spec: Net2Spec,
+    steps: Steps,
+    net1: Net1,
+    seed: int,
+    start: Path | None = None,
+    *,
+    resume: Path | None = None,
+    checkpoint: Path | None = None,
 ) -> tuple[nn.Module, dict[str, Any]]:
     """net2 trained offline on the logged steps, from the weights of an
     earlier run's net2.pt (``start``) if given; returns the policy that maps
     net2's input to the action (through the encoder, with one), and the
-    training log."""
+    training log. ``checkpoint`` saves the whole learner and its random
+    state after the last update; ``resume`` continues such a checkpoint to
+    spec.steps updates in all, exactly as one longer run would."""
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     states, log2_bdp = net2_view(net1, spec, steps)
@@ -1014,15 +1050,38 @@ def fit_net2(
     learner = Learner(spec, width if encoder is None else net1.kind.k, encoder)
     if start is not None:
         learner.start_from(torch.load(start, map_location="cpu", weights_only=True))
+    same = {"spec": spec.model_dump(mode="json", exclude={"steps"}), "seed": seed}
+    first = 0
+    if resume is not None:
+        saved = torch.load(resume, map_location="cpu", weights_only=True)
+        if saved["same"] != same:
+            raise ValueError("resume: the checkpoint was trained with another spec or seed")
+        first = saved["step"]
+        if first >= spec.steps:
+            raise ValueError(f"resume: the checkpoint has {first} updates, spec.steps {spec.steps}")
+        learner.load(saved["learner"])
+        rng.bit_generator.state = saved["rng"]
+        torch.set_rng_state(saved["torch_rng"])
     log: dict[str, list[float]] = {}
-    for step in range(spec.steps):
+    for step in range(first, spec.steps):
         b = torch.from_numpy(rng.integers(0, len(data), spec.batch_size))
         for name, v in learner.update(data.batch(b), step).items():
             log.setdefault(name, []).append(v)
+    if checkpoint is not None:
+        torch.save(
+            {
+                "same": same,
+                "step": spec.steps,
+                "learner": learner.state(),
+                "rng": rng.bit_generator.state,
+                "torch_rng": torch.get_rng_state(),
+            },
+            checkpoint,
+        )
     actor = (learner.actor if encoder is None else nn.Sequential(encoder, learner.actor)).eval()
     with torch.no_grad():
         val_bc = _bc_mse(actor, val)
-    tail = max(1, spec.steps // 10)
+    tail = max(1, (spec.steps - first) // 10)
     return actor, {
         "transitions": len(data),
         "actions_clipped": clipped,

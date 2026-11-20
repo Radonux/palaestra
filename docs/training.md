@@ -155,6 +155,11 @@ net2 on net1 v7 and v9, with its two best arms (TD3+BC, alpha 5 and 10,
 `net2_from` in the training spec starts net2 from an earlier run's
 `net2.pt` (the actor, and a free encoder), with fresh critics: a policy
 cloned from one controller's steps (`controllers`) and then trained by RL.
+`save_learner` writes `learner.pt` (every weight, optimizer moment and
+random state), and `net2_resume` continues it in a later run to
+`net2.steps` updates in all, exactly as one longer run would: training
+longer than one job's time limit runs as a chain of jobs. The data, net1,
+net2 spec and seed must match.
 
 Every learner update reports diagnostics in `report.json` and
 `history.json`:

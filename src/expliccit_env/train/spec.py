@@ -235,12 +235,20 @@ class TrainSpec(_Frozen):
     # An earlier run's net2.pt to start net2 from (its actor, and its encoder
     # with encoder "free"); the critics start fresh.
     net2_from: Path | None = None
+    # An earlier run's learner.pt to continue: same data, net1, net2 spec and
+    # seed, with net2.steps the total number of updates.
+    net2_resume: Path | None = None
+    # Save learner.pt (every weight, optimizer moment and random state) for a
+    # later run to continue.
+    save_learner: bool = False
     net2: Net2Spec = Net2Spec()
 
     @model_validator(mode="after")
     def _fractions(self) -> Self:
         if self.val_fraction + self.test_fraction >= 1:
             raise ValueError("val_fraction + test_fraction must leave training data")
+        if self.net2_from is not None and self.net2_resume is not None:
+            raise ValueError("net2_from starts a new net2; net2_resume continues one: not both")
         return self
 
     @classmethod
