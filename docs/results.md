@@ -665,13 +665,24 @@ TD3+BC critic fitted the 10-step returns with about a fifth of the loss
 it had on the LCFs (final 16 to 25 against 82 to 99 on neto1 v1's
 estimates and 73 to 79 on the true values) and pulled its actor away
 from the logged actions less (Q-gradient scale 0.2 to 0.8 against 1.8
-to 16 and 2.4 to 3.3). A plausible reading, not tested: the seven LCFs,
-exact or estimated, leave out some of what predicts the return, so the
-critic on them is less accurate and pushes its actor where the data
-gives no support, while an encoder trained by the critic keeps what the
-return needs from the same measurements. Under CQL, the same freedom
-let the free critic move its own inputs while it bootstrapped, and it
-diverged.
+to 16 and 2.4 to 3.3). That loss is on training data. On validation
+links, the LCFs do not hold much less of the return than the free
+latents: a network of two layers of 128 predicts the discounted 10-step
+return from the input and the logged action with R^2 0.80 from the true
+LCFs, 0.74 from neto1 v1's estimates, 0.85 from the free latents (ahead
+of the true LCFs on four of five seeds), 0.87 from the measurements
+themselves, and 0.91 from the true LCFs and free latents together. What
+differs is how plainly the return is laid out: a linear map reads 0.79
+of it from the free latents, 0.42 from the true LCFs and 0.37 from the
+estimates (mean over five seeds,
+[`exp-lcf-cost-return-probe-333`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-return-probe-333)).
+A plausible reading, not tested: an encoder trained by the critic does
+part of the critic's work, so the free arm's critic is in effect the
+encoder's 1.27 million weights plus two layers of 256, while on seven
+fixed values the critic has only its own two layers; it fits less and
+pushes its actor where the data gives no support. Under CQL, the same
+freedom let the free critic move its own inputs while it bootstrapped,
+and it diverged.
 
 The free latents do not rediscover the LCFs. A small network (two layers
 of 128) fitted from the latents of the clones and the CQL policies to
@@ -687,12 +698,12 @@ encoders were not probed (UNRUN).
 So in this design, with a learner that improves on imitation, fixing
 the latents to mean the LCFs cost the controller about 0.5 of log
 utility per step with competing flows and 0.7 alone, and the LCF arm
-gained nothing over cloning BBRv3. The cost lies in the seven LCFs
-themselves, not in estimating them: exact values did no better. For
-the separation this means the interface, not the estimator, limits the
-controller here: a net1 that states more of what predicts the return
-would be the fix to test, not a better estimate of these seven (an
-inference, UNRUN). The limits: one design (expliCCit's memoryless actor
+gained nothing over cloning BBRv3. The cost lies in reading the seven
+LCFs, not in estimating them: exact values did no better, and they
+hold nearly as much of the return as the free latents, though far less
+plainly. For the separation, the next test is a net2 whose critic has
+the depth the free arm's critic borrowed from its encoder, on the same
+fixed LCFs (UNRUN). The limits: one design (expliCCit's memoryless actor
 with seven latents) and one family of links, scored on its own training
 links as a one-off and on unseen links from the same ranges; neto1 v1
 learned from net1's labelled data, while the free encoder learned from
