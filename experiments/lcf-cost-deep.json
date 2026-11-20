@@ -1,0 +1,34 @@
+{
+ "title": "Cost of the LCFs' meaning, split: an encoder of the free arm's depth on the seven LCFs, trained by the critic",
+ "description": "exp-lcf-cost-truth-report-332 found that the TD3+BC actor on the true values of the seven LCFs did no better than on neto1 v1's estimates of them, and 0.37 to 0.82 worse than behind seven free latents. exp-lcf-cost-return-probe-333 found that a small network predicts the critic's target from the true LCFs almost as well as from the free latents (validation R^2 0.80 against 0.85, mean over 5 seeds), though a linear map reads far less from them (0.42 against 0.79). So the seven LCFs may hold most of what the critic needs, and the free arm may win by depth: its encoder (expliCCit's net1 architecture, about 1.2 million weights) learns from the critic's loss in front of the critic's own two layers of 256, while on fixed LCFs the critic has only those two layers. These two arms put the same encoder, from fresh weights and trained the same way, between the seven LCFs and the same actor and critic: on the true LCFs (deeptruth, an oracle for neto1 v1, from the labels in training and the guest's live truth when deployed, as exp-lcf-cost-truth-330) and on neto1 v1's estimates (deeppaper, the net1/net2 split itself). The encoder differs from the free arm's only in its first layer, which reads 7 numbers instead of 70; the actor still reads its 7 outputs without moving them. Everything else is the recipe of exp-lcf-cost-td3-326: expliCCit's actor, critic and window multiplier, TD3+BC on log utility with 10-step returns, over alpha 2.5, 5 or 10 and 60,000 or 150,000 updates, training seeds 0 to 4. A search then chooses each arm's configuration by its mean over seeds 0 and 1 on links 0 to 99, and a report scores the chosen five seeds beside the paper, truth and free arms. If the deep arms reach the free arm, the cost of meaning was the critic's depth behind a fixed-meaning interface, and a deeper net2 keeps the split; if they stay near the paper arm, the interface itself costs.",
+ "train": true,
+ "inputs": {
+  "n": "release:exp-net1-point-228",
+  "d": "release:exp-data-net2-steps-222"
+ },
+ "matrix": {
+  "arm": [
+   "deeptruth",
+   "deeppaper"
+  ],
+  "alpha": [
+   "2.5",
+   "5",
+   "10"
+  ],
+  "steps": [
+   60000,
+   150000
+  ],
+  "seed": [
+   0,
+   1,
+   2,
+   3,
+   4
+  ]
+ },
+ "run": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; case \"$ARM\" in deeptruth) I=truth;; deeppaper) I=net1;; *) exit 1;; esac; O=\"$OUT/lcftd-$ARM-a$ALPHA-n$((STEPS / 1000))k-s$SEED\"; mkdir -p \"$O\"; jq -n --arg d \"$IN/d\" --arg n \"$N\" --arg i \"$I\" --argjson seed \"$SEED\" --argjson alpha \"$ALPHA\" --argjson steps \"$STEPS\" '{data: [$d], split_by: \"link\", seed: $seed, net1_from: $n, net2: {algo: \"td3bc\", inputs: $i, encoder: \"free\", action: \"multiplier\", reward: \"log_utility\", reward_scale: 1.0, n_step: 10, action_max: 1.0, action_decimals: 3, alpha: $alpha, steps: $steps}}' > \"$O/train.json\"; uv run expliccit train run \"$O/train.json\" \"$O\"; rm -f \"$O/net1.pt\"",
+ "collect": "{ echo \"| policy | transitions | validation BC error | seconds | final diagnostics |\"; echo \"|---|---|---|---|---|\"; for r in \"$OUT\"/lcftd-*/report.json; do echo \"| $(basename \"$(dirname \"$r\")\") | $(jq -r '[.net2.transitions, .net2.val_bc_mse, (.net2.seconds | floor), (.net2.final | to_entries | map(\"\\(.key) \\(.value | tostring | .[0:7])\") | join(\", \"))] | join(\" | \")' \"$r\") |\"; done; } > \"$OUT/summary.md\"",
+ "timeout_minutes": 350
+}
