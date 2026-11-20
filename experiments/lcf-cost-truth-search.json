@@ -1,0 +1,14 @@
+{
+ "title": "Cost of the LCFs' meaning, split: the 12 truth-arm policies of exp-lcf-cost-truth-330 on 100 training links",
+ "description": "The search of exp-lcf-cost-truth-330, which trained expliCCit's actor with TD3+BC on the true values of the seven LCFs (an oracle for neto1 v1), with the recipe and grid of exp-lcf-cost-td3-326: alpha 2.5, 5 or 10 and 60,000 or 150,000 updates, training seeds 0 and 1 here. The paper arm (neto1 v1's estimates) and the free arm (seven free latents) were searched on the same links and conditions in exp-lcf-cost-td3-search-327; the runs are deterministic, so their scores there stand beside these. As before, a one-off in distribution: links 0 to 99 of net2's 600 training links, each under 2 of the data's 64 conditions drawn with campaign seed 31 (experiments/comfort.py), 30 s, every policy and BBRv3 on every episode; each policy reads the guest's live truth. summary.md scores each policy in log utility per 10 ms step minus BBRv3, paired by link, and chooses the configuration by its mean over both seeds, never one with a failed episode (chosen.json). The choice is reported on links 100 onward, which this run does not touch; nothing here supports a claim about the arm.",
+ "uml": true,
+ "train": true,
+ "inputs": {
+  "n": "release:exp-lcf-cost-truth-330"
+ },
+ "prepare": "P=(); for a in \"$IN\"/n/lcftd-truth-*-s[01]; do P+=(--policy \"$(basename \"$a\")=$a/policy.onnx\"); done; [ \"${#P[@]}\" -eq 24 ]; for x in \"${P[@]}\"; do [ \"$x\" = --policy ] || [ -f \"${x#*=}\" ]; done; uv run python experiments/comfort.py \"$OUT/spec\" --links 0:100 --seed 31 --stock bbr3 \"${P[@]}\"; uv run expliccit campaign plan \"$OUT/spec/campaign.json\" \"$OUT/c-comfort\"; cp \"$OUT/spec/aliases.json\" \"$OUT/aliases.json\"",
+ "shards": 100,
+ "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+ "collect": "uv run python experiments/rule_report.py \"$OUT\" --best lcftd-truth --over-seeds",
+ "timeout_minutes": 350
+}
