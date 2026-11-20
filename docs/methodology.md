@@ -120,6 +120,16 @@ Same links, seeds and training budget in each arm.
 | A4 | raw measurements (a black box) | A3: the cost of the split (H6) |
 | A5 | the same number of latents from an encoder of net1's architecture, trained with net2 and free of meaning (`encoder: "free"`) | A2 in expliCCit's design: the cost of fixing what the latents mean |
 
+A5 against A2 is the one exception to equal training. Both use the same
+network, expliCCit's, with the same number of layers, weights and latents.
+Splitting it into an estimator and a decision maker makes staged training
+possible: net1 learns the LCFs from ground truth, then net2 learns on the
+fixed net1. A5's latents have no target, so it can only be trained end to
+end by net2's loss. Holding A2 to that one option would deny the split the
+training it exists to enable, so each arm is trained the way that suits it
+and the two are compared at their best: the same net2 learners are tried
+on both, and each arm's best is chosen on links the reports never use.
+
 ## Interpretability
 
 A belief is a distribution over one physical quantity, so every statement
