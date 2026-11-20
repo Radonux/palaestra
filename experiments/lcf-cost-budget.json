@@ -1,0 +1,32 @@
+{
+  "title": "Cost of the LCFs' meaning: each candidate trained past the edges of its tuning grid, stage 1 of 2",
+  "description": "Every candidate's best in the earlier searches on links 0 to 99 sits at an edge of what was tried, so none is known to be tuned. Copying BBRv3 ran only at 10,000 updates, on both sides (lcft-paper-none, lcft-freefix-none, exp-lcf-cost-teacher-317). TD3+BC on neto1 v1's seven LCF estimates was best at the fewest updates (60,000) and the smallest alpha (2.5) tried (exp-lcf-cost-td3-search-327). TD3+BC behind seven free latents, and behind the larger decision maker on the true LCFs and on the estimates (exp-lcf-cost-deep-334), were best at the most updates tried (150,000); the free side gained 0.18 to 0.34 from 60,000 to 150,000 updates at every alpha, its critic loss falling from 24 to 17, and the larger decision maker's critic loss was still falling too (on the true LCFs, 44 to 36). The larger decision maker was also best at an edge of alpha (2.5, the smallest, on the true LCFs; 10, the largest, on the estimates). This stage trains, on seeds 0 and 1 with every other setting as before: copying for 30,000 and 100,000 updates on both sides; TD3+BC on the estimates at alpha 2.5 for 30,000 updates and alpha 1 for 60,000; and 150,000 updates, saving the whole learner (save_learner), of the free side at alpha 2.5 and 10, the larger decision maker on the true LCFs at alpha 1 and 2.5, and on the estimates at alpha 10 and 30. A hosted job's 6-hour limit stops one job near 150,000 updates, so stage 2 continues those six to 300,000 (net2_resume), and a search on links 0 to 99 then picks each candidate's configuration. Both sides keep expliCCit's network exactly; the larger decision maker is a separate question. summary.md lists each policy's training diagnostics.",
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1-point-228",
+    "d": "release:exp-data-net2-steps-222"
+  },
+  "matrix": {
+    "cfg": [
+      "lcft-paper-none-n30k copy net1 - - 30000 false",
+      "lcft-paper-none-n100k copy net1 - - 100000 false",
+      "lcft-freefix-none-n30k copy raw free - 30000 false",
+      "lcft-freefix-none-n100k copy raw free - 100000 false",
+      "lcftd-paper-a2.5-n30k td3 net1 - 2.5 30000 false",
+      "lcftd-paper-a1-n60k td3 net1 - 1 60000 false",
+      "lcftd-free-a2.5-n150k td3 raw free 2.5 150000 true",
+      "lcftd-free-a10-n150k td3 raw free 10 150000 true",
+      "lcftd-deeptruth-a1-n150k td3 truth free 1 150000 true",
+      "lcftd-deeptruth-a2.5-n150k td3 truth free 2.5 150000 true",
+      "lcftd-deeppaper-a10-n150k td3 net1 free 10 150000 true",
+      "lcftd-deeppaper-a30-n150k td3 net1 free 30 150000 true"
+    ],
+    "seed": [
+      0,
+      1
+    ]
+  },
+  "timeout_minutes": 350,
+  "run": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; read -r NAME KIND INPUTS ENC ALPHA STEPS SAVE <<< \"$CFG\"; O=\"$OUT/$NAME-s$SEED\"; mkdir -p \"$O\"; case \"$KIND\" in copy) BASE='{\"algo\": \"bc\", \"reward\": \"sage\", \"reward_alignment\": \"same\"}'; CTL='[\"bbr3\"]';; td3) BASE=\"{\\\"algo\\\": \\\"td3bc\\\", \\\"reward\\\": \\\"log_utility\\\", \\\"reward_scale\\\": 1.0, \\\"n_step\\\": 10, \\\"alpha\\\": $ALPHA}\"; CTL=null;; *) exit 1;; esac; X='{}'; [ \"$ENC\" = free ] && X=\"{\\\"inputs\\\": \\\"$INPUTS\\\", \\\"encoder\\\": \\\"free\\\"}\"; jq -n --arg d \"$IN/d\" --arg n \"$N\" --argjson seed \"$SEED\" --argjson base \"$BASE\" --argjson x \"$X\" --argjson steps \"$STEPS\" --argjson ctl \"$CTL\" --argjson save \"$SAVE\" '{data: [$d], split_by: \"link\", seed: $seed, net1_from: $n, save_learner: $save, net2: ({action: \"multiplier\", action_max: 1.0, action_decimals: 3, steps: $steps} + $base + $x)} + (if $ctl == null then {} else {controllers: $ctl} end)' > \"$O/train.json\"; uv run expliccit train run \"$O/train.json\" \"$O\"; rm -f \"$O/net1.pt\"",
+  "collect": "{ echo \"| policy | transitions | validation BC error | seconds | final diagnostics |\"; echo \"|---|---|---|---|---|\"; for r in \"$OUT\"/lcft*/report.json; do echo \"| $(basename \"$(dirname \"$r\")\") | $(jq -r '[.net2.transitions, .net2.val_bc_mse, (.net2.seconds | floor), (.net2.final | to_entries | map(\"\\(.key) \\(.value | tostring | .[0:7])\") | join(\", \"))] | join(\" | \")' \"$r\") |\"; done; } > \"$OUT/summary.md\""
+}
