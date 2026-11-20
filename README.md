@@ -78,10 +78,12 @@ the claims and defines every term used below.
    The LCF arm gained nothing over cloning BBRv3; the free arm did. With
    expliCCit's own CQL, which fell below cloning for both arms, the LCFs
    scored 0.91 higher; cloned, the two are level by median. The free
-   latents hold little of capacity or free buffer. How much of the cost is
-   what the LCFs leave out and how much is neto1 v1's error in estimating
-   them is open
+   latents hold little of capacity or free buffer. The cost is in the
+   seven LCFs, not in estimating them: on the true LCF values the same
+   actor did no better than on neto1 v1's estimates, and 0.37 to 0.82
+   worse than on the free latents
    ([`exp-lcf-cost-td3-report-329`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-td3-report-329),
+   [`exp-lcf-cost-truth-report-332`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-truth-report-332),
    [`exp-lcf-cost-report-322`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-report-322)).
 6. net2 gains nothing from net1's stated uncertainty: reading the
    distributions does no better than reading their means, and lowering

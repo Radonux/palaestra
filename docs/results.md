@@ -627,16 +627,51 @@ delay and paid in drops (2.7% to 18% over seeds). The paper arm's drops
 range from 9% to 59% over seeds, the most from its failed seed; the
 paper clone's are its two failed seeds (32% and 28%).
 
+The cost is not neto1 v1's error in estimating the LCFs. The same actor
+on the true values of the seven LCFs, which the guest computes live
+from the bottleneck's records (an oracle for neto1 v1), was trained over
+the same TD3+BC grid
+([`exp-lcf-cost-truth-330`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-truth-330)),
+searched the same way
+([`exp-lcf-cost-truth-search-331`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-truth-search-331),
+which chose alpha 2.5 and 60,000 updates, as the paper arm had), and ran
+on five seeds beside both TD3+BC arms in one campaign per link set
+([`exp-lcf-cost-truth-report-332`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-truth-report-332),
+no failed episode):
+
+| Links | true LCFs minus paper | free minus true LCFs | medians minus BBRv3: paper, true LCFs, free |
+|---|---|---|---|
+| training, competition | +0.084 (-0.004 to +0.172) | +0.422 (+0.329 to +0.513) | -0.35, -0.63, -0.06 |
+| unseen, competition | +0.078 (-0.007 to +0.161) | +0.374 (+0.277 to +0.471) | -0.37, -0.66, -0.11 |
+| training, alone | -0.050 (-0.156 to +0.061) | +0.824 (+0.718 to +0.932) | -0.39, -0.88, +0.09 |
+| unseen, alone | -0.091 (-0.195 to +0.014) | +0.768 (+0.661 to +0.879) | -0.41, -0.92, +0.01 |
+
+Exact LCFs did no better than neto1 v1's estimates: every interval
+crosses zero. The true-LCF arm had no failed seed, but its median seed
+sat 0.28 to 0.51 below the paper arm's (over seeds Mann-Whitney p =
+0.22 to 0.31), and only its best seed (s3) reached the range of the
+paper arm's four working seeds (-0.28 to -0.55). The free arm beat it
+over seeds (p = 0.03 with competition, 0.01 alone). Alone on
+training links it used 0.78 of the link at 80 ms of queueing delay and
+dropped 30%, against 0.81, 51 ms and 24% for the paper arm in the same
+campaign. Because a campaign draws each link's conditions from one
+random stream with the episodes' seeds, a campaign with a different
+number of controllers gets a new draw; on that new draw the paper and
+free arms repeated the free-minus-paper gap of 329 within 0.01 (+0.506,
++0.452, +0.775 and +0.678).
+
 The training diagnostics point to the critic. On the free latents, the
 TD3+BC critic fitted the 10-step returns with about a fifth of the loss
-it had on the LCFs (final 16 to 25 against 82 to 99) and pulled its
-actor away from the logged actions less (Q-gradient scale 0.2 to 0.8
-against 1.8 to 16). A plausible reading, not tested: seven values
-trained to match the LCFs leave out some of what predicts the return,
-so the critic on them is less accurate and pushes its actor where the
-data gives no support, while an encoder trained by the critic keeps
-what the return needs. Under CQL, the same freedom let the free critic
-move its own inputs while it bootstrapped, and it diverged.
+it had on the LCFs (final 16 to 25 against 82 to 99 on neto1 v1's
+estimates and 73 to 79 on the true values) and pulled its actor away
+from the logged actions less (Q-gradient scale 0.2 to 0.8 against 1.8
+to 16 and 2.4 to 3.3). A plausible reading, not tested: the seven LCFs,
+exact or estimated, leave out some of what predicts the return, so the
+critic on them is less accurate and pushes its actor where the data
+gives no support, while an encoder trained by the critic keeps what the
+return needs from the same measurements. Under CQL, the same freedom
+let the free critic move its own inputs while it bootstrapped, and it
+diverged.
 
 The free latents do not rediscover the LCFs. A small network (two layers
 of 128) fitted from the latents of the clones and the CQL policies to
@@ -652,16 +687,18 @@ encoders were not probed (UNRUN).
 So in this design, with a learner that improves on imitation, fixing
 the latents to mean the LCFs cost the controller about 0.5 of log
 utility per step with competing flows and 0.7 alone, and the LCF arm
-gained nothing over cloning BBRv3. Two causes are mixed in that cost:
-what the seven LCFs leave out, and neto1 v1's errors in estimating
-them; an arm on the true LCFs would separate the two (UNRUN). The
-limits: one design (expliCCit's memoryless actor with seven latents) and
-one family of links, scored on its own training links as a one-off and
-on unseen links from the same ranges; neto1 v1 learned from net1's
-labelled data, while the free encoder learned from net2's data and
-objective; all five paper seeds read one neto1 v1 network; five seeds
-per arm; and one offline learner that works for one arm and not the
-other.
+gained nothing over cloning BBRv3. The cost lies in the seven LCFs
+themselves, not in estimating them: exact values did no better. For
+the separation this means the interface, not the estimator, limits the
+controller here: a net1 that states more of what predicts the return
+would be the fix to test, not a better estimate of these seven (an
+inference, UNRUN). The limits: one design (expliCCit's memoryless actor
+with seven latents) and one family of links, scored on its own training
+links as a one-off and on unseen links from the same ranges; neto1 v1
+learned from net1's labelled data, while the free encoder learned from
+net2's data and objective; all five paper seeds read one neto1 v1
+network; five seeds per arm; and one offline learner, which improved on
+cloning for the free arm and not for the paper arm.
 
 ## Reproduction of expliCCit
 
