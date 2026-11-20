@@ -693,7 +693,13 @@ receive rate nearly as well as neto1 v1 (0.73 to 0.96 against 0.98), and
 capacity and free buffer poorly (0.66 and 0.25 at most, against 0.78
 and 0.37)
 ([`exp-lcf-cost-probe-324`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-probe-324)). The TD3+BC
-encoders were not probed (UNRUN).
+free latents, the ones that beat the LCFs, hold even less: a mean R^2
+over the seven of 0.26 to 0.33 through the network over five seeds,
+about the untrained encoder's 0.29, and 0.14 to 0.24 linearly (0.08
+untrained). What they keep is mostly busy fraction (0.60 to 0.74) and
+queueing delay (0.56 to 0.73); capacity reaches 0.13 to 0.29 and free
+buffer 0.10 at most
+([`exp-lcf-cost-td3-probe-335`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-td3-probe-335)).
 
 So in this design, with a learner that improves on imitation, fixing
 the latents to mean the LCFs cost the controller about 0.5 of log
