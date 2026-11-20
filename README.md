@@ -68,23 +68,21 @@ the claims and defines every term used below.
    Trained three times as long, the black box reached +0.093, against
    +0.158 for the split in the same run
    ([`exp-blackbox-more-val-297`](https://github.com/Radonux/palaestra/releases/tag/exp-blackbox-more-val-297)).
-5. In expliCCit's own design, giving the latents a meaning did not cost
-   the controller. With its offline CQL, net2 on the seven LCF values
-   of expliCCit's estimator (neto1 v1) scored 0.91 higher than the same networks behind an encoder
-   whose seven outputs were free and trained with net2 (-1.48 against
-   -2.39 minus BBRv3, five training seeds each); the free arm's critic
-   was unstable. Cloning BBRv3's logged windows, the best recipe for
-   both, the free latents scored 0.26 higher on average; the gap comes
-   from two of five LCF seeds that failed in closed loop, and the medians
-   are level; with the flow alone, as in expliCCit's experiments, the
-   median LCF seed scored higher. The free latents hold less of the LCFs than neto1 v1's
-   output, and little of capacity or free buffer. Both comparisons
-   held on net2's own training links (a one-off) and on links no training
-   data had, with and without competing flows, and every configuration
-   stayed below BBRv3 on average
-   ([`exp-lcf-cost-report-322`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-report-322),
-   [`exp-lcf-cost-unseen-323`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-unseen-323),
-   [`exp-lcf-cost-alone-325`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-alone-325)).
+5. In expliCCit's own design, giving the latents a meaning cost the
+   controller once the learner worked. Trained offline with TD3+BC on log
+   utility, net2 behind seven free latents learned with its critic
+   scored 0.46 to 0.51 higher than the same networks on the seven LCF
+   values of expliCCit's estimator (neto1 v1) with competing flows, and
+   0.69 to 0.78 higher with the flow alone, where it was level with BBRv3
+   (five training seeds each; over seeds Mann-Whitney p = 0.10 and 0.01).
+   The LCF arm gained nothing over cloning BBRv3; the free arm did. With
+   expliCCit's own CQL, which fell below cloning for both arms, the LCFs
+   scored 0.91 higher; cloned, the two are level by median. The free
+   latents hold little of capacity or free buffer. How much of the cost is
+   what the LCFs leave out and how much is neto1 v1's error in estimating
+   them is open
+   ([`exp-lcf-cost-td3-report-329`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-td3-report-329),
+   [`exp-lcf-cost-report-322`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-report-322)).
 6. net2 gains nothing from net1's stated uncertainty: reading the
    distributions does no better than reading their means, and lowering
    the window where net1 is unsure helps among copies but costs beside a
