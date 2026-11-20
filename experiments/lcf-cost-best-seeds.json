@@ -1,0 +1,25 @@
+{
+  "title": "Cost of the LCFs' meaning: each side's best configuration on training seeds 5 to 9",
+  "description": "More training seeds for the two configurations compared head to head, both in expliCCit's encoder-decoder architecture (an encoder of 1.27 million weights with seven outputs, read by an actor and a critic of two layers of 256): the meaningful side's best, the actor on neto1 v1's seven LCF estimates cloned from BBRv3's logged window multipliers (lcft-paper-none, 10,000 updates, as in exp-lcf-cost-teacher-317), and the free side's best, seven free latents trained by the critic with TD3+BC on log utility (lcftd-free-a2.5-n150k, alpha 2.5, 150,000 updates, 10-step returns, as in exp-lcf-cost-td3-326). Each side's configuration was chosen on links 0 to 99 by the mean over seeds 0 and 1 (exp-lcf-cost-teacher-search-318, exp-lcf-cost-td3-search-327); seeds 0 to 4 are in those runs and exp-lcf-cost-teacher-seeds-321 and exp-lcf-cost-td3-seeds-328. On five seeds the gap between them held across links but not firmly across seeds (Mann-Whitney p 0.10 to 0.22, exp-lcf-cost-td3-report-329); seeds 5 to 9 double the seeds for the report run that scores both on the same links. summary.md lists each policy's training diagnostics.",
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1-point-228",
+    "d": "release:exp-data-net2-steps-222"
+  },
+  "matrix": {
+    "side": [
+      "meaningful",
+      "free"
+    ],
+    "seed": [
+      5,
+      6,
+      7,
+      8,
+      9
+    ]
+  },
+  "timeout_minutes": 350,
+  "run": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; case \"$SIDE\" in meaningful) O=\"$OUT/lcft-paper-none-s$SEED\"; NET2='{\"algo\": \"bc\", \"action\": \"multiplier\", \"reward\": \"sage\", \"reward_alignment\": \"same\", \"action_max\": 1.0, \"action_decimals\": 3, \"steps\": 10000}'; CTL='[\"bbr3\"]';; free) O=\"$OUT/lcftd-free-a2.5-n150k-s$SEED\"; NET2='{\"algo\": \"td3bc\", \"action\": \"multiplier\", \"reward\": \"log_utility\", \"reward_scale\": 1.0, \"n_step\": 10, \"action_max\": 1.0, \"action_decimals\": 3, \"alpha\": 2.5, \"steps\": 150000, \"inputs\": \"raw\", \"encoder\": \"free\"}'; CTL=null;; *) exit 1;; esac; mkdir -p \"$O\"; jq -n --arg d \"$IN/d\" --arg n \"$N\" --argjson seed \"$SEED\" --argjson net2 \"$NET2\" --argjson ctl \"$CTL\" '{data: [$d], split_by: \"link\", seed: $seed, net1_from: $n, net2: $net2} + (if $ctl == null then {} else {controllers: $ctl} end)' > \"$O/train.json\"; uv run expliccit train run \"$O/train.json\" \"$O\"; rm -f \"$O/net1.pt\"",
+  "collect": "{ echo \"| policy | transitions | validation BC error | seconds | final diagnostics |\"; echo \"|---|---|---|---|---|\"; for r in \"$OUT\"/lcft*/report.json; do echo \"| $(basename \"$(dirname \"$r\")\") | $(jq -r '[.net2.transitions, .net2.val_bc_mse, (.net2.seconds | floor), (.net2.final | to_entries | map(\"\\(.key) \\(.value | tostring | .[0:7])\") | join(\", \"))] | join(\" | \")' \"$r\") |\"; done; } > \"$OUT/summary.md\""
+}
