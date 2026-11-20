@@ -6,8 +6,9 @@ Usage: python experiments/return_probe.py OUT DATA NET1.pt NAME=DIR... [A+B...]
 DIR is a net2 training output (net2.pt, train_spec.json); every DIR must
 share one seed, split and reward. For each, the input its actor and critic
 read, built as training built it (fit.net2_view): net1's estimates, the true
-LCFs, or for a free encoder the scaled measurements through the run's own
-trained encoder, which also adds "raw", the scaled measurements themselves.
+LCFs or the scaled measurements, and for a run with a free encoder that
+input through the run's own trained encoder, which also adds the input
+itself under its spec name ("raw", "truth" or "net1").
 A+B joins two inputs side by side. The target is what the critic fits
 before bootstrapping: the discounted sum of the next n rewards after the
 logged action (fit.transitions). A map from (input, action) to that sum is
@@ -123,10 +124,10 @@ def probe(
         n2 = spec.net2
         states, _ = fit.net2_view(net1, n2, steps)
         if n2.encoder == "free":
-            f = fit.free_encoder(net1, s.seed)
+            f = fit.free_encoder(net1, s.seed, states.shape[1])
             state = torch.load(d / "net2.pt", map_location="cpu", weights_only=True)
             f.load_state_dict({k[2:]: v for k, v in state.items() if k.startswith("0.")})
-            inputs["raw"] = states
+            inputs[n2.inputs] = states
             inputs[name] = encode(f.eval(), states)
         else:
             inputs[name] = states

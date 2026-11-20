@@ -169,13 +169,15 @@ class Net2Spec(_Frozen):
         1e-4,
         1e-3,
     )
-    # "free": the controller trained end to end, with inputs "raw". In front
-    # of net2 sits a network of net1's architecture (a point net1's: one
-    # output per LCF, the same width, depth and dropout) from random weights,
-    # so net2 reads as many latents as net1 has LCFs but nothing says what
-    # they mean. The critic's loss trains it with the critic; the actor
-    # reads the latents without moving them, as with a shared encoder in
-    # actor-critic learning from pixels (SAC-AE, Yarats et al., 2021).
+    # "free": in front of net2 sits a network of net1's architecture (a
+    # point net1's: one output per LCF, the same width, depth and dropout)
+    # from random weights, reading net2's input, so net2 reads as many
+    # latents as net1 has LCFs but nothing says what they mean. The critic's
+    # loss trains it with the critic; the actor reads the latents without
+    # moving them, as with a shared encoder in actor-critic learning from
+    # pixels (SAC-AE, Yarats et al., 2021). On inputs "raw" it is the
+    # controller trained end to end; on the LCFs, the same depth behind a
+    # fixed-meaning interface.
     encoder: Literal["free"] | None = None
     # encoder "free" only: the encoder's learning rate (none: the critic's,
     # or the actor's for bc; 0 holds it fixed, in eval mode).
@@ -197,8 +199,8 @@ class Net2Spec(_Frozen):
         # ponytail: the algos of the comparison it serves; iql's update path
         # would need the encoder too.
         algos = ("expliccit-v1", "bc", "td3bc")
-        if self.encoder is not None and (self.inputs != "raw" or self.algo not in algos):
-            raise ValueError(f'encoder "free" is one of the algos {algos} on inputs "raw"')
+        if self.encoder is not None and self.algo not in algos:
+            raise ValueError(f'encoder "free" is one of the algos {algos}')
         if self.encoder_lr is not None and self.encoder is None:
             raise ValueError('encoder_lr is the learning rate of encoder "free"')
         return self

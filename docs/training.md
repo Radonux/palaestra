@@ -150,7 +150,7 @@ net2 on net1 v7 and v9, with its two best arms (TD3+BC, alpha 5 and 10,
 | `discount`, `n_step` | 0.95, 1 | multi-step returns let a target's effect over an RTT reach the critic |
 | `action_max`, `action_decimals` | 1.0, none | a = action_max tanh(...), rounded in the exported graph |
 | `cql_alpha`, `expliccit_lrs` | 1.0, (1e-4, 1e-3) | `expliccit-v1`: the weight of its penalty on random actions, and the actor's and critic's learning rates |
-| `encoder` | none | `free` (with `expliccit-v1` and `raw`): a network of net1's architecture, from random weights, maps the measurements to as many unnamed latents as net1 has LCFs, and the critic's loss trains it with the critic; the actor reads the latents and does not move them (also with `bc`, where the actor's loss trains it, and `td3bc`); `encoder_lr` is its learning rate (none: the critic's, or the actor's for `bc`; 0 holds it fixed) |
+| `encoder` | none | `free` (with `expliccit-v1`, `td3bc` or `bc`): a network of net1's architecture, from random weights, maps net2's input to as many unnamed latents as net1 has LCFs, and the critic's loss trains it with the critic; the actor reads the latents and does not move them (with `bc`, the actor's loss trains it). On `raw` it is a controller trained end to end; on `net1` or `truth`, the same depth behind the LCFs, only its first layer narrower. `encoder_lr` is its learning rate (none: the critic's, or the actor's for `bc`; 0 holds it fixed) |
 
 `net2_from` in the training spec starts net2 from an earlier run's
 `net2.pt` (the actor, and a free encoder), with fresh critics: a policy

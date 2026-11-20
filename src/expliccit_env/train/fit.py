@@ -972,14 +972,19 @@ def _bc_mse(actor: nn.Module, t: Replay) -> float:
     return total / len(t)
 
 
-def free_encoder(net1: Net1, seed: int) -> nn.Module:
+def free_encoder(net1: Net1, seed: int, width: int | None = None) -> nn.Module:
     """A point net1's network with fresh weights, in train mode: as many
-    outputs as net1 has LCFs, none of them meaning one. Drawn from its own
-    random stream, so a net2 trained behind it starts from the same weights
-    as one trained on net1 with the same seed."""
-    if not isinstance(net1.kind, Point):
-        raise ValueError(f"a free encoder copies a point net1's network, not {net1.kind}")
+    outputs as net1 has LCFs, none of them meaning one. It reads ``width``
+    numbers (none: net1's own input, the scaled measurements); only its
+    first layer depends on that. Drawn from its own random stream, so a
+    net2 trained behind it starts from the same weights as one trained on
+    net1 with the same seed."""
     encoder = copy.deepcopy(net1.net)
+    if not isinstance(net1.kind, Point) or not isinstance(encoder, ExpliccitNet1):
+        raise ValueError(f"a free encoder copies a point net1's network, not {net1.kind}")
+    first = encoder.initial[0]
+    if width is not None and isinstance(first, nn.Linear) and first.in_features != width:
+        encoder.initial[0] = nn.Linear(width, first.out_features)
     with torch.random.fork_rng(devices=[]):
         torch.manual_seed(seed + 1)
         for m in encoder.modules():
@@ -993,8 +998,8 @@ def fit_net2(
 ) -> tuple[nn.Module, dict[str, Any]]:
     """net2 trained offline on the logged steps, from the weights of an
     earlier run's net2.pt (``start``) if given; returns the policy that maps
-    net2's input (or, with an encoder, the scaled measurements) to the
-    action, and the training log."""
+    net2's input to the action (through the encoder, with one), and the
+    training log."""
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     states, log2_bdp = net2_view(net1, spec, steps)
@@ -1005,7 +1010,7 @@ def fit_net2(
     width = states.shape[1]
     if len(data) == 0:
         raise ValueError("no training transitions")
-    encoder = free_encoder(net1, seed) if spec.encoder == "free" else None
+    encoder = free_encoder(net1, seed, width) if spec.encoder == "free" else None
     learner = Learner(spec, width if encoder is None else net1.kind.k, encoder)
     if start is not None:
         learner.start_from(torch.load(start, map_location="cpu", weights_only=True))

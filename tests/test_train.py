@@ -854,15 +854,35 @@ def test_a_cloning_free_arm_trains_its_encoder_with_the_actor() -> None:
     assert not _unchanged(learner.encoder, before)
 
 
-def test_a_free_encoder_is_expliccits_objective_on_the_measurements() -> None:
-    Net2Spec(algo="expliccit-v1", inputs="raw", encoder="free")
+def test_a_free_encoder_is_one_of_the_actor_critic_objectives() -> None:
+    for inputs in ["raw", "net1", "truth"]:
+        Net2Spec(algo="expliccit-v1", inputs=inputs, encoder="free")  # pyright: ignore[reportArgumentType]
     with pytest.raises(ValueError, match="encoder_lr"):
         Net2Spec(algo="expliccit-v1", inputs="raw", encoder_lr=1e-5)
-    for bad in [{"inputs": "net1"}, {"algo": "iql"}]:
-        with pytest.raises(ValueError, match="free"):
-            Net2Spec.model_validate(
-                {"algo": "expliccit-v1", "inputs": "raw", "encoder": "free"} | bad
-            )
+    with pytest.raises(ValueError, match="free"):
+        Net2Spec(algo="iql", inputs="raw", encoder="free")
+
+
+def test_a_free_encoder_on_the_lcfs_differs_from_the_free_arms_only_in_its_first_layer() -> None:
+    net1 = _net1()
+    steps = synthetic(n_episodes=10, steps=50)
+    spec = Net2Spec(algo="td3bc", inputs="truth", encoder="free", hidden=16, batch_size=64)
+    states, _ = fit.net2_view(net1, spec, steps)
+    deep = fit.free_encoder(net1, 3, states.shape[1]).state_dict()
+    free = fit.free_encoder(net1, 3).state_dict()
+    assert deep["initial.0.weight"].shape == (64, 7) and free["initial.0.weight"].shape == (64, 70)
+    assert {k: v.shape for k, v in deep.items() if not k.startswith("initial.0.")} == {
+        k: v.shape for k, v in free.items() if not k.startswith("initial.0.")
+    }
+    policy, log = fit.fit_net2(spec.model_copy(update={"steps": 20}), steps, net1, 0)
+    assert np.isfinite(log["final"]["critic"]) and np.isfinite(log["val_bc_mse"])
+    assert isinstance(policy, torch.nn.Sequential)
+    with torch.no_grad():
+        a = policy(torch.from_numpy(states[:8]))
+    assert a.shape == (8, 1) and torch.isfinite(a).all()
+    graph = fit.policy_graph(net1, policy, 1.0, inputs="truth")
+    model = onnx.load_from_string(to_onnx(graph))
+    assert [i.name for i in model.graph.input] == ["obs", "truth"]
 
 
 @pytest.mark.parametrize("intervals", [False, True])
