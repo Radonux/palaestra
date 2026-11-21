@@ -1,0 +1,53 @@
+{
+  "title": "Cost of the LCFs' meaning: seeds 2 to 9 of each side's choice, and TD3+BC on the estimates below alpha 1",
+  "description": "Trains what the head-to-head needs after exp-lcf-cost-budget-search-342 chose each side's configuration on links 0 to 99. Both sides keep expliCCit's encoder-decoder architecture exactly: an encoder of 1.27 million weights with seven outputs, read by an actor and a critic of two layers of 256. Training differs between the sides by design: the split lets the meaningful side train in stages (the encoder on ground truth, then the decision maker on the fixed encoder), while free latents have no target and can only be trained end to end by the decisions' loss, so each side is compared at its best. Seeds 2 to 9 of the choices: the meaningful side's actor copying BBRv3 on neto1 v1's seven LCF estimates for 30,000 updates (lcft-paper-none-n30k); the free side's encoder and actor copying BBRv3 together for 30,000 updates (lcft-freefix-none-n30k, the free side's other method, reported beside its best); and the first 150,000 updates of the free side's TD3+BC at alpha 2.5 (lcftd-free-a2.5-n150k, learner saved; training is deterministic, so these equal the released 150,000-update policies, and a second stage continues them to the chosen 300,000). Seeds 2 to 4 of the larger decision maker on the true LCFs at alpha 1 for 150,000 updates (lcftd-deeptruth-a1-n150k), that arm's new choice; it is not a candidate, since it adds a second 1.23-million-weight network. One edge stays open: TD3+BC on the estimates gained 0.98 from alpha 2.5 to alpha 1, the smallest alpha tried, so it trains at alpha 1 for 30,000 updates and at alpha 0.3 and 0.1 for 30,000 and 60,000 updates, seeds 0 and 1, for a search beside the copying choice on the same links. An edge whose last step gained less than 0.1 in the mean over two seeds is not extended, since reruns of one policy on identical episodes differ by up to 0.16 per seed: the free side's TD3+BC gained 0.06 from 150,000 to 300,000 updates and 0.04 from alpha 10 to 2.5, and the larger decision maker lost from 150,000 to 300,000 updates in every configuration. summary.md lists each policy's training diagnostics.",
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1-point-228",
+    "d": "release:exp-data-net2-steps-222"
+  },
+  "matrix": {
+    "cfg": [
+      "lcftd-paper-a1-n30k td3 net1 - 1 30000 false 0",
+      "lcftd-paper-a1-n30k td3 net1 - 1 30000 false 1",
+      "lcftd-paper-a0.3-n30k td3 net1 - 0.3 30000 false 0",
+      "lcftd-paper-a0.3-n30k td3 net1 - 0.3 30000 false 1",
+      "lcftd-paper-a0.3-n60k td3 net1 - 0.3 60000 false 0",
+      "lcftd-paper-a0.3-n60k td3 net1 - 0.3 60000 false 1",
+      "lcftd-paper-a0.1-n30k td3 net1 - 0.1 30000 false 0",
+      "lcftd-paper-a0.1-n30k td3 net1 - 0.1 30000 false 1",
+      "lcftd-paper-a0.1-n60k td3 net1 - 0.1 60000 false 0",
+      "lcftd-paper-a0.1-n60k td3 net1 - 0.1 60000 false 1",
+      "lcft-paper-none-n30k copy net1 - - 30000 false 2",
+      "lcft-freefix-none-n30k copy raw free - 30000 false 2",
+      "lcftd-free-a2.5-n150k td3 raw free 2.5 150000 true 2",
+      "lcft-paper-none-n30k copy net1 - - 30000 false 3",
+      "lcft-freefix-none-n30k copy raw free - 30000 false 3",
+      "lcftd-free-a2.5-n150k td3 raw free 2.5 150000 true 3",
+      "lcft-paper-none-n30k copy net1 - - 30000 false 4",
+      "lcft-freefix-none-n30k copy raw free - 30000 false 4",
+      "lcftd-free-a2.5-n150k td3 raw free 2.5 150000 true 4",
+      "lcft-paper-none-n30k copy net1 - - 30000 false 5",
+      "lcft-freefix-none-n30k copy raw free - 30000 false 5",
+      "lcftd-free-a2.5-n150k td3 raw free 2.5 150000 true 5",
+      "lcft-paper-none-n30k copy net1 - - 30000 false 6",
+      "lcft-freefix-none-n30k copy raw free - 30000 false 6",
+      "lcftd-free-a2.5-n150k td3 raw free 2.5 150000 true 6",
+      "lcft-paper-none-n30k copy net1 - - 30000 false 7",
+      "lcft-freefix-none-n30k copy raw free - 30000 false 7",
+      "lcftd-free-a2.5-n150k td3 raw free 2.5 150000 true 7",
+      "lcft-paper-none-n30k copy net1 - - 30000 false 8",
+      "lcft-freefix-none-n30k copy raw free - 30000 false 8",
+      "lcftd-free-a2.5-n150k td3 raw free 2.5 150000 true 8",
+      "lcft-paper-none-n30k copy net1 - - 30000 false 9",
+      "lcft-freefix-none-n30k copy raw free - 30000 false 9",
+      "lcftd-free-a2.5-n150k td3 raw free 2.5 150000 true 9",
+      "lcftd-deeptruth-a1-n150k td3 truth free 1 150000 false 2",
+      "lcftd-deeptruth-a1-n150k td3 truth free 1 150000 false 3",
+      "lcftd-deeptruth-a1-n150k td3 truth free 1 150000 false 4"
+    ]
+  },
+  "run": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; read -r NAME KIND INPUTS ENC ALPHA STEPS SAVE SEED <<< \"$CFG\"; O=\"$OUT/$NAME-s$SEED\"; mkdir -p \"$O\"; case \"$KIND\" in copy) BASE='{\"algo\": \"bc\", \"reward\": \"sage\", \"reward_alignment\": \"same\"}'; CTL='[\"bbr3\"]';; td3) BASE=\"{\\\"algo\\\": \\\"td3bc\\\", \\\"reward\\\": \\\"log_utility\\\", \\\"reward_scale\\\": 1.0, \\\"n_step\\\": 10, \\\"alpha\\\": $ALPHA}\"; CTL=null;; *) exit 1;; esac; X='{}'; [ \"$ENC\" = free ] && X=\"{\\\"inputs\\\": \\\"$INPUTS\\\", \\\"encoder\\\": \\\"free\\\"}\"; jq -n --arg d \"$IN/d\" --arg n \"$N\" --argjson seed \"$SEED\" --argjson base \"$BASE\" --argjson x \"$X\" --argjson steps \"$STEPS\" --argjson ctl \"$CTL\" --argjson save \"$SAVE\" '{data: [$d], split_by: \"link\", seed: $seed, net1_from: $n, save_learner: $save, net2: ({action: \"multiplier\", action_max: 1.0, action_decimals: 3, steps: $steps} + $base + $x)} + (if $ctl == null then {} else {controllers: $ctl} end)' > \"$O/train.json\"; uv run expliccit train run \"$O/train.json\" \"$O\"; rm -f \"$O/net1.pt\"",
+  "collect": "{ echo \"| policy | transitions | validation BC error | seconds | final diagnostics |\"; echo \"|---|---|---|---|---|\"; for r in \"$OUT\"/lcft*/report.json; do echo \"| $(basename \"$(dirname \"$r\")\") | $(jq -r '[.net2.transitions, .net2.val_bc_mse, (.net2.seconds | floor), (.net2.final | to_entries | map(\"\\(.key) \\(.value | tostring | .[0:7])\") | join(\", \"))] | join(\" | \")' \"$r\") |\"; done; } > \"$OUT/summary.md\"",
+  "timeout_minutes": 350
+}
