@@ -525,197 +525,130 @@ told the two apart (H1).
 ## Giving the latents a meaning
 
 Does it cost the controller to fix what net2's inputs mean? This was
-tested in expliCCit's own design, as a one-off for a paper deadline:
-its memoryless actor (two layers of 256) and single critic, asked every
-10 ms, set the window to cwnd 2^a with |a| at most 1, rounded to three
-decimals, and learn offline from the logged steps of
-`exp-data-net2-steps-222`. In arm A2 (paper) the actor reads neto1 v1's
-seven LCF values (`exp-net1-point-228`, held fixed). In arm A5 (free)
-the same actor reads the seven outputs of an encoder with neto1 v1's
-architecture (1.27 million weights) from fresh weights, trained by the
-critic's loss on the scaled measurements and never shown an LCF. Only
-what the seven numbers mean differs.
+tested in expliCCit's own design, for a paper deadline. Both arms use
+its network exactly: an encoder of 1.27 million weights from 70 scaled
+measurements to seven numbers, and a memoryless actor and critic of two
+layers of 256 that read only those seven, asked every 10 ms to set the
+window to cwnd 2^a with |a| at most 1. Only what the seven numbers are
+trained to be differs. In arm A2 (paper) the encoder is neto1 v1
+(`exp-net1-point-228`), trained on labelled data to output the seven
+LCFs and then held fixed. In arm A5 (free) the encoder starts from
+fresh weights and learns from net2's objective alone. Both learn
+offline from the logged steps of `exp-data-net2-steps-222`.
 
-Each arm was trained with three learners and tuned separately for each.
-Every configuration ran on training seeds 0 and 1 and was scored in
-closed loop on links 0 to 99 (net2's own training links, each under 2 of
-the training data's 64 conditions, 30 s,
-[`experiments/comfort.py`](../experiments/comfort.py)); the best by its
-mean over both seeds was trained on seeds 2 to 4.
+Each arm is compared at its best, not under one training method: the
+split lets the paper arm learn in stages (a supervised encoder, then a
+decision maker on a fixed input of known meaning), which an end-to-end
+network cannot. Both arms tried the same four ways of learning the
+decisions: expliCCit's CQL on Sage's reward, cloning BBRv3's logged
+decisions, cloning then CQL or TD3+BC, and TD3+BC on log utility with
+10-step returns. Each arm extended its training length and settings
+while the last step gained at least 0.1 (reruns of one policy differ
+by up to 0.16 per seed), and kept its best by the mean of seeds 0 and 1
+on links 0 to 99 minus BBRv3
+([`exp-lcf-cost-budget-search-342`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-budget-search-342),
+[`exp-lcf-cost-alpha-search-345`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-alpha-search-345)):
 
-- **TD3+BC** on log utility with 10-step returns, this repository's
-  offline recipe, at alpha 2.5, 5 or 10 and 60,000 or 150,000 updates,
-  from fresh weights or from the clones below
-  ([`exp-lcf-cost-td3-326`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-td3-326),
-  search [`exp-lcf-cost-td3-search-327`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-td3-search-327),
-  seeds [`exp-lcf-cost-td3-seeds-328`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-td3-seeds-328)).
-  Both arms chose alpha 2.5, the paper arm with 60,000 updates and the
-  free arm with 150,000. Started from their clones, both arms scored
-  below the clones on both seeds (-1.61 and -1.75 minus BBRv3, against
-  -0.85 and -0.26) and were dropped.
-- **A clone of BBRv3**: 10,000 updates regressing BBRv3's logged window
-  multipliers, the free encoder learning with the actor
-  ([`exp-lcf-cost-teacher-317`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-teacher-317), search
-  [`exp-lcf-cost-teacher-search-318`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-teacher-search-318),
-  seeds [`exp-lcf-cost-teacher-seeds-321`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-teacher-seeds-321)).
-  Every RL stage after it (CQL or TD3+BC on Sage's reward) scored lower,
-  so both arms chose the clone alone.
-- **expliCCit's offline CQL** on Sage's reward with one-step returns
-  ([`exp-lcf-cost-315`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-315), search
-  [`exp-lcf-cost-search-316`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-search-316), seeds
-  [`exp-lcf-cost-seeds-320`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-seeds-320)). It failed as a
-  learner for both arms: in the search both scored below their own
-  clones (-1.20 and -1.84 against -0.86 and -0.28), and the free critic
-  diverged in about half its long runs. Its gap of 0.91 for the LCFs over
-  five seeds ([`exp-lcf-cost-report-322`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-report-322))
-  shows how much a fixed, supervised input shields a failing learner,
-  not what meaning costs one that works. Alone, the faithful arm (CQL on
-  the LCFs) used 0.62 of the link, far from expliCCit's reported 5% below
-  Sage ([`exp-lcf-cost-alone-325`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-alone-325); see
-  [Reproduction of expliCCit](#reproduction-of-expliccit)).
+| Learner | paper | free |
+|---|---|---|
+| expliCCit's CQL | -1.20 | -1.84 |
+| clone of BBRv3 (10,000 / 30,000 / 100,000 updates) | -0.88 / **-0.19** / -0.52 | -0.28 / -0.24 / -0.29 |
+| clone, then CQL or TD3+BC | below the clone | below the clone |
+| TD3+BC, best | -0.33 (alpha 1, 60,000 updates) | **-0.20** (alpha 2.5, 300,000 updates) |
 
-The chosen TD3+BC configurations and the clones then ran on five seeds
-each on four sets of 300 links: links 100 to 399 of net2's training
-links, which neither search used (a one-off), and 300 links no training
-data had, drawn from the same ranges under a new draw of conditions;
-each with competing flows and with the flow alone, as in expliCCit's
-experiments (`comfort.py --alone` keeps the 27 of the 64 conditions
-without cross traffic)
-([`exp-lcf-cost-td3-report-329`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-td3-report-329), no
-failed episode). The clones' scores equal those of the earlier runs on
-the same links to the third decimal. Free minus paper, each link's score
-averaged over the five seeds of each arm, with a 95% bootstrap interval
-over links, and the median over seeds of each arm minus BBRv3:
+No reinforcement learner beat the clone on the paper arm (TD3+BC over
+alpha 0.1 to 2.5 and 30,000 to 60,000 updates scored -0.33 to -1.32;
+CQL's free critic diverged in about half its long runs). Ten seeds of
+each best, and of the free clone, ran on four sets of 300 links: links
+100 to 399 of net2's training links (a one-off) and 300 links no
+training data had, each with competing flows and with the flow alone
+(`comfort.py --alone`), 600 episodes per policy per set, no failed
+episode
+([`exp-lcf-cost-head-report-346`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-head-report-346)).
+Each link's score is averaged over an arm's seeds; intervals are 95%
+bootstrap over links; p is Mann-Whitney over the seeds' means, computed
+here from the release's per-policy scores:
 
-| Links | TD3+BC: free minus paper | TD3+BC medians, paper and free | Clone: free minus paper | Clone medians, paper and free |
-|---|---|---|---|---|
-| training, competition | +0.509 (+0.449 to +0.570) | -0.34, -0.03 | +0.263 (+0.206 to +0.319) | -0.29, -0.30 |
-| unseen, competition | +0.458 (+0.396 to +0.519) | -0.36, -0.12 | +0.336 (+0.278 to +0.397) | -0.30, -0.33 |
-| training, alone | +0.782 (+0.723 to +0.847) | -0.42, +0.09 | +0.236 (+0.169 to +0.302) | -0.11, -0.30 |
-| unseen, alone | +0.687 (+0.626 to +0.749) | -0.40, +0.01 | +0.346 (+0.274 to +0.416) | -0.18, -0.29 |
+| Links | free minus paper | median over seeds | p | free clone minus paper clone | p |
+|---|---|---|---|---|---|
+| training, competition | +0.295 (+0.253 to +0.338) | +0.209 | 0.007 | +0.023 (-0.030 to +0.076) | 0.24 |
+| unseen, competition | +0.303 (+0.259 to +0.347) | +0.193 | 0.007 | +0.074 (+0.027 to +0.123) | 0.47 |
+| training, alone | +0.373 (+0.331 to +0.418) | +0.152 | 0.0004 | -0.001 (-0.056 to +0.058) | 0.12 |
+| unseen, alone | +0.388 (+0.341 to +0.438) | +0.200 | 0.0005 | +0.031 (-0.028 to +0.092) | 0.23 |
 
-Over seeds (computed here from the release's per-policy scores), the
-TD3+BC gap holds with the flow alone (Mann-Whitney p = 0.01 on both link
-sets) and is weaker with competition (p = 0.10; Welch's t-test 0.08 to
-0.18, widened by one failed paper seed). The clone gap does not hold
-(p = 0.69 to 1.00).
+Minus BBRv3, the free arm scored -0.023, -0.044, +0.147 and +0.098 in
+the four sets, the paper arm -0.318, -0.347, -0.227 and -0.290. Three
+paper seeds (s6, s8, s9) failed in all four sets (-0.58 to -0.89 over
+the four), with the same validation cloning error (0.004 to 0.011) as
+the seven that worked (-0.01 to -0.12); the worst free seed scored
+-0.18. Two free clones failed the same way (-0.51, -0.55). Mean over
+the seeds, averaged over the training and unseen links:
 
-TD3+BC improved on the clone only for the free arm: free minus its clone
-+0.163, +0.094, +0.305 and +0.234 over links in the four sets, every
-interval above zero (over seeds p = 0.03 alone, 0.15 and 0.31 with
-competition); paper minus its clone -0.083, -0.028, -0.241 and -0.107
-(over seeds p of 0.42 or more). One paper seed (s1) failed in all four
-sets (-1.77 to -2.08), as two paper clones (s1, s3) did; no free seed
-failed with either recipe. Alone, the free TD3+BC arm is level with
-BBRv3 (+0.041, -0.014 to +0.094, on training links; -0.032, -0.092 to
-+0.025, on unseen ones), and one free seed (s3) beat BBRv3 in all four
-sets (+0.03 to +0.17). In the measures expliCCit reports, alone on the
-training links, with the mean over seeds of each policy's mean over
-links (the unseen links agree within 0.02 of utilization, 5 ms and 3
-points of drops):
+| Configuration | competition: utilization, queueing delay, drops | alone: utilization, queueing delay, drops |
+|---|---|---|
+| BBRv3 | 0.90, 54 ms, 1.5% | 0.87, 29 ms, 0.7% |
+| free, TD3+BC | 0.91, 42 ms, 10.9% | 0.88, 16 ms, 4.3% |
+| paper, clone | 0.92, 61 ms, 9.6% | 0.90, 39 ms, 9.3% |
+| free, clone | 0.87, 66 ms, 3.0% | 0.83, 49 ms, 2.5% |
 
-| Configuration | utilization | mean queueing delay (ms) | packets dropped by the full queue |
-|---|---|---|---|
-| BBRv3 | 0.87 | 27 | 0.7% |
-| TD3+BC, free | 0.91 | 19 | 7.6% |
-| TD3+BC, paper | 0.81 | 48 | 24% |
-| clone, free | 0.82 | 51 | 1.7% |
-| clone, paper | 0.89 | 45 | 14% |
+So fixing the latents to mean the LCFs cost about 0.3 of log utility
+per step (0.15 to 0.21 by median seed), as queueing delay and, alone,
+drops. Cloned, the two arms are level; the cost is that TD3+BC lifted
+the free arm 0.23 to 0.38 above its clone (p 0.0002 to 0.004) and
+nothing lifted the paper arm above its own.
 
-The free TD3+BC arm used more of the link than BBRv3 at less queueing
-delay and paid in drops (2.7% to 18% over seeds). The paper arm's drops
-range from 9% to 59% over seeds, the most from its failed seed; the
-paper clone's are its two failed seeds (32% and 28%).
-
-The cost is not neto1 v1's error in estimating the LCFs. The same actor
-on the true values of the seven LCFs, which the guest computes live
-from the bottleneck's records (an oracle for neto1 v1), was trained over
-the same TD3+BC grid
-([`exp-lcf-cost-truth-330`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-truth-330)),
-searched the same way
-([`exp-lcf-cost-truth-search-331`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-truth-search-331),
-which chose alpha 2.5 and 60,000 updates, as the paper arm had), and ran
-on five seeds beside both TD3+BC arms in one campaign per link set
-([`exp-lcf-cost-truth-report-332`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-truth-report-332),
-no failed episode):
-
-| Links | true LCFs minus paper | free minus true LCFs | medians minus BBRv3: paper, true LCFs, free |
-|---|---|---|---|
-| training, competition | +0.084 (-0.004 to +0.172) | +0.422 (+0.329 to +0.513) | -0.35, -0.63, -0.06 |
-| unseen, competition | +0.078 (-0.007 to +0.161) | +0.374 (+0.277 to +0.471) | -0.37, -0.66, -0.11 |
-| training, alone | -0.050 (-0.156 to +0.061) | +0.824 (+0.718 to +0.932) | -0.39, -0.88, +0.09 |
-| unseen, alone | -0.091 (-0.195 to +0.014) | +0.768 (+0.661 to +0.879) | -0.41, -0.92, +0.01 |
-
-Exact LCFs did no better than neto1 v1's estimates: every interval
-crosses zero. The true-LCF arm had no failed seed, but its median seed
-sat 0.28 to 0.51 below the paper arm's (over seeds Mann-Whitney p =
-0.22 to 0.31), and only its best seed (s3) reached the range of the
-paper arm's four working seeds (-0.28 to -0.55). The free arm beat it
-over seeds (p = 0.03 with competition, 0.01 alone). Alone on
-training links it used 0.78 of the link at 80 ms of queueing delay and
-dropped 30%, against 0.81, 51 ms and 24% for the paper arm in the same
-campaign. Because a campaign draws each link's conditions from one
-random stream with the episodes' seeds, a campaign with a different
-number of controllers gets a new draw; on that new draw the paper and
-free arms repeated the free-minus-paper gap of 329 within 0.01 (+0.506,
-+0.452, +0.775 and +0.678).
-
-The training diagnostics point to the critic. On the free latents, the
-TD3+BC critic fitted the 10-step returns with about a fifth of the loss
-it had on the LCFs (final 16 to 25 against 82 to 99 on neto1 v1's
-estimates and 73 to 79 on the true values) and pulled its actor away
-from the logged actions less (Q-gradient scale 0.2 to 0.8 against 1.8
-to 16 and 2.4 to 3.3). That loss is on training data. On validation
-links, the LCFs do not hold much less of the return than the free
-latents: a network of two layers of 128 predicts the discounted 10-step
-return from the input and the logged action with R^2 0.80 from the true
-LCFs, 0.74 from neto1 v1's estimates, 0.85 from the free latents (ahead
-of the true LCFs on four of five seeds), 0.87 from the measurements
-themselves, and 0.91 from the true LCFs and free latents together. What
-differs is how plainly the return is laid out: a linear map reads 0.79
-of it from the free latents, 0.42 from the true LCFs and 0.37 from the
-estimates (mean over five seeds,
-[`exp-lcf-cost-return-probe-333`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-return-probe-333)).
-A plausible reading, not tested: an encoder trained by the critic does
-part of the critic's work, so the free arm's critic is in effect the
-encoder's 1.27 million weights plus two layers of 256, while on seven
-fixed values the critic has only its own two layers; it fits less and
-pushes its actor where the data gives no support. Under CQL, the same
-freedom let the free critic move its own inputs while it bootstrapped,
-and it diverged.
-
-The free latents do not rediscover the LCFs. A small network (two layers
-of 128) fitted from the latents of the clones and the CQL policies to
-each LCF on training links reached a mean R^2 over the seven of 0.36 to
-0.64 on validation links, against 0.84 for neto1 v1's output and 0.29
-for the untrained encoder. The free latents hold queueing delay and
-receive rate nearly as well as neto1 v1 (0.73 to 0.96 against 0.98), and
-capacity and free buffer poorly (0.66 and 0.25 at most, against 0.78
-and 0.37)
-([`exp-lcf-cost-probe-324`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-probe-324)). The TD3+BC
-free latents, the ones that beat the LCFs, hold even less: a mean R^2
-over the seven of 0.26 to 0.33 through the network over five seeds,
-about the untrained encoder's 0.29, and 0.14 to 0.24 linearly (0.08
-untrained). What they keep is mostly busy fraction (0.60 to 0.74) and
-queueing delay (0.56 to 0.73); capacity reaches 0.13 to 0.29 and free
-buffer 0.10 at most
+The cost is not neto1 v1's error. The same two-layer actor on the true
+values of the seven LCFs, which the guest computes live from the
+bottleneck's records, did no better than on the estimates: -0.09 to
++0.08, every interval across zero
+([`exp-lcf-cost-truth-report-332`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-truth-report-332)).
+Nor is it missing information: a network of two layers of 128 predicts
+the discounted 10-step return on validation links with R^2 0.80 from
+the true LCFs, 0.74 from the estimates and 0.85 from the free latents.
+What differs is how plainly the return is laid out: a linear map reads
+0.79 of it from the free latents, 0.42 from the true LCFs and 0.37
+from the estimates
+([`exp-lcf-cost-return-probe-333`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-return-probe-333)),
+and the TD3+BC critic's final loss is 12.5 to 13.9 on the free latents
+against 95 to 114 on the estimates and 73 to 79 on the true LCFs. The
+free latents do not rediscover the LCFs: a small network reads a mean
+R^2 over the seven of 0.26 to 0.33 from them (0.29 from an untrained
+encoder, 0.84 from neto1 v1), mostly busy fraction and queueing delay
 ([`exp-lcf-cost-td3-probe-335`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-td3-probe-335)).
 
-So in this design, with a learner that improves on imitation, fixing
-the latents to mean the LCFs cost the controller about 0.5 of log
-utility per step with competing flows and 0.7 alone, and the LCF arm
-gained nothing over cloning BBRv3. The cost lies in reading the seven
-LCFs, not in estimating them: exact values did no better, and they
-hold nearly as much of the return as the free latents, though far less
-plainly. For the separation, the next test is a net2 whose critic has
-the depth the free arm's critic borrowed from its encoder, on the same
-fixed LCFs (UNRUN). The limits: one design (expliCCit's memoryless actor
-with seven latents) and one family of links, scored on its own training
-links as a one-off and on unseen links from the same ranges; neto1 v1
-learned from net1's labelled data, while the free encoder learned from
-net2's data and objective; all five paper seeds read one neto1 v1
-network; five seeds per arm; and one offline learner, which improved on
-cloning for the free arm and not for the paper arm.
+A deeper reader closes the gap on exact values and not on estimates. A
+second network of the encoder's shape (1,233,671 weights, seven inputs)
+between the LCFs and the actor, trained by the critic with TD3+BC
+(alpha 1, 150,000 updates on the true LCFs; alpha 10, 150,000 on the
+estimates; 300,000 updates scored lower or level), changes the network,
+so it answers a separate question. On the true LCFs (five seeds) it was
+level with the free arm on three of four sets (free minus it -0.002,
++0.077, +0.022, +0.011; p 0.24 to 0.86, 0.013 alone on training links)
+at +0.017 minus BBRv3 over the four, with utilization 0.95 to 0.96
+(run 346). On neto1 v1's estimates it scored -2.24 minus BBRv3, 1.48 to
+1.66 below the two-layer actor on the same estimates
+([`exp-lcf-cost-deep-report-339`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-deep-report-339)).
+Seven physical quantities hold enough for a controller as good as the
+free one; a reader deep enough to use them needs precision the
+estimates lack.
+
+Every reported policy trained cleanly: no critic diverged, actions at
+the bound stayed under 0.13%. Retraining is not bit-exact across
+GitHub's machines (four of eight retrained seeds moved the final critic
+loss by 0.05 to 0.17), so each reported policy is one unbroken run. The
+limits: one design (expliCCit's memoryless actor with seven latents),
+one family of links, scored on its own training links as a one-off and
+on unseen links from the same ranges; offline learning only; every
+paper seed reads one neto1 v1 network, which learned from net1's
+labelled data, while the free encoder learned from net2's data and
+objective. Training and searches:
+[`exp-lcf-cost-report-322`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-report-322) (CQL and clones),
+[`exp-lcf-cost-truth-330`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-truth-330) (true LCFs),
+[`exp-lcf-cost-deep-334`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-deep-334) (deeper reader),
+[`exp-lcf-cost-budget-340`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-budget-340),
+[`exp-lcf-cost-budget-2-341`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-budget-2-341),
+[`exp-lcf-cost-final-seeds-343`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-final-seeds-343) and
+[`exp-lcf-cost-final-seeds-2-344`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-final-seeds-2-344) (the reported policies).
 
 ## Reproduction of expliCCit
 

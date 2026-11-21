@@ -68,23 +68,20 @@ the claims and defines every term used below.
    Trained three times as long, the black box reached +0.093, against
    +0.158 for the split in the same run
    ([`exp-blackbox-more-val-297`](https://github.com/Radonux/palaestra/releases/tag/exp-blackbox-more-val-297)).
-5. In expliCCit's own design, giving the latents a meaning cost the
-   controller once the learner worked. Trained offline with TD3+BC on log
-   utility, net2 behind seven free latents learned with its critic
-   scored 0.46 to 0.51 higher than the same networks on the seven LCF
-   values of expliCCit's estimator (neto1 v1) with competing flows, and
-   0.69 to 0.78 higher with the flow alone, where it was level with BBRv3
-   (five training seeds each; over seeds Mann-Whitney p = 0.10 and 0.01).
-   The LCF arm gained nothing over cloning BBRv3; the free arm did. With
-   expliCCit's own CQL, which fell below cloning for both arms, the LCFs
-   scored 0.91 higher; cloned, the two are level by median. The free
-   latents hold little of capacity or free buffer. The cost is in the
-   seven LCFs, not in estimating them: on the true LCF values the same
-   actor did no better than on neto1 v1's estimates, and 0.37 to 0.82
-   worse than on the free latents
-   ([`exp-lcf-cost-td3-report-329`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-td3-report-329),
+5. In expliCCit's own network, giving the latents a meaning costs the
+   controller about 0.3 of log utility per step. With the network
+   identical and each arm at its best training, net2 behind seven free
+   latents trained end to end beat net2 on the seven LCF values of
+   expliCCit's estimator (neto1 v1) by +0.30 to +0.39 on held-out links,
+   with competing flows and alone (ten seeds each; Mann-Whitney p below
+   0.01), and tied or beat BBRv3. Cloning BBRv3, the two are level; the
+   cost is that reinforcement learning improved the free arm and never
+   the LCF arm. It lies in reading the LCFs, not estimating them: exact
+   values did no better, and a deeper reader closed the gap on exact
+   values but collapsed on the estimates
+   ([`exp-lcf-cost-head-report-346`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-head-report-346),
    [`exp-lcf-cost-truth-report-332`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-truth-report-332),
-   [`exp-lcf-cost-report-322`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-report-322)).
+   [`exp-lcf-cost-deep-report-339`](https://github.com/Radonux/palaestra/releases/tag/exp-lcf-cost-deep-report-339)).
 6. net2 gains nothing from net1's stated uncertainty: reading the
    distributions does no better than reading their means, and lowering
    the window where net1 is unsure helps among copies but costs beside a
