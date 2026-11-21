@@ -1,0 +1,28 @@
+{
+  "title": "Cost of the LCFs' meaning: the free side's TD3+BC seeds 2 to 9 continued to the chosen 300,000 updates",
+  "description": "Continues seeds 2 to 9 of the free side's chosen configuration, TD3+BC at alpha 2.5 behind seven free latents (lcftd-free-a2.5), from the 150,000-update learners saved in exp-lcf-cost-final-seeds-343 to the 300,000 updates that exp-lcf-cost-budget-search-342 chose on links 0 to 99 (net2_resume: every weight, optimizer moment and random state carried over, so each run ends as one 300,000-update run would; seeds 0 and 1 are in exp-lcf-cost-budget-2-341). Every other setting is unchanged, and the network is expliCCit's encoder-decoder exactly, the same as the meaningful side's. No third stage follows: the last doubling gained 0.06 on links 0 to 99, below the 0.1 that extends an edge. summary.md lists each policy's training diagnostics.",
+  "train": true,
+  "inputs": {
+    "n": "release:exp-net1-point-228",
+    "d": "release:exp-data-net2-steps-222",
+    "a": "release:exp-lcf-cost-final-seeds-343"
+  },
+  "matrix": {
+    "cfg": [
+      "lcftd-free-a2.5"
+    ],
+    "seed": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ]
+  },
+  "timeout_minutes": 350,
+  "run": "N=\"$IN/n/$(cat \"$IN/n/chosen.txt\")/net1.pt\"; A=\"$IN/a/$CFG-n150k-s$SEED\"; [ -f \"$A/learner.pt\" ] && [ -f \"$A/train.json\" ]; O=\"$OUT/$CFG-n300k-s$SEED\"; mkdir -p \"$O\"; jq --arg d \"$IN/d\" --arg n \"$N\" --arg r \"$A/learner.pt\" '.data = [$d] | .net1_from = $n | .net2_resume = $r | .save_learner = false | .net2.steps = 300000' \"$A/train.json\" > \"$O/train.json\"; uv run expliccit train run \"$O/train.json\" \"$O\"; rm -f \"$O/net1.pt\"",
+  "collect": "{ echo \"| policy | transitions | validation BC error | seconds | final diagnostics |\"; echo \"|---|---|---|---|---|\"; for r in \"$OUT\"/lcft*/report.json; do echo \"| $(basename \"$(dirname \"$r\")\") | $(jq -r '[.net2.transitions, .net2.val_bc_mse, (.net2.seconds | floor), (.net2.final | to_entries | map(\"\\(.key) \\(.value | tostring | .[0:7])\") | join(\", \"))] | join(\" | \")' \"$r\") |\"; done; } > \"$OUT/summary.md\""
+}

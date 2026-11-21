@@ -1,0 +1,15 @@
+{
+  "title": "Cost of the LCFs' meaning: TD3+BC on the estimates below alpha 1 beside the copying choice, 100 training links",
+  "description": "Closes the one edge left open after exp-lcf-cost-budget-search-342: TD3+BC on neto1 v1's seven LCF estimates gained 0.98 from alpha 2.5 to alpha 1, the smallest alpha tried, an edge whose last step gained at least 0.1 in the mean over two seeds and so is extended. Candidates of the meaningful side (prefix split-): the copying choice (the actor copying BBRv3 for 30,000 updates, exp-lcf-cost-budget-340), TD3+BC at alpha 1 for 60,000 updates (exp-lcf-cost-budget-340), and TD3+BC at alpha 1 for 30,000 updates and at alpha 0.3 and 0.1 for 30,000 and 60,000 updates (exp-lcf-cost-final-seeds-343). All keep expliCCit's encoder-decoder architecture exactly, with the encoder trained beforehand on the LCFs and fixed. Every policy runs on training seeds 0 and 1, on the same episodes as each other. A one-off in distribution: links 0 to 99 of net2's 600 training links, each under 2 of the data's 64 conditions drawn with campaign seed 31 (experiments/comfort.py), 30 s, every policy and BBRv3 on every episode, as in run 342. chosen.json gives, by the mean over seeds, the meaningful side's best configuration, never one with a failed episode in any seed. Nothing here supports a claim about any policy.",
+  "uml": true,
+  "train": true,
+  "inputs": {
+    "a": "release:exp-lcf-cost-budget-340",
+    "c": "release:exp-lcf-cost-final-seeds-343"
+  },
+  "prepare": "P=(); for s in 0 1; do P+=(--policy \"split-paper-imit-n30k-s$s=$IN/a/lcft-paper-none-n30k-s$s/policy.onnx\" --policy \"split-paper-td3-a1-n60k-s$s=$IN/a/lcftd-paper-a1-n60k-s$s/policy.onnx\" --policy \"split-paper-td3-a1-n30k-s$s=$IN/c/lcftd-paper-a1-n30k-s$s/policy.onnx\" --policy \"split-paper-td3-a0.3-n30k-s$s=$IN/c/lcftd-paper-a0.3-n30k-s$s/policy.onnx\" --policy \"split-paper-td3-a0.3-n60k-s$s=$IN/c/lcftd-paper-a0.3-n60k-s$s/policy.onnx\" --policy \"split-paper-td3-a0.1-n30k-s$s=$IN/c/lcftd-paper-a0.1-n30k-s$s/policy.onnx\" --policy \"split-paper-td3-a0.1-n60k-s$s=$IN/c/lcftd-paper-a0.1-n60k-s$s/policy.onnx\"); done; [ \"${#P[@]}\" -eq 28 ]; for x in \"${P[@]}\"; do [ \"$x\" = --policy ] || [ -f \"${x#*=}\" ]; done; uv run python experiments/comfort.py \"$OUT/spec\" --links 0:100 --seed 31 --stock bbr3 \"${P[@]}\"; uv run expliccit campaign plan \"$OUT/spec/campaign.json\" \"$OUT/c-comfort\"; cp \"$OUT/spec/aliases.json\" \"$OUT/aliases.json\"",
+  "shards": 50,
+  "run": "for c in \"$OUT\"/c-*; do uv run expliccit campaign run \"$c\" --shard \"$SHARD/$SHARDS\" --build \"$UML\" --workers \"$WORKERS\" --tables steps; done; uv run python experiments/slim_steps.py \"$OUT\"",
+  "collect": "uv run python experiments/rule_report.py \"$OUT\" --best split --over-seeds",
+  "timeout_minutes": 350
+}
